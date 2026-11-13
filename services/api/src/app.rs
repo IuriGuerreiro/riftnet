@@ -5,11 +5,12 @@ use std::sync::Arc;
 
 use axum::Router;
 use axum::http::{HeaderValue, Method, header};
+use axum::middleware;
 use common::snowflake::Snowflake;
 use metrics_exporter_prometheus::PrometheusHandle;
 use tower_http::cors::CorsLayer;
-use tower_http::trace::TraceLayer;
 
+use crate::common::middleware::http_metrics;
 use crate::common::middleware::rate_limit::RateLimiter;
 use crate::config::Config;
 use crate::features::auth::identity::ZitadelClient;
@@ -69,7 +70,7 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
         .merge(auth::routes())
         .merge(users::routes())
         .merge(gateway::routes())
-        .layer(TraceLayer::new_for_http())
+        .layer(middleware::from_fn(http_metrics::track))
         .layer(cors)
         .with_state(state))
 }
