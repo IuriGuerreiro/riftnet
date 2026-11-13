@@ -93,7 +93,9 @@ async function doRefresh(startedWith: string | null): Promise<boolean> {
       await useAuth.persist.rehydrate();
       return useAuth.getState().refreshToken !== refreshToken;
     }
-    useAuth.getState().clear(); // refresh failed: back to login
+    // Only a real rejection (401: expired, revoked, reused) means "log in again".
+    // Offline, 429 or a 5xx is temporary: keep the tokens and let the caller retry.
+    if (err instanceof ApiError && err.status === 401) useAuth.getState().clear();
     return false;
   }
 }
