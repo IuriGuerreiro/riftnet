@@ -1,18 +1,25 @@
-//! WebSocket endpoint. Every binary frame is one protobuf `Envelope`.
+//! WebSocket gateway. Every binary frame is one protobuf `Envelope`.
+//! Parked until DMs: will require `Authenticate` as the first frame.
 
+use axum::Router;
 use axum::extract::ws::{Message as WsMessage, WebSocket, WebSocketUpgrade};
 use axum::response::Response;
+use axum::routing::get;
 use protocol::Message;
 use protocol::v1::{Envelope, Error, Pong, envelope::Payload};
 
-pub async fn handler(ws: WebSocketUpgrade) -> Response {
+use crate::app::AppState;
+
+pub fn routes() -> Router<AppState> {
+    Router::new().route("/ws", get(handler))
+}
+
+async fn handler(ws: WebSocketUpgrade) -> Response {
     ws.on_upgrade(handle_socket)
 }
 
 async fn handle_socket(mut socket: WebSocket) {
     metrics::gauge!("ws_connections").increment(1.0);
-    tracing::info!("ws connected");
-
     while let Some(Ok(frame)) = socket.recv().await {
         let WsMessage::Binary(bytes) = frame else {
             continue;
@@ -29,9 +36,7 @@ async fn handle_socket(mut socket: WebSocket) {
             break;
         }
     }
-
     metrics::gauge!("ws_connections").decrement(1.0);
-    tracing::info!("ws disconnected");
 }
 
 fn handle(req: Envelope) -> Envelope {

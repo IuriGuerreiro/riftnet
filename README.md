@@ -39,12 +39,12 @@ pnpm gen                    # generate TS types from proto/
 
 # UI against the mock API (no backend needed)
 pnpm mock                   # ws://127.0.0.1:7101/ws
-pnpm dev                    # web UI on http://localhost:5173
+pnpm dev                    # web UI on http://localhost:7104
 pnpm desktop                # same UI in the Tauri window
 
-# Real API
-cargo run -p api            # ws://127.0.0.1:7100/ws, /health, /metrics
-VITE_API_URL=ws://127.0.0.1:7100/ws pnpm dev
+# Real API (needs the docker stack below; run from the repo root)
+cargo run -p api            # http://127.0.0.1:7100: /auth/*, /me, /health, /metrics
+scripts/smoke-auth.sh       # end-to-end auth checks
 
 # Databases (Postgres, Scylla, NATS, Redis, Zitadel)
 docker compose -f infra/docker-compose.yml up -d --wait
@@ -64,7 +64,20 @@ Default admin: `zitadel-admin@zitadel.localhost` / `Password1!` (local dev only)
 | Scylla   | 9042  |
 | NATS     | 4222  |
 | Redis    | 6379  |
-| Vite dev | 5173  |
+| Vite dev | 7104  |
+
+## Testing from other devices (Tailscale)
+
+Uses MagicDNS + HTTPS (needed later for OAuth). One-time setup on the dev machine:
+
+```sh
+tailscale serve --bg --https=7103 http://127.0.0.1:7104   # web UI
+tailscale serve --bg --https=7099 http://127.0.0.1:7100   # api
+```
+
+Then run the stack, `cargo run -p api` and `pnpm dev`, and open
+**https://server.tailcbbc1b.ts.net:7103** from any device on the tailnet.
+The UI picks the Tailscale api URL automatically when opened via `*.ts.net`.
 
 ## Changing the API
 

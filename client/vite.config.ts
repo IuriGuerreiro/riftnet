@@ -6,5 +6,11 @@ import tailwindcss from "@tailwindcss/vite";
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   clearScreen: false,
-  server: { port: 5173, strictPort: true },
+  server: {
+    host: "127.0.0.1",
+    port: 7104,
+    strictPort: true,
+    // Allow access through Tailscale MagicDNS (tailscale serve proxies HTTPS to this port).
+    allowedHosts: [".ts.net"],
+  },
 });

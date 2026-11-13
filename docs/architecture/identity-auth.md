@@ -1,30 +1,191 @@
 # Identity and auth
 
-## User login: Zitadel
+## Overview
 
-- We use an **auth provider** instead of building login and 2FA ourselves.
-- **Chosen: Zitadel, self-hosted.** Open source, Go + Postgres, free, no per-user bill.
-- To validate with a prototype before fully committing.
-- Day 1 features: email + password, passkeys, optional 2FA (TOTP), Google/GitHub login.
+- **Zitadel** (self-hosted) stores accounts and checks passwords.
+- **Our `api`** is the only thing that talks to Zitadel. The app never does.
+- After login, the api issues **our own tokens**. Everything else (WebSocket, media, nodes) only trusts our tokens.
+- If we ever swap Zitadel, only the api's login code changes.
 
-### Why Zitadel
+```mermaid
+flowchart LR
+    App["📱 App<br/>(our login screens)"] -- "email + password<br/>(HTTPS)" --> API["🦀 api"]
+    API -- "Session / User API<br/>(service account)" --> Z["🔐 Zitadel"]
+    API -- "our tokens" --> App
+    API --- PG[("🐘 Postgres<br/>users · devices · refresh tokens")]
+    App -- "access token" --> WS["WebSocket, media, nodes"]
+```
 
-| Option        | Verdict                                                                    |
-| ------------- | -------------------------------------------------------------------------- |
-| **Zitadel**   | Open source, passkeys/2FA/OAuth built in, ready login screens. **Picked.** |
-| Ory Kratos    | Very flexible, but no screens: we'd build every login page                 |
-| Keycloak      | Proven but heavy (Java) and dated UI                                       |
-| Authentik     | Aimed at internal apps, not millions of public users                       |
-| Clerk / Auth0 | Easiest, but closed and paid per user (~$1–2k/month at 100k MAU)           |
+## Decided
 
-### Login flow
+| Topic         | Decision                                                                      |
+| ------------- | ----------------------------------------------------------------------------- |
+| Provider      | Zitadel, self-hosted                                                          |
+| Login UI      | **Native screens in our app** (no browser redirect) via Zitadel's Session API |
+| Day-1 methods | Email + password. Google/GitHub later (needs browser + deep link)             |
+| Access token  | Ours, Ed25519-signed, **15 min**, verified without a DB lookup                |
+| Refresh token | Ours, opaque, **30 days**, one per device, stored hashed, rotated on use      |
+| Username      | Picked **after first login**, unique                                          |
+| Token storage | Desktop: OS keychain. Web: memory + refresh token in an `HttpOnly` cookie     |
 
-1. User clicks "Log in". The app opens the Zitadel login page.
-2. User logs in (password, passkey, Google...).
-3. Zitadel redirects back to the hub with proof of identity.
-4. The hub issues **our own token**. The app uses only that from then on.
+## Register
 
-Because the hub issues its own tokens, we can swap providers later without touching nodes or clients.
+```mermaid
+sequenceDiagram
+    autonumber
+    participant App
+    participant API as api
+    participant Z as Zitadel
+    participant DB as Postgres
+    App->>API: POST /auth/register {email, password, device}
+    API->>API: validate + rate limit
+    API->>Z: User API: create human user
+    Z-->>API: zitadel user id
+    API->>DB: insert user (no username yet) + device + refresh token hash
+    API-->>App: access token + refresh token
+    Note over App: username is empty → "Pick your username" screen
+```
+
+## Login
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant App
+    participant API as api
+    participant Z as Zitadel
+    participant DB as Postgres
+    App->>API: POST /auth/login {email, password, device}
+    API->>API: rate limit (per IP + per email)
+    API->>Z: Session API: create session (check password)
+    alt wrong password
+        Z-->>API: error
+        API-->>App: 401 invalid_credentials (same message for unknown email)
+    else ok
+        Z-->>API: session ok, user id
+        API->>DB: find/create user, create device, store refresh token hash
+        API-->>App: access token (15 min) + refresh token (30 days)
+    end
+```
+
+## Pick username (first login)
+
+```mermaid
+sequenceDiagram
+    participant App
+    participant API as api
+    participant DB as Postgres
+    App->>API: PUT /me/username {username} (Bearer access token)
+    API->>API: Zod-equivalent check: 3–32 chars, a–z 0–9 _ .
+    API->>DB: UPDATE users SET username (unique index)
+    alt taken
+        API-->>App: 409 username_taken
+    else ok
+        API-->>App: 200 {user}
+    end
+```
+
+## Refresh (rotation + theft detection)
+
+```mermaid
+sequenceDiagram
+    participant App
+    participant API as api
+    participant DB as Postgres
+    App->>API: POST /auth/refresh {refresh token}
+    API->>DB: look up hash
+    alt valid and unused
+        API->>DB: mark old as used, store new hash
+        API-->>App: new access token + new refresh token
+    else already used (stolen copy!)
+        API->>DB: revoke the whole device
+        API-->>App: 401 → log in again
+    else expired / revoked
+        API-->>App: 401 → log in again
+    end
+```
+
+The app refreshes automatically shortly before the access token expires.
+
+## Logout
+
+`POST /auth/logout` revokes the current device and all its refresh tokens. Access tokens die on their own within 15 min.
+
+## Endpoints (HTTP)
+
+| Method | Path             | Auth          | Purpose                       |
+| ------ | ---------------- | ------------- | ----------------------------- |
+| POST   | `/auth/register` | —             | Create account + log in       |
+| POST   | `/auth/login`    | —             | Email + password → our tokens |
+| POST   | `/auth/refresh`  | refresh token | Rotate tokens                 |
+| POST   | `/auth/logout`   | access token  | Revoke this device            |
+| GET    | `/me`            | access token  | Current user                  |
+| PUT    | `/me/username`   | access token  | Set username                  |
+
+Errors use one shape: `{ "code": "username_taken", "message": "..." }`.
+
+## Access token contents
+
+```text
+header:  { alg: EdDSA, kid: <key id> }
+payload: { sub: user_id, did: device_id, iat, exp (+15 min), iss: "api" }
+```
+
+The `kid` lets us rotate signing keys: the api keeps old public keys until their tokens expire.
+
+## Database
+
+```mermaid
+erDiagram
+    users ||--o{ devices : has
+    devices ||--o{ refresh_tokens : has
+    users {
+        bigint id PK "Snowflake"
+        text zitadel_id UK
+        text username UK "nullable until picked"
+        text display_name
+        timestamptz created_at
+    }
+    devices {
+        bigint id PK
+        bigint user_id FK
+        text name "e.g. G's PC"
+        text platform "desktop | web"
+        timestamptz last_seen_at
+        timestamptz revoked_at
+    }
+    refresh_tokens {
+        bigint id PK
+        bigint device_id FK
+        bytea token_hash UK "SHA-256"
+        timestamptz expires_at
+        timestamptz used_at
+    }
+```
+
+## Security rules
+
+- **Never log passwords or tokens.** A test checks the logs.
+- Same error for "unknown email" and "wrong password" (don't reveal who has an account).
+- Rate limit login and register per IP and per email.
+- Refresh tokens are stored as SHA-256 hashes only.
+- HTTPS everywhere outside local dev.
+
+## Local Zitadel setup
+
+On a **fresh** database, Zitadel's first boot creates a service account for the api
+(`api-service`, instance owner) and writes its token to `infra/.secrets/api.pat`
+(git-ignored). The api reads it from there. No clicking in the console.
+
+The api creates its token signing key at `infra/.secrets/api_signing_key` on first start.
+
+To reset everything: `docker compose -f infra/docker-compose.yml down -v`, then `up -d --wait`.
+
+## Testing
+
+- Unit tests: `cargo test -p api` (tokens, validation, rate limit).
+- End to end: `scripts/smoke-auth.sh` against a running api + stack (register, login, wrong password,
+  forged token, username, refresh rotation, stolen-token reuse, logout).
 
 ## Hub ↔ node trust (after the MVP)
 
@@ -34,17 +195,14 @@ Because the hub issues its own tokens, we can swap providers later without touch
 4. The node verifies it with the **hub's public key**, offline, with no call to the hub.
 5. The node never sees the password.
 
-## Devices
+## Later
 
-Accounts have devices from day 1 (`device_id`). Needed for E2E later. See [dms.md](dms.md).
-
-## Open questions
-
-- Token lifetime and refresh (short = safer, long = survives the hub being down).
-- Revocation: how does a node learn an account was banned or stolen? (A revocation list pulled periodically?)
-- Hub key rotation.
-- LAN mode: a node working without the hub? Local accounts?
+- Google / GitHub login (system browser + PKCE + deep link back to the app).
+- 2FA (TOTP) and passkeys: Zitadel supports both; we build the screens.
+- Account deletion, email change, password reset.
+- Revocation list for nodes.
 
 ## Risks
 
-- A stolen token is valid until it expires. Per-node tokens (audience) limit the damage.
+- Passwords pass through our api: logging mistakes would be serious (see the rules above).
+- Building 2FA/passkey screens ourselves later is extra work vs Zitadel's hosted login.

@@ -17,7 +17,9 @@ Open source Discord alternative, written in Rust. Name not decided yet (favourit
 | ------------------------------------------------- | --------------------------------------------- | ---------- |
 | [overview.md](architecture/overview.md)           | Hub + nodes, scale targets, failure modes     | ✅ Decided |
 | [tech-stack.md](architecture/tech-stack.md)       | Languages, libraries, infra, observability    | ✅ Decided |
-| [identity-auth.md](architecture/identity-auth.md) | Accounts, Zitadel, hub ↔ node tokens         | ✅ Decided |
+| [identity-auth.md](architecture/identity-auth.md) | Accounts, Zitadel, native login, our tokens   | ✅ Decided |
+| [backend.md](architecture/backend.md)             | Feature folders, controller → service → repo  | ✅ Decided |
+| [frontend.md](architecture/frontend.md)           | React stack, folder rules, auth states        | ✅ Decided |
 | [protocol.md](architecture/protocol.md)           | Protobuf, WebSocket vs REST, sync, versioning | ✅ Decided |
 | [messaging.md](architecture/messaging.md)         | Message flow, storage, node profiles          | ✅ Decided |
 | [dms.md](architecture/dms.md)                     | DMs (MVP focus), E2E plan, group limits       | 🎯 MVP     |
