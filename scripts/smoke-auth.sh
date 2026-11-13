@@ -35,8 +35,15 @@ NAME="smoke_$(date +%s%N | tail -c 9)"
 unset AUTH
 [ "$(post /auth/refresh "{\"refresh_token\":\"$REFRESH\"}")" = 200 ] && ok "refresh rotates tokens" || fail "refresh: $(cat /tmp/smoke.body)"
 NEW_REFRESH=$(field "['refresh_token']")
-[ "$(post /auth/refresh "{\"refresh_token\":\"$REFRESH\"}")" = 401 ] && ok "old refresh token reused → 401" || fail "reuse not detected"
-[ "$(post /auth/refresh "{\"refresh_token\":\"$NEW_REFRESH\"}")" = 401 ] && ok "reuse revoked the device (new token dead too)" || fail "device not revoked"
+[ "$(post /auth/refresh "{\"refresh_token\":\"$REFRESH\"}")" = 409 ] && ok "old token reused right away (2 tabs) → 409, not revoked" || fail "grace window: $(cat /tmp/smoke.body)"
+[ "$(post /auth/refresh "{\"refresh_token\":\"$NEW_REFRESH\"}")" = 200 ] && ok "newer token still works" || fail "newer token broken"
+if [ "${SLOW:-0}" = 1 ]; then
+  echo "   waiting 31s for the grace window to pass…"; sleep 31
+  [ "$(post /auth/refresh "{\"refresh_token\":\"$REFRESH\"}")" = 401 ] && ok "old token reused later (theft) → 401" || fail "reuse not detected"
+  [ "$(post /auth/refresh "{\"refresh_token\":\"$NEW_REFRESH\"}")" = 401 ] && ok "theft revoked the device" || fail "device not revoked"
+else
+  echo "   (skip theft check; run with SLOW=1 to wait out the 30s grace window)"
+fi
 
 [ "$(post /auth/login "{\"email\":\"$EMAIL\",\"password\":\"$PASS\",\"device\":$DEV}")" = 200 ] || fail "login 2"
 AUTH=$(field "['access_token']"); R2=$(field "['refresh_token']")

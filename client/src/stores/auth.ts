@@ -34,3 +34,9 @@ export const useAuth = create<AuthState>()(
     { name: "auth" },
   ),
 );
+
+// Keep tabs in sync: when another tab logs in, refreshes or logs out,
+// reload the tokens from localStorage.
+window.addEventListener("storage", (e) => {
+  if (e.key === "auth") void useAuth.persist.rehydrate();
+});

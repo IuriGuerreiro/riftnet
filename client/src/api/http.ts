@@ -63,24 +63,44 @@ async function refreshIfExpiring() {
   }
 }
 
-// Only one refresh at a time, even if many requests need it.
+// Only one refresh at a time: within this tab (`inFlight`) and across tabs
+// (Web Locks). Tabs share tokens through localStorage, so if two tabs refreshed
+// with the same token, the server would see it used twice.
 let inFlight: Promise<boolean> | null = null;
 
 function refresh(): Promise<boolean> {
-  inFlight ??= (async () => {
-    const refreshToken = useAuth.getState().refreshToken;
-    if (!refreshToken) return false;
-    try {
-      const res = await send("/auth/refresh", { method: "POST", body: { refresh_token: refreshToken } }, false);
-      const session = await parse<Session>(res);
-      useAuth.getState().setSession(session);
-      return true;
-    } catch {
-      useAuth.getState().clear(); // refresh failed: back to login
-      return false;
-    }
-  })().finally(() => {
+  const startedWith = useAuth.getState().refreshToken;
+  inFlight ??= withRefreshLock(() => doRefresh(startedWith)).finally(() => {
     inFlight = null;
   });
   return inFlight;
+}
+
+async function doRefresh(startedWith: string | null): Promise<boolean> {
+  // Another tab may have refreshed while we waited for the lock: reload from storage.
+  await useAuth.persist.rehydrate();
+  const refreshToken = useAuth.getState().refreshToken;
+  if (!refreshToken) return false;
+  if (refreshToken !== startedWith) return true; // someone else already did it
+
+  try {
+    const res = await send("/auth/refresh", { method: "POST", body: { refresh_token: refreshToken } }, false);
+    useAuth.getState().setSession(await parse<Session>(res));
+    return true;
+  } catch (err) {
+    if (err instanceof ApiError && err.code === "refresh_superseded") {
+      // Lost a race with another request: the newer token is (or soon will be) in storage.
+      await useAuth.persist.rehydrate();
+      return useAuth.getState().refreshToken !== refreshToken;
+    }
+    useAuth.getState().clear(); // refresh failed: back to login
+    return false;
+  }
+}
+
+function withRefreshLock<T>(fn: () => Promise<T>): Promise<T> {
+  // Web Locks: supported by all current browsers and Tauri webviews. Fall back
+  // to the in-tab guard only if missing.
+  if (!("locks" in navigator)) return fn();
+  return navigator.locks.request("auth-refresh", fn);
 }
