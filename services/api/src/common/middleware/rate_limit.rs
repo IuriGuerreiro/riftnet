@@ -33,6 +33,29 @@ impl RateLimiter {
         }
         Ok(())
     }
+
+    /// Like `check`, but doesn't count this hit. Pair with `record` to only
+    /// count some outcomes (e.g. failed logins).
+    pub fn ensure_below(&self, key: &str, limit: u32, window: Duration) -> Result<(), ApiError> {
+        let windows = self.windows.lock().expect("rate limiter mutex poisoned");
+        match windows.get(key) {
+            Some((start, count)) if start.elapsed() < window && *count >= limit => {
+                Err(ApiError::TooManyRequests)
+            }
+            _ => Ok(()),
+        }
+    }
+
+    /// Counts one hit for `key` without checking a limit.
+    pub fn record(&self, key: &str, window: Duration) {
+        let mut windows = self.windows.lock().expect("rate limiter mutex poisoned");
+        let now = Instant::now();
+        let entry = windows.entry(key.to_string()).or_insert((now, 0));
+        if now.duration_since(entry.0) >= window {
+            *entry = (now, 0);
+        }
+        entry.1 += 1;
+    }
 }
 
 #[cfg(test)]
@@ -48,5 +71,20 @@ mod tests {
         }
         assert!(limiter.check("k", 3, w).is_err());
         assert!(limiter.check("other", 3, w).is_ok());
+    }
+
+    #[test]
+    fn ensure_below_only_counts_recorded_hits() {
+        let limiter = RateLimiter::default();
+        let w = Duration::from_secs(60);
+        for _ in 0..10 {
+            assert!(
+                limiter.ensure_below("fail", 2, w).is_ok(),
+                "checking alone never blocks"
+            );
+        }
+        limiter.record("fail", w);
+        limiter.record("fail", w);
+        assert!(limiter.ensure_below("fail", 2, w).is_err());
     }
 }

@@ -13,6 +13,12 @@ use crate::common::error::ApiError;
 use crate::common::middleware::auth::AuthUser;
 
 const MINUTE: Duration = Duration::from_secs(60);
+const FIFTEEN_MINUTES: Duration = Duration::from_secs(15 * 60);
+
+/// Normalized, length-capped email for rate-limit keys (input isn't validated yet).
+fn rate_key_email(email: &str) -> String {
+    email.trim().to_lowercase().chars().take(254).collect()
+}
 
 pub async fn register(
     State(state): State<AppState>,
@@ -34,19 +40,35 @@ pub async fn login(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Json(req): Json<CredentialsRequest>,
 ) -> Result<Json<SessionResponse>, ApiError> {
+    let ip = addr.ip();
+    let email = rate_key_email(&req.email);
+
+    // Per IP, and per IP + email: an attacker only slows themselves down.
+    state.limiter.check(&format!("login:ip:{ip}"), 10, MINUTE)?;
     state
         .limiter
-        .check(&format!("login:ip:{}", addr.ip()), 10, MINUTE)?;
-    state.limiter.check(
-        &format!("login:email:{}", req.email.trim().to_lowercase()),
-        5,
-        MINUTE,
-    )?;
-    let session = state
+        .check(&format!("login:ip-email:{ip}:{email}"), 5, MINUTE)?;
+    // Per email from anywhere, counting FAILED attempts only: stops distributed
+    // password guessing without letting anyone lock out the real user by
+    // spamming requests (a correct password never adds to this count).
+    let failures_key = format!("login:failures:{email}");
+    state
+        .limiter
+        .ensure_below(&failures_key, 20, FIFTEEN_MINUTES)?;
+
+    match state
         .auth
         .login(&req.email, &req.password, device(req.device))
-        .await?;
-    Ok(Json(session.into()))
+        .await
+    {
+        Ok(session) => Ok(Json(session.into())),
+        Err(err) => {
+            if matches!(err, ApiError::Unauthorized("invalid_credentials")) {
+                state.limiter.record(&failures_key, FIFTEEN_MINUTES);
+            }
+            Err(err)
+        }
+    }
 }
 
 pub async fn refresh(
