@@ -61,22 +61,22 @@ impl TokenService {
         }
     }
 
-    /// Loads the key from `path`, or creates one there if it doesn't exist (dev).
-    pub fn from_key_file(path: &Path) -> anyhow::Result<Self> {
+    /// Loads the key from `path`. If it doesn't exist and `allow_create` is set
+    /// (dev only), creates one. In production a missing key is an error, so
+    /// we never silently invalidate everyone's tokens.
+    pub fn from_key_file(path: &Path, allow_create: bool) -> anyhow::Result<Self> {
         let seed: [u8; 32] = if path.exists() {
-            let raw = std::fs::read_to_string(path)?;
-            B64.decode(raw.trim())?
+            B64.decode(crate::common::secrets::read(path)?)?
                 .try_into()
                 .map_err(|_| anyhow::anyhow!("signing key must be 32 bytes"))?
-        } else {
+        } else if allow_create {
             let mut seed = [0u8; 32];
             OsRng.fill_bytes(&mut seed);
-            if let Some(dir) = path.parent() {
-                std::fs::create_dir_all(dir)?;
-            }
-            std::fs::write(path, B64.encode(seed))?;
-            tracing::warn!(path = %path.display(), "created a new token signing key");
+            crate::common::secrets::create(path, &B64.encode(seed))?;
+            tracing::warn!(path = %path.display(), "created a new token signing key (dev)");
             seed
+        } else {
+            anyhow::bail!("signing key not found at {}", path.display());
         };
         Ok(Self::new(SigningKey::from_bytes(&seed)))
     }

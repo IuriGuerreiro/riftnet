@@ -31,7 +31,10 @@ pub struct AppState {
 pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Result<Router> {
     let pool = crate::common::db::connect(&config.database_url).await?;
     let ids = Arc::new(Snowflake::new(config.machine_id));
-    let tokens = Arc::new(TokenService::from_key_file(&config.signing_key_file)?);
+    let tokens = Arc::new(TokenService::from_key_file(
+        &config.signing_key_file,
+        !config.is_production(),
+    )?);
 
     // Repositories (swap in cached versions here later)
     let user_repo: Arc<dyn UserRepo> = Arc::new(PgUserRepo::new(pool.clone()));

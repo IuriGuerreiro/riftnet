@@ -5,6 +5,8 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 
 pub struct Config {
+    /// `development` (default) or `production`.
+    pub env: String,
     pub addr: SocketAddr,
     pub database_url: String,
     pub zitadel_url: String,
@@ -22,14 +24,12 @@ impl Config {
             Ok(pat) => pat,
             Err(_) => {
                 let path = env_or("ZITADEL_PAT_FILE", "infra/.secrets/api.pat");
-                std::fs::read_to_string(&path)
-                    .map_err(|e| anyhow::anyhow!("reading Zitadel PAT from {path}: {e}"))?
-                    .trim()
-                    .to_string()
+                crate::common::secrets::read(path.as_ref())?
             }
         };
 
         Ok(Self {
+            env: env_or("APP_ENV", "development"),
             addr: env_or("API_ADDR", "127.0.0.1:7100").parse()?,
             database_url: env_or("DATABASE_URL", "postgres://app:app@127.0.0.1:55432/app"),
             zitadel_url: env_or("ZITADEL_URL", "http://localhost:7102"),
@@ -45,6 +45,12 @@ impl Config {
             .map(|s| s.trim().to_string())
             .collect(),
         })
+    }
+}
+
+impl Config {
+    pub fn is_production(&self) -> bool {
+        self.env == "production"
     }
 }
 
