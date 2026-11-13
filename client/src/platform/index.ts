@@ -3,13 +3,25 @@
 // - web: browser APIs (WebSocket, browser WebRTC, getDisplayMedia)
 export interface Platform {
   kind: "desktop" | "web";
-  apiUrl: string;
+  httpUrl: string;
+  wsUrl: string;
+  deviceName: string;
 }
 
 const isTauri = "__TAURI_INTERNALS__" in window;
 
 export const platform: Platform = {
   kind: isTauri ? "desktop" : "web",
-  // Mock by default; point at the real api with VITE_API_URL=ws://127.0.0.1:7100/ws
-  apiUrl: import.meta.env.VITE_API_URL ?? "ws://127.0.0.1:7101/ws",
+  httpUrl: import.meta.env.VITE_API_HTTP ?? defaultHttpUrl(),
+  // Mock by default; real api: VITE_API_WS=ws://127.0.0.1:7100/ws
+  wsUrl: import.meta.env.VITE_API_WS ?? "ws://127.0.0.1:7101/ws",
+  deviceName: isTauri ? "Desktop app" : `Web (${navigator.platform || "browser"})`,
 };
+
+// Opened through Tailscale MagicDNS (https://<host>.ts.net:7103)? Then use the
+// api through Tailscale too (https port 7099 → local 7100). Otherwise localhost.
+function defaultHttpUrl(): string {
+  const { hostname } = window.location;
+  if (hostname.endsWith(".ts.net")) return `https://${hostname}:7099`;
+  return "http://127.0.0.1:7100";
+}

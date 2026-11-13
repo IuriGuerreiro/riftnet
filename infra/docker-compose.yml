@@ -51,6 +51,14 @@ services:
       ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: app
       ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD: app
       ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: disable
+      # First boot creates a service account for the api and writes its token
+      # (PAT) to infra/.secrets/api.pat. Only on a fresh database.
+      ZITADEL_FIRSTINSTANCE_PATPATH: /secrets/api.pat
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME: api-service
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME: api
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE: "2099-01-01T00:00:00Z"
+    volumes:
+      - ./.secrets:/secrets
     ports: ["127.0.0.1:7102:8080"]
     depends_on:
       postgres:

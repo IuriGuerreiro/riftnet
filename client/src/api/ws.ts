@@ -1,15 +1,16 @@
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
-import { EnvelopeSchema, type Envelope } from "./gen/v1/envelope_pb";
-import { platform } from "./platform";
+import { EnvelopeSchema, type Envelope } from "../gen/v1/envelope_pb";
+import { platform } from "../platform";
 
 // Minimal request/response client over the WebSocket: id in, same id out.
-export class ApiClient {
+// WebSocket client, parked until DMs.
+export class WsClient {
   private ws: WebSocket;
   private nextId = 1n;
   private pending = new Map<bigint, (env: Envelope) => void>();
   onPush: (env: Envelope) => void = () => {};
 
-  constructor(url = platform.apiUrl) {
+  constructor(url = platform.wsUrl) {
     this.ws = new WebSocket(url);
     this.ws.binaryType = "arraybuffer";
     this.ws.onmessage = (ev) => {

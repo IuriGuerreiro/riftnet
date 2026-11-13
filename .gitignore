@@ -6,3 +6,6 @@ dist/
 .DS_Store
 client/src/gen/
 client/src-tauri/gen/
+
+# local secrets
+infra/.secrets/
