@@ -47,8 +47,11 @@ cargo run -p api            # ws://127.0.0.1:7100/ws, /health, /metrics
 VITE_API_URL=ws://127.0.0.1:7100/ws pnpm dev
 
 # Databases (Postgres, Scylla, NATS, Redis, Zitadel)
-docker compose -f infra/docker-compose.yml up -d
+docker compose -f infra/docker-compose.yml up -d --wait
 ```
+
+Zitadel console: http://localhost:7102/ui/console (first boot takes ~1 min).
+Default admin: `zitadel-admin@zitadel.localhost` / `Password1!` (local dev only).
 
 ## Local ports
 
