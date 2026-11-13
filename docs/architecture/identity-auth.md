@@ -163,11 +163,22 @@ erDiagram
     }
 ```
 
+## Email verification
+
+- Registered emails are stored as **unverified** in Zitadel (we never claim ownership we didn't check).
+- Login does not require a verified email yet (no email sending in dev).
+- **Before** password reset, invites or anything that trusts an email: send a verification code
+  (Zitadel can send it once SMTP is configured) and gate those features on `isVerified`.
+
 ## Security rules
 
 - **Never log passwords or tokens.** A test checks the logs.
 - Same error for "unknown email" and "wrong password" (don't reveal who has an account).
-- Rate limit login and register per IP and per email.
+- Rate limits: login 10/min per IP, 5/min per IP + email, and 100 **failed** attempts per 15 min per email
+  (one IP can't reach that, so nobody can lock out a real user by spamming). Register 5/min per IP.
+- Refresh token reuse within **30s** of rotation (two tabs, a retry) returns `409 refresh_superseded`;
+  later reuse is treated as theft and revokes the device.
+- Secret files (`infra/.secrets/`) are `0600`, folder `0700`. The signing key is only auto-created outside production.
 - Refresh tokens are stored as SHA-256 hashes only.
 - HTTPS everywhere outside local dev.
 

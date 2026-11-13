@@ -71,7 +71,7 @@ impl IdentityProvider for ZitadelClient {
             .json(&json!({
                 "username": email,
                 "profile": { "givenName": given_name, "familyName": "-" },
-                "email": { "email": email, "isVerified": true },
+                "email": { "email": email, "isVerified": false },
                 "password": { "password": password, "changeRequired": false },
             }))
             .send()
