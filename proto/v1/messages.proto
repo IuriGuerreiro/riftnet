@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package app.v1;
+
+message Message {
+  uint64 id = 1;               // Snowflake
+  uint64 conversation_id = 2;
+  uint64 author_id = 3;
+  uint64 seq = 4;              // per-conversation sequence, for sync
+  bytes content = 5;           // opaque: plain text now, encrypted later
+  Encryption encryption = 6;
+}
+
+enum Encryption {
+  ENCRYPTION_NONE = 0;
+  ENCRYPTION_MLS = 1;
+}
+
+message SendMessage {
+  uint64 conversation_id = 1;
+  bytes content = 2;
+  string nonce = 3;            // client-made; dedupe + match the ack
+}
+
+message MessageAck {
+  string nonce = 1;
+  Message message = 2;
+}
+
+message GetHistory {
+  uint64 conversation_id = 1;
+  uint64 before_id = 2;        // 0 = latest
+  uint32 limit = 3;
+}
+
+message History {
+  repeated Message messages = 1;
+}
+
+message MessageCreated {
+  Message message = 1;
+}
