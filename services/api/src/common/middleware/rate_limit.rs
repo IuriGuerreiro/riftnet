@@ -29,6 +29,7 @@ impl RateLimiter {
         }
         entry.1 += 1;
         if entry.1 > limit {
+            limited(key);
             return Err(ApiError::TooManyRequests);
         }
         Ok(())
@@ -40,6 +41,7 @@ impl RateLimiter {
         let windows = self.windows.lock().expect("rate limiter mutex poisoned");
         match windows.get(key) {
             Some((start, count)) if start.elapsed() < window && *count >= limit => {
+                limited(key);
                 Err(ApiError::TooManyRequests)
             }
             _ => Ok(()),
@@ -58,9 +60,25 @@ impl RateLimiter {
     }
 }
 
+/// Counts a blocked request. The label is the rule (`login:ip`), never the
+/// IP or email part of the key.
+fn limited(key: &str) {
+    metrics::counter!("rate_limited_requests_total", "rule" => rule(key)).increment(1);
+}
+
+fn rule(key: &str) -> String {
+    key.splitn(3, ':').take(2).collect::<Vec<_>>().join(":")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rule_label_drops_ip_and_email() {
+        assert_eq!(rule("login:ip-email:1.2.3.4:a@b.c"), "login:ip-email");
+        assert_eq!(rule("register:ip:::1"), "register:ip");
+    }
 
     #[test]
     fn blocks_after_limit() {
