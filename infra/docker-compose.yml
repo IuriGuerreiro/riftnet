@@ -1,0 +1,60 @@
+# Local dev dependencies. Start: docker compose -f infra/docker-compose.yml up -d
+# Host ports are moved off the defaults to avoid clashing with other local services.
+name: discord2
+
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: app
+    ports: ["127.0.0.1:55432:5432"]
+    volumes:
+      - postgres:/var/lib/postgresql/data
+      - ./postgres-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app"]
+      interval: 5s
+      retries: 10
+
+  scylla:
+    image: scylladb/scylla:2025.1
+    command: --smp 1 --memory 1G --overprovisioned 1 --developer-mode 1
+    ports: ["127.0.0.1:9042:9042"]
+    volumes: [scylla:/var/lib/scylla]
+
+  nats:
+    image: nats:2.11
+    command: ["-m", "8222"]
+    ports: ["127.0.0.1:4222:4222", "127.0.0.1:8222:8222"]
+
+  redis:
+    image: redis:8
+    ports: ["127.0.0.1:6379:6379"]
+
+  zitadel:
+    image: ghcr.io/zitadel/zitadel:v4.6.2
+    command: start-from-init --masterkeyFromEnv --tlsMode disabled
+    environment:
+      ZITADEL_MASTERKEY: "MasterkeyNeedsToHave32Characters"
+      ZITADEL_EXTERNALDOMAIN: localhost
+      ZITADEL_EXTERNALPORT: 7102
+      ZITADEL_EXTERNALSECURE: "false"
+      ZITADEL_DATABASE_POSTGRES_HOST: postgres
+      ZITADEL_DATABASE_POSTGRES_PORT: 5432
+      ZITADEL_DATABASE_POSTGRES_DATABASE: zitadel
+      ZITADEL_DATABASE_POSTGRES_USER_USERNAME: zitadel
+      ZITADEL_DATABASE_POSTGRES_USER_PASSWORD: zitadel
+      ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE: disable
+      ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: app
+      ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD: app
+      ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: disable
+    ports: ["127.0.0.1:7102:8080"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres:
+  scylla:

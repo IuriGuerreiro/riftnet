@@ -1,0 +1,10 @@
+[package]
+name = "common"
+description = "Shared helpers: Snowflake IDs, tracing setup"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+tracing.workspace = true
+tracing-subscriber.workspace = true

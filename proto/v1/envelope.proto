@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package app.v1;
+
+import "v1/messages.proto";
+import "v1/users.proto";
+
+// Every WebSocket frame is one Envelope.
+// Requests carry an `id`; the reply carries the same `id`.
+// Server pushes (new messages, presence) have id = 0.
+message Envelope {
+  uint64 id = 1;
+
+  oneof payload {
+    // client -> server
+    Ping ping = 10;
+    SendMessage send_message = 11;
+    GetHistory get_history = 12;
+
+    // server -> client
+    Pong pong = 50;
+    Error error = 51;
+    MessageAck message_ack = 52;
+    History history = 53;
+    MessageCreated message_created = 54;
+    UserUpdated user_updated = 55;
+  }
+}
+
+message Ping {}
+message Pong {}
+
+message Error {
+  string code = 1;
+  string message = 2;
+}

@@ -1,0 +1,14 @@
+{
+  "name": "discord2",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "scripts": {
+    "gen": "pnpm --filter client gen",
+    "dev": "pnpm --filter client dev",
+    "desktop": "pnpm --filter client tauri dev",
+    "mock": "pnpm --filter mock start",
+    "lint": "pnpm -r lint",
+    "build": "pnpm -r build"
+  },
+  "packageManager": "pnpm@11.18.0"
+}

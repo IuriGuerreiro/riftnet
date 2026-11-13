@@ -1,0 +1,10 @@
+[package]
+name = "client-core"
+description = "Client brain: API connection, state, media. No Tauri/UI code here."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+protocol.workspace = true
+tracing.workspace = true

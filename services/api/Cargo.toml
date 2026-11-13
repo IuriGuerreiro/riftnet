@@ -1,0 +1,16 @@
+[package]
+name = "api"
+description = "API server: accounts, friends, DMs. WebSocket + a little HTTP."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+common.workspace = true
+protocol.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+anyhow.workspace = true
+axum = { version = "0.8", features = ["ws"] }
+metrics = "0.24"
+metrics-exporter-prometheus = { version = "0.16", default-features = false }

@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package app.v1;
+
+message User {
+  uint64 id = 1;
+  string username = 2;
+  string display_name = 3;
+}
+
+message UserUpdated {
+  User user = 1;
+}
