@@ -38,7 +38,8 @@
 ## Observability (from day 1, not optional)
 
 - `tracing` crate for structured logs and spans.
-- Prometheus metrics (+ Grafana dashboards).
+- Prometheus metrics at `/metrics`.
+- OpenTelemetry (OTLP) export of logs, traces and metrics to SigNoz. See [observability.md](observability.md).
 
 ## Hosting
 
