@@ -63,7 +63,7 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4317 cargo run -p api
 
 Or set it in `.env` (see [.env.example](.env.example)). Then open
 http://127.0.0.1:8080 → Services → `api`. Unset = stdout logs only.
-Details: [docs/architecture/observability.md](docs/architecture/observability.md).
+Details and how to add logs, spans and metrics: [docs/architecture/observability.md](docs/architecture/observability.md).
 
 ## Local ports
 
