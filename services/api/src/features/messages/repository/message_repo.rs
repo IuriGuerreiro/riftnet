@@ -169,8 +169,10 @@ impl MessageRepo for ScyllaMessageRepo {
         let oldest_bucket = bucket_of(oldest_id);
 
         let mut out = Vec::new();
+
         for bucket in (oldest_bucket..=newest_bucket).rev() {
             let want = (limit - out.len()) as i32;
+
             let rows = self
                 .session
                 .execute_unpaged(&self.history, (conversation_id, bucket, i64::MAX, want))
@@ -178,6 +180,7 @@ impl MessageRepo for ScyllaMessageRepo {
                 .context("sync")?
                 .into_rows_result()
                 .context("sync")?;
+
             for row in rows.rows::<Row>().context("sync")? {
                 let message = to_message(row.context("sync")?);
                 if message.seq <= after_seq {
@@ -185,10 +188,12 @@ impl MessageRepo for ScyllaMessageRepo {
                 }
                 out.push(message);
             }
+
             if out.len() >= limit {
                 break;
             }
         }
+
         Ok(out)
     }
 }

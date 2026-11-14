@@ -101,6 +101,7 @@ async fn sync(state: &AppState, session: &Session, req: v1::Sync) -> Result<Payl
             req.after_seq as i64,
         )
         .await?;
+
     Ok(Payload::SyncResult(v1::SyncResult {
         messages: messages.iter().map(Into::into).collect(),
         complete,
