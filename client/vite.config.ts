@@ -12,7 +12,5 @@ export default defineConfig({
     strictPort: true,
     // Allow access through Tailscale MagicDNS (tailscale serve proxies HTTPS to this port).
     allowedHosts: [".ts.net"],
-    // TEST: voice-call spike SFU (spikes/sfu-audio). Same origin = no CORS, works over Tailscale HTTPS.
-    proxy: { "/sfu": { target: "http://127.0.0.1:3000", rewrite: (p) => p.replace(/^\/sfu/, "") } },
   },
 });

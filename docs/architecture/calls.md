@@ -1,6 +1,7 @@
 # Calls (design)
 
-Status: **research / proposal**, Nov 2026. No production code yet.
+Status: **1:1 audio works** (Nov 2026): api signaling + `services/media` SFU + test UI.
+Not yet: 3+ people, call history, TURN, desktop (libwebrtc), video.
 Builds on [voice-video.md](voice-video.md) (media pipelines) and [protocol.md](protocol.md) (Envelope).
 This doc covers: which SFU, how signaling works, the call flow, new messages, and the first spike.
 
@@ -80,27 +81,48 @@ Step by step:
 
 Trickle ICE (sending candidates one by one) is not needed: the SFU puts its one candidate in the answer, and clients find the SFU without extra candidates. Add `ice_candidate` only for P2P later.
 
-## 5. New protobuf messages
+## 5. Protobuf messages
 
-New file `proto/v1/calls.proto`. **Reserve Envelope field numbers 100–139 for calls** so we don't clash with other branches.
+Client ↔ api: `proto/v1/calls.proto`. **Envelope fields 100–139 are reserved for calls.**
 
 | Envelope field | Message | Direction |
 | --- | --- | --- |
-| 100 | `CallStart {conversation_id}` | client → server |
-| 101 | `CallAccept {call_id}` | client → server |
-| 102 | `CallDecline {call_id}` | client → server |
-| 103 | `CallJoin {call_id, sdp_offer}` | client → server |
-| 104 | `CallRenegotiate {call_id, sdp}` | both ways |
-| 105 | `CallLeave {call_id}` | client → server |
-| 106 | `SetMute {call_id, muted}` | client → server |
-| 120 | `CallStarted {call_id}` | reply |
-| 121 | `CallJoined {sdp_answer, participants}` | reply |
-| 130 | `CallIncoming {call_id, conversation_id, from}` | push |
-| 131 | `ParticipantJoined / ParticipantLeft {user_id}` | push |
-| 132 | `ParticipantMuted {user_id, muted}` | push |
-| 133 | `CallEnded {call_id, reason}` | push (`hangup`, `declined`, `missed`, `answered_elsewhere`) |
+| 100 | `CallStart {conversation_id}` | request → `CallResult` (existing call if one is going) |
+| 101 | `CallAccept {call_id}` | request → `CallResult` |
+| 102 | `CallDecline {call_id}` | request → `CallResult` |
+| 103 | `CallJoin {call_id, sdp_offer}` | request → `CallJoined {call, sdp_answer}` |
+| 105 | `CallLeave {call_id}` | request → `CallResult` |
+| 120 | `CallResult {call}` | reply |
+| 121 | `CallJoined {call, sdp_answer}` | reply |
+| 130 | `CallIncoming {call}` | push: ring |
+| 131 | `CallUpdated {call}` | push: accepted, someone joined/left |
+| 133 | `CallEnded {call_id, conversation_id, reason}` | push: `hangup`, `declined`, `missed` |
 
-SDP stays a plain `string`. It's ugly but every WebRTC stack speaks it.
+`Call` = `{id, conversation_id, caller_id, state (ringing/active), participant_ids}`.
+Free for later: 104 (renegotiate, for 3+ people), 106 (mute status), 132.
+
+api ↔ media (internal, NATS): `proto/v1/media.proto`.
+
+| Subject | Message |
+| --- | --- |
+| `media.join` (request/reply) | `MediaJoin {room_id, sdp_offer}` → `MediaJoinReply {peer_id, sdp_answer, error}` |
+| `media.leave` (publish) | `MediaLeave {peer_id}` |
+
+Rules (in `features/calls/service.rs`):
+
+- One live call per conversation. `call_start` on a busy one returns it.
+- The callee joining counts as accepting. Nobody answers in 30 s → `missed`.
+- The call ends when nobody is left to talk to (after it was answered, one person left = end).
+- A socket closing removes that device from its call.
+- Calls live **in memory in the api**: correct with one api server only. Several → move `CallStore` to Redis.
+
+## How to run
+
+```sh
+cargo run -p media                  # MEDIA_IP=<tailscale ip> to call across devices; UDP port 7110
+cargo run -p api                    # as usual
+scripts/smoke-calls.sh              # end-to-end check (needs the client dev server on :7104)
+```
 
 ## 6. Audio settings (Opus)
 
@@ -138,6 +160,8 @@ The SFU doesn't care which client it talks to. A `Platform`/`MediaTransport` tra
 7. Ring on many devices + glare (both call at once): pick "join the existing call" rule.
 
 ## 10. First spike: 1:1 audio through our SFU
+
+✅ Done. Steps 1–8 are now real code (`services/media`, `features/calls`). Step 9 is next.
 
 Goal: two browser tabs talk through our `str0m` SFU, signaling over our WebSocket. Folder: `spikes/sfu-audio/` (throwaway).
 

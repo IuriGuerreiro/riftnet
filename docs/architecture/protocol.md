@@ -74,6 +74,8 @@ sequenceDiagram
 | `get_history {conversation_id, before_id, limit}` | `history` (newest first)       | limit default 50, max 100    |
 | `sync {conversation_id, after_seq}`               | `sync_result`                  | done                         |
 | — (push, id 0)                                    | `message_created`              | live, via NATS (see dms.md)  |
+| `call_start` / `call_accept` / `call_decline` / `call_join` / `call_leave` | `call_result` / `call_joined` | voice, see [calls.md](calls.md) |
+| — (push, id 0) | `call_incoming` / `call_updated` / `call_ended` | voice calls |
 
 Example session (written as JSON; on the wire it's binary protobuf):
 
