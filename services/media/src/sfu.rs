@@ -59,7 +59,7 @@ impl Sfu {
     pub fn add(&self, room: u64, sdp_offer: &str) -> anyhow::Result<(u64, String)> {
         let offer = SdpOffer::from_sdp_string(sdp_offer)?;
         // Full ICE, not ICE-lite: lite picked the wrong path on machines with
-        // several network interfaces (see spikes/sfu-audio/README.md).
+        // several network interfaces (see docs/architecture/calls.md, section 3).
         let mut rtc = Rtc::builder().build(Instant::now());
         rtc.add_local_candidate(Candidate::host(self.addr, "udp")?);
         let answer = rtc.sdp_api().accept_offer(offer)?;

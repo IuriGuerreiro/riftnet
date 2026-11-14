@@ -43,7 +43,7 @@ Why str0m: we need little (forward Opus, later forward video layers). Sans-IO me
 ## 3. Network: STUN / TURN
 
 - The SFU has a public IP, so clients need no STUN to reach it.
-- **Use full ICE, not ICE-lite**, for now. The spike broke with lite on a machine with several network interfaces (see `spikes/sfu-audio/README.md`).
+- **Use full ICE, not ICE-lite**, for now. The spike broke with lite on a machine with Docker bridges: Chrome sent media from `192.168.192.1`, str0m-lite had picked `192.168.1.88`, so ~97% of packets were dropped. Full ICE fixed it. Revisit lite in production (public IP, one interface).
 - UDP blocked (corporate wifi): ~a few % of users. Fix later with **ICE over TCP/443** on the SFU or a **coturn** in front. Not in the spike.
 - coturn becomes required when P2P arrives (after MVP). Credentials: short-lived HMAC ("TURN REST") issued by `api`.
 
@@ -163,9 +163,9 @@ The SFU doesn't care which client it talks to. A `Platform`/`MediaTransport` tra
 
 ✅ Done. Steps 1–8 are now real code (`services/media`, `features/calls`). Step 9 is next.
 
-Goal: two browser tabs talk through our `str0m` SFU, signaling over our WebSocket. Folder: `spikes/sfu-audio/` (throwaway).
+Goal: two browser tabs talk through our `str0m` SFU, signaling over our WebSocket. The spike folder was deleted once this became real code (see git history: `7e874e8`).
 
-1. New crate `spikes/sfu-audio/sfu`: tokio UDP socket + str0m, based on str0m's `chat.rs` example. One room. ✅ done: `spikes/sfu-audio/`.
+1. New crate `spikes/sfu-audio/sfu`: tokio UDP socket + str0m, based on str0m's `chat.rs` example. One room.
 2. SFU exposes `join(sdp_offer) -> sdp_answer`. For the spike, plain HTTP POST on the SFU (skip NATS).
 3. Forward every audio packet from one peer to the other. No decode.
 4. Static HTML page: `getUserMedia({audio:true})` → offer → POST → set answer → play remote track.
