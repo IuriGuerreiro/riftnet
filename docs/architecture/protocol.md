@@ -72,7 +72,7 @@ sequenceDiagram
 | `list_conversations`                              | `conversations`                |                              |
 | `send_message {conversation_id, content, nonce}`  | `message_ack {nonce, message}` | see [dms.md](dms.md#sending) |
 | `get_history {conversation_id, before_id, limit}` | `history` (newest first)       | limit default 50, max 100    |
-| `sync {conversation_id, after_seq}`               | `sync_result`                  | not built yet                |
+| `sync {conversation_id, after_seq}`               | `sync_result`                  | done                         |
 | — (push, id 0)                                    | `message_created`              | live, via NATS (see dms.md)  |
 
 Example session (written as JSON; on the wire it's binary protobuf):
@@ -92,8 +92,11 @@ Test it end to end: `pnpm --filter mock smoke:ws` (api + stack running).
 
 ## Event sync (reconnect)
 
-- Every event in a conversation gets a **sequence number**.
-- On reconnect: "I have up to #5000" → the server sends everything after.
+- Every message in a conversation gets a **sequence number** (`seq`).
+- On reconnect, per conversation: `sync {after_seq: 5000}` → every message after #5000, **oldest first**.
+- Nothing new? Answered from the conversation row (`last_seq`), no message read.
+- At most 200 per sync. More missed → `complete: false`: you got the newest 200; drop your local copy and load older with `get_history`.
+- Holes in seq (a crashed send) are fine: sync filters `seq > after_seq`, it doesn't count.
 
 ## Versioning
 

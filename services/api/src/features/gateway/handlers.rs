@@ -19,6 +19,7 @@ pub async fn dispatch(
         Payload::ListConversations(_) => list_conversations(state, session).await,
         Payload::SendMessage(req) => send_message(state, session, req).await,
         Payload::GetHistory(req) => get_history(state, session, req).await,
+        Payload::Sync(req) => sync(state, session, req).await,
         Payload::Authenticate(_) => Err(ApiError::bad_request(
             "already_authenticated",
             "already authenticated",
@@ -88,5 +89,20 @@ async fn get_history(
         .await?;
     Ok(Payload::History(v1::History {
         messages: messages.iter().map(Into::into).collect(),
+    }))
+}
+
+async fn sync(state: &AppState, session: &Session, req: v1::Sync) -> Result<Payload, ApiError> {
+    let (messages, complete) = state
+        .messages
+        .sync(
+            session.user_id,
+            req.conversation_id as i64,
+            req.after_seq as i64,
+        )
+        .await?;
+    Ok(Payload::SyncResult(v1::SyncResult {
+        messages: messages.iter().map(Into::into).collect(),
+        complete,
     }))
 }

@@ -138,5 +138,4 @@ Possible fixes if needed: rely on WebRTC's automatic quality drop, encode once f
 
 ## Open questions
 
-- Sync on reconnect is next.
 - DM list order: by creation for now; should be by latest message.

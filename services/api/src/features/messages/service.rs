@@ -4,7 +4,7 @@ use common::snowflake::Snowflake;
 use protocol::Message as _;
 use protocol::v1::{Envelope, MessageCreated, envelope::Payload};
 
-use super::models::{MAX_CONTENT_BYTES, MAX_NONCE_LEN, Message};
+use super::models::{MAX_CONTENT_BYTES, MAX_NONCE_LEN, MAX_SYNC, Message};
 use super::repository::MessageRepo;
 use crate::common::error::ApiError;
 use crate::common::events::EventBus;
@@ -117,6 +117,32 @@ impl MessageService {
             .repo
             .history(conversation_id, before_id, limit, conversation.id)
             .await?)
+    }
+
+    /// What I missed since `after_seq` (e.g. after a reconnect), oldest first.
+    /// `complete = false`: more than `MAX_SYNC` missed. You got the newest
+    /// `MAX_SYNC`; drop your local copy and load older ones with history.
+    #[tracing::instrument(name = "messages.sync", skip_all, fields(user.id = me, conversation.id = conversation_id))]
+    pub async fn sync(
+        &self,
+        me: i64,
+        conversation_id: i64,
+        after_seq: i64,
+    ) -> Result<(Vec<Message>, bool), ApiError> {
+        let conversation = self.member_conversation(me, conversation_id).await?;
+        // Common case: nothing new. The conversation row already says so.
+        if conversation.last_seq <= after_seq {
+            return Ok((Vec::new(), true));
+        }
+        // Ask for one extra: if it comes back, there were more than MAX_SYNC.
+        let mut messages = self
+            .repo
+            .since_seq(conversation_id, after_seq, MAX_SYNC + 1, conversation.id)
+            .await?;
+        let complete = messages.len() <= MAX_SYNC;
+        messages.truncate(MAX_SYNC);
+        messages.reverse(); // newest first → oldest first
+        Ok((messages, complete))
     }
 
     /// The conversation, if `me` is in it. Same error whether it doesn't exist

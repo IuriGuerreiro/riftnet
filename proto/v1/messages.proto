@@ -46,7 +46,7 @@ message Sync {
 
 message SyncResult {
   repeated Message messages = 1; // oldest first
-  bool complete = 2;             // false = too many, call Sync again
+  bool complete = 2;             // false = too many missed: these are the newest; load older with GetHistory
 }
 
 // Push: a new message in a conversation you're in.

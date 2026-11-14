@@ -3,7 +3,7 @@
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { AuthenticateSchema, EnvelopeSchema, PingSchema, type Envelope } from "../../../client/src/gen/v1/envelope_pb.ts";
 import { ListConversationsSchema, OpenDmSchema } from "../../../client/src/gen/v1/conversations_pb.ts";
-import { GetHistorySchema, SendMessageSchema } from "../../../client/src/gen/v1/messages_pb.ts";
+import { GetHistorySchema, SendMessageSchema, SyncSchema } from "../../../client/src/gen/v1/messages_pb.ts";
 
 const HTTP = process.env.API_HTTP ?? "http://127.0.0.1:7100";
 const WS = HTTP.replace(/^http/, "ws") + "/ws";
@@ -39,7 +39,9 @@ function talk(payloads: Envelope["payload"][], want: number): Promise<{ replies:
     ws.onopen = () =>
       payloads.forEach((payload, i) => ws.send(toBinary(EnvelopeSchema, create(EnvelopeSchema, { id: BigInt(i + 1), payload }))));
     ws.onmessage = (ev) => {
-      replies.push(fromBinary(EnvelopeSchema, new Uint8Array(ev.data as ArrayBuffer)));
+      const env = fromBinary(EnvelopeSchema, new Uint8Array(ev.data as ArrayBuffer));
+      if (env.id === 0n && env.payload.case !== "error") return; // live pushes aren't replies
+      replies.push(env);
       if (replies.length >= want) { ws.close(); resolve({ replies }); }
     };
     ws.onclose = (ev) => resolve({ replies, closeCode: ev.code });
@@ -179,5 +181,16 @@ check(`bob gets it live${WS2 !== WS ? " (via another api server)" : ""}`, !!got 
 check("alice's other device gets it too", alicePhone.pushes.some((e) => created(e)?.id === sent?.id));
 check("non-member gets nothing", carolLive.pushes.length === 0);
 [bobLive, alicePhone, carolLive].forEach((l) => l.stop());
+
+// --- sync (reconnect: "I have up to seq N") ---  the DM now has seq 1..14
+const sync = (conversationId: bigint, afterSeq: bigint) => ({ case: "sync" as const, value: create(SyncSchema, { conversationId, afterSeq }) });
+const synced = (e?: Envelope) => (e?.payload.case === "syncResult" ? e.payload.value : undefined);
+r = await talk([auth(bob.token), sync(dm, 10n), sync(dm, 14n), sync(dm, 0n)], 4);
+const s10 = synced(r.replies[1]), s14 = synced(r.replies[2]), s0 = synced(r.replies[3]);
+check("sync after 10 → 11..14, oldest first", s10?.complete === true && s10.messages.map((m) => m.seq).join(",") === "11,12,13,14", s10?.messages.map((m) => m.seq).join(","));
+check("sync when up to date → empty", s14?.complete === true && s14.messages.length === 0);
+check("sync from 0 → all 14", s0?.complete === true && s0.messages.length === 14 && s0.messages[0].seq === 1n);
+r = await talk([auth(carol.token), sync(dm, 0n)], 2);
+check("non-member can't sync", errCode(r.replies[1]) === "conversation_not_found");
 
 process.exit(failed ? 1 : 0);

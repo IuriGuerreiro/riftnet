@@ -14,6 +14,8 @@ pub struct Message {
 /// Max size of one message's content (bytes, not characters).
 pub const MAX_CONTENT_BYTES: usize = 8 * 1024;
 /// Max client nonce length.
+/// Most messages one `sync` returns.
+pub const MAX_SYNC: usize = 200;
 pub const MAX_NONCE_LEN: usize = 64;
 
 /// A partition holds ~10 days of one conversation, so it never grows forever.

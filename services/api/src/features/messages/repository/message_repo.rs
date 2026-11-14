@@ -32,6 +32,15 @@ pub trait MessageRepo: Send + Sync {
         limit: usize,
         oldest_id: i64,
     ) -> Result<Vec<Message>, RepoError>;
+    /// Messages with `seq > after_seq`, newest first, at most `limit`.
+    /// Walks back from now and stops at the first message the client already has.
+    async fn since_seq(
+        &self,
+        conversation_id: i64,
+        after_seq: i64,
+        limit: usize,
+        oldest_id: i64,
+    ) -> Result<Vec<Message>, RepoError>;
 }
 
 #[async_trait]
@@ -138,6 +147,43 @@ impl MessageRepo for ScyllaMessageRepo {
                 .context("history")?;
             for row in rows.rows::<Row>().context("history")? {
                 out.push(to_message(row.context("history")?));
+            }
+            if out.len() >= limit {
+                break;
+            }
+        }
+        Ok(out)
+    }
+
+    #[tracing::instrument(name = "db SELECT messages", skip_all, err(Display), fields(otel.kind = "client", db.system = "scylladb", db.operation = "SELECT", db.collection.name = "messages"))]
+    async fn since_seq(
+        &self,
+        conversation_id: i64,
+        after_seq: i64,
+        limit: usize,
+        oldest_id: i64,
+    ) -> Result<Vec<Message>, RepoError> {
+        // Same walk as history (newest bucket first), but instead of counting
+        // to a limit we stop at the first message the client already has.
+        let newest_bucket = bucket_at(chrono::Utc::now().timestamp_millis() as u64);
+        let oldest_bucket = bucket_of(oldest_id);
+
+        let mut out = Vec::new();
+        for bucket in (oldest_bucket..=newest_bucket).rev() {
+            let want = (limit - out.len()) as i32;
+            let rows = self
+                .session
+                .execute_unpaged(&self.history, (conversation_id, bucket, i64::MAX, want))
+                .await
+                .context("sync")?
+                .into_rows_result()
+                .context("sync")?;
+            for row in rows.rows::<Row>().context("sync")? {
+                let message = to_message(row.context("sync")?);
+                if message.seq <= after_seq {
+                    return Ok(out); // reached what the client has
+                }
+                out.push(message);
             }
             if out.len() >= limit {
                 break;
