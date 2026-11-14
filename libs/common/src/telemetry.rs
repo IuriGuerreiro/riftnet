@@ -88,8 +88,13 @@ fn is_exporter_internal(target: &str) -> bool {
 impl Providers {
     fn new(service: &'static str, version: &'static str) -> anyhow::Result<Self> {
         let env = std::env::var("APP_ENV").unwrap_or_else(|_| "development".into());
+        // OTEL_SERVICE_NAME overrides the default (e.g. to tell test runs apart).
+        let name = std::env::var("OTEL_SERVICE_NAME")
+            .ok()
+            .filter(|n| !n.trim().is_empty())
+            .unwrap_or_else(|| service.to_owned());
         let resource = Resource::builder()
-            .with_service_name(service)
+            .with_service_name(name)
             .with_attributes([
                 KeyValue::new("service.version", version),
                 KeyValue::new("deployment.environment", env.clone()),

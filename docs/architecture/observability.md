@@ -22,7 +22,7 @@ Setup lives in `libs/common/src/telemetry.rs`:
   `http.response.status_code` (duration = span length).
 - **Metrics:** the `metrics` crate feeds two places: the Prometheus `/metrics`
   endpoint (always) and OTLP (when enabled).
-- **Resource:** `service.name` (`api`, `media`), `service.version`,
+- **Resource:** `service.name` (`api`, `media`; override with `OTEL_SERVICE_NAME`), `service.version`,
   `deployment.environment` (from `APP_ENV`).
 - Exporters flush on shutdown (Ctrl+C / SIGTERM).
 
