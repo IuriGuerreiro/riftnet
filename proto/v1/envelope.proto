@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package app.v1;
 
+import "v1/calls.proto";
 import "v1/conversations.proto";
 import "v1/messages.proto";
 import "v1/users.proto";
@@ -38,6 +39,21 @@ message Envelope {
     // server -> client (pushes, id = 0)
     MessageCreated message_created = 54;
     UserUpdated user_updated = 55;
+
+    // calls (100-139 reserved, see docs/architecture/calls.md)
+    // client -> server
+    CallStart call_start = 100;
+    CallAccept call_accept = 101;
+    CallDecline call_decline = 102;
+    CallJoin call_join = 103;
+    CallLeave call_leave = 105;
+    // server -> client (replies)
+    CallResult call_result = 120;
+    CallJoined call_joined = 121;
+    // server -> client (pushes, id = 0)
+    CallIncoming call_incoming = 130;
+    CallUpdated call_updated = 131;
+    CallEnded call_ended = 133;
   }
 }
 
