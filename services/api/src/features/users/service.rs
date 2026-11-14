@@ -13,10 +13,12 @@ impl UserService {
         Self { repo }
     }
 
+    #[tracing::instrument(name = "users.get", skip_all, fields(user.id = id))]
     pub async fn get(&self, id: i64) -> Result<User, ApiError> {
         self.repo.find_by_id(id).await?.ok_or(ApiError::NotFound)
     }
 
+    #[tracing::instrument(name = "users.set_username", skip_all, fields(user.id = id))]
     pub async fn set_username(&self, id: i64, raw: &str) -> Result<User, ApiError> {
         let username = normalize_username(raw)?;
         match self.repo.set_username(id, &username).await {

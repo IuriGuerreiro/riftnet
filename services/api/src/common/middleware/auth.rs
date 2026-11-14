@@ -30,6 +30,9 @@ impl FromRequestParts<AppState> for AuthUser {
             .verify_access(token)
             .map_err(|_| ApiError::Unauthorized("invalid_token"))?;
 
+        let span = tracing::Span::current();
+        span.record("user.id", claims.user_id);
+        span.record("device.id", claims.device_id);
         Ok(AuthUser {
             user_id: claims.user_id,
             device_id: claims.device_id,

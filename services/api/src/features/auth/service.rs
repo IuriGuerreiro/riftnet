@@ -45,6 +45,7 @@ impl AuthService {
         }
     }
 
+    #[tracing::instrument(name = "auth.register", skip_all, fields(user.id = tracing::field::Empty, device.id = tracing::field::Empty, outcome = tracing::field::Empty))]
     pub async fn register(
         &self,
         email: &str,
@@ -52,11 +53,13 @@ impl AuthService {
         device: NewDevice,
     ) -> Result<Session, ApiError> {
         let result = self.register_inner(email, password, device).await;
-        metrics::registration(match &result {
+        let outcome = match &result {
             Ok(_) => "ok",
             Err(ApiError::BadRequest { .. } | ApiError::Conflict { .. }) => "rejected",
             Err(_) => "error",
-        });
+        };
+        tracing::Span::current().record("outcome", outcome);
+        metrics::registration(outcome);
         result
     }
 
@@ -86,6 +89,7 @@ impl AuthService {
         self.start_session(user, device).await
     }
 
+    #[tracing::instrument(name = "auth.login", skip_all, fields(user.id = tracing::field::Empty, device.id = tracing::field::Empty, outcome = tracing::field::Empty))]
     pub async fn login(
         &self,
         email: &str,
@@ -93,11 +97,13 @@ impl AuthService {
         device: NewDevice,
     ) -> Result<Session, ApiError> {
         let result = self.login_inner(email, password, device).await;
-        metrics::login(match &result {
+        let outcome = match &result {
             Ok(_) => "ok",
             Err(ApiError::Unauthorized(_) | ApiError::BadRequest { .. }) => "failed",
             Err(_) => "error",
-        });
+        };
+        tracing::Span::current().record("outcome", outcome);
+        metrics::login(outcome);
         result
     }
 
@@ -123,9 +129,12 @@ impl AuthService {
         self.start_session(user, device).await
     }
 
+    #[tracing::instrument(name = "auth.refresh", skip_all, fields(user.id = tracing::field::Empty, device.id = tracing::field::Empty, outcome = tracing::field::Empty))]
     pub async fn refresh(&self, refresh_token: &str) -> Result<Session, ApiError> {
         let result = self.refresh_inner(refresh_token).await;
-        metrics::refresh(refresh_outcome(&result));
+        let outcome = refresh_outcome(&result);
+        tracing::Span::current().record("outcome", outcome);
+        metrics::refresh(outcome);
         result
     }
 
@@ -137,6 +146,9 @@ impl AuthService {
             .await?
             .ok_or(ApiError::Unauthorized("invalid_refresh_token"))?;
 
+        let span = tracing::Span::current();
+        span.record("user.id", record.user_id);
+        span.record("device.id", record.device_id);
         if record.device_revoked_at.is_some() {
             return Err(ApiError::Unauthorized("session_revoked"));
         }
@@ -190,6 +202,7 @@ impl AuthService {
         })
     }
 
+    #[tracing::instrument(name = "auth.logout", skip_all, fields(device.id = device_id))]
     pub async fn logout(&self, device_id: i64) -> Result<(), ApiError> {
         self.repo.revoke_device(device_id).await?;
         Ok(())
@@ -204,6 +217,9 @@ impl AuthService {
 
     async fn start_session(&self, user: User, device: NewDevice) -> Result<Session, ApiError> {
         let device_id = self.next_id();
+        let span = tracing::Span::current();
+        span.record("user.id", user.id);
+        span.record("device.id", device_id);
         self.repo.create_device(device_id, user.id, &device).await?;
 
         let (refresh_token, hash) = self.tokens.new_refresh_token();

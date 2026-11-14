@@ -53,6 +53,7 @@ impl ZitadelClient {
 
     async fn error_of(res: reqwest::Response) -> ZitadelError {
         let status = res.status();
+        tracing::Span::current().record("zitadel.status", status.as_u16());
         res.json::<ZitadelError>().await.unwrap_or(ZitadelError {
             code: -1,
             message: format!("zitadel returned {status}"),
@@ -62,6 +63,7 @@ impl ZitadelClient {
 
 #[async_trait]
 impl IdentityProvider for ZitadelClient {
+    #[tracing::instrument(name = "zitadel create_user", skip_all, fields(otel.kind = "client", peer.service = "zitadel", zitadel.status = tracing::field::Empty, outcome = tracing::field::Empty))]
     async fn create_user(&self, email: &str, password: &str) -> Result<String, IdentityError> {
         let given_name = email.split('@').next().unwrap_or("user");
         let res = self
@@ -85,19 +87,23 @@ impl IdentityProvider for ZitadelClient {
                 user_id: String,
             }
             let created: Created = res.json().await.map_err(anyhow::Error::from)?;
+            tracing::Span::current().record("outcome", "created");
             return Ok(created.user_id);
         }
 
         let err = Self::error_of(res).await;
-        Err(match err.code {
+        let result = match err.code {
             6 => IdentityError::EmailTaken, // ALREADY_EXISTS
             3 if err.message.contains("Password") => {
                 IdentityError::WeakPassword(strip_id(&err.message))
             }
             _ => anyhow::anyhow!("zitadel create user: {} ({})", err.message, err.code).into(),
-        })
+        };
+        tracing::Span::current().record("outcome", identity_outcome(&result));
+        Err(result)
     }
 
+    #[tracing::instrument(name = "zitadel verify_password", skip_all, fields(otel.kind = "client", peer.service = "zitadel", zitadel.status = tracing::field::Empty, outcome = tracing::field::Empty))]
     async fn verify_password(&self, email: &str, password: &str) -> Result<String, IdentityError> {
         let res = self
             .http
@@ -115,14 +121,16 @@ impl IdentityProvider for ZitadelClient {
 
         if !res.status().is_success() {
             let err = Self::error_of(res).await;
-            return Err(match err.code {
+            let result = match err.code {
                 // INVALID_ARGUMENT (wrong password), NOT_FOUND (no user),
                 // FAILED_PRECONDITION (locked/inactive): all look the same to the client.
                 3 | 5 | 9 => IdentityError::InvalidCredentials,
                 _ => {
                     anyhow::anyhow!("zitadel create session: {} ({})", err.message, err.code).into()
                 }
-            });
+            };
+            tracing::Span::current().record("outcome", identity_outcome(&result));
+            return Err(result);
         }
 
         #[derive(Deserialize)]
@@ -162,7 +170,18 @@ impl IdentityProvider for ZitadelClient {
             tracing::warn!(error = %err, "failed to delete zitadel session");
         }
 
+        tracing::Span::current().record("outcome", "ok");
         Ok(user_id)
+    }
+}
+
+/// Error kind for spans. Never the message: Zitadel may echo user input.
+fn identity_outcome(err: &IdentityError) -> &'static str {
+    match err {
+        IdentityError::InvalidCredentials => "invalid_credentials",
+        IdentityError::EmailTaken => "email_taken",
+        IdentityError::WeakPassword(_) => "weak_password",
+        IdentityError::Other(_) => "error",
     }
 }
 

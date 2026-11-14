@@ -20,6 +20,13 @@ Setup lives in `libs/common/src/telemetry.rs`:
 - **Traces:** every `tracing` span. Each HTTP request is one span named
   `METHOD /route` with `http.request.method`, `http.route`,
   `http.response.status_code` (duration = span length).
+- **Span tree** (e.g. a login):
+  `POST /auth/login` → `auth.login` → `zitadel verify_password`, `db SELECT users`,
+  `db INSERT devices`, `db INSERT refresh_tokens`.
+  - Request span: `error.code` (e.g. `invalid_credentials`), `user.id`, `device.id`.
+  - Service spans: `outcome` (same values as the metrics), `user.id`, `device.id`.
+  - DB spans: `db.system`, `db.operation`, `db.collection.name`. Zitadel spans: `zitadel.status`, `outcome`.
+  - All spans use `skip_all`: function arguments (passwords, tokens) are never recorded.
 - **Metrics:** the `metrics` crate feeds two places: the Prometheus `/metrics`
   endpoint (always) and OTLP (when enabled).
 - **Resource:** `service.name` (`api`, `media`; override with `OTEL_SERVICE_NAME`), `service.version`,
@@ -65,7 +72,8 @@ Then open http://127.0.0.1:8080 → **Services → api** (traces),
 
 Nothing exported may contain passwords, tokens, or the `Authorization` header.
 
-- The HTTP span records method, route and status only. No headers, no bodies, no query strings.
+- Spans record method, route, status, error code and internal ids only. No headers, bodies, query strings, emails or error messages from Zitadel (they can echo input).
+- New `#[tracing::instrument]` must use `skip_all` and add fields explicitly.
 - Request types holding secrets implement `Debug` as `<redacted>`.
 - Never `tracing::info!(?req)` on a request that holds a password or token.
 - Checked after changes: run `scripts/smoke-auth.sh` with OTLP on and search

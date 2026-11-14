@@ -28,6 +28,9 @@ pub async fn track(req: Request, next: Next) -> Response {
         http.route = %route,
         http.response.status_code = field::Empty,
         otel.status_code = field::Empty,
+        error.code = field::Empty,
+        user.id = field::Empty,
+        device.id = field::Empty,
     );
 
     let start = Instant::now();
