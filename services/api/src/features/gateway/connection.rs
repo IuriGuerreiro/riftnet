@@ -5,12 +5,15 @@
 //! 3. Reply `AuthOk { user }`, then handle requests until the socket closes.
 //!
 //! Anything wrong in step 1–2 → an `Error` frame, then close with code 4001.
+//! Requests are handled in `handlers.rs`.
 
 use std::time::Duration;
 
 use axum::extract::ws::{CloseFrame, Message as WsMessage, WebSocket};
 use protocol::Message;
-use protocol::v1::{AuthOk, Envelope, Error, Pong, User, envelope::Payload};
+use protocol::v1::{AuthOk, Envelope, Error, envelope::Payload};
+
+use super::handlers;
 
 use crate::app::AppState;
 
@@ -53,7 +56,7 @@ pub async fn run(mut socket: WebSocket, state: AppState) {
             continue; // ping/pong/text frames: ignore
         };
         let reply = match Envelope::decode(bytes) {
-            Ok(req) => handle(&session, req),
+            Ok(req) => handle(&state, &session, req).await,
             Err(_) => error(0, "bad_frame", "not a valid Envelope"),
         };
         if send(&mut socket, reply).await.is_err() {
@@ -100,33 +103,28 @@ async fn authenticate(socket: &mut WebSocket, state: &AppState) -> Result<Sessio
     let ok = Envelope {
         id: env.id,
         payload: Some(Payload::AuthOk(AuthOk {
-            user: Some(User {
-                id: user.id as u64,
-                username: user.username.unwrap_or_default(),
-                display_name: user.display_name.unwrap_or_default(),
-            }),
+            user: Some((&user).into()),
         })),
     };
     send(socket, ok).await.map_err(|_| "closed")?;
     Ok(session)
 }
 
-/// Step 3: one request in, one reply out. Messaging handlers go here.
-fn handle(_session: &Session, req: Envelope) -> Envelope {
+/// Step 3: one request in, one reply out (same `id`).
+async fn handle(state: &AppState, session: &Session, req: Envelope) -> Envelope {
     metrics::counter!("ws_requests_total").increment(1);
-    match req.payload {
-        Some(Payload::Ping(_)) => Envelope {
+    let Some(payload) = req.payload else {
+        return error(req.id, "bad_frame", "empty envelope");
+    };
+    match handlers::dispatch(state, session, payload).await {
+        Ok(reply) => Envelope {
             id: req.id,
-            payload: Some(Payload::Pong(Pong {})),
+            payload: Some(reply),
         },
-        Some(Payload::Authenticate(_)) => {
-            error(req.id, "already_authenticated", "already authenticated")
+        Err(err) => {
+            let (_, code, message) = err.describe();
+            error(req.id, code, &message)
         }
-        _ => error(
-            req.id,
-            "not_implemented",
-            "request type not implemented yet",
-        ),
     }
 }
 

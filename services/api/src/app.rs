@@ -17,6 +17,8 @@ use crate::features::auth::identity::ZitadelClient;
 use crate::features::auth::repository::PgAuthRepo;
 use crate::features::auth::service::AuthService;
 use crate::features::auth::tokens::TokenService;
+use crate::features::conversations::repository::ScyllaConversationRepo;
+use crate::features::conversations::service::ConversationService;
 use crate::features::users::repository::{PgUserRepo, UserRepo};
 use crate::features::users::service::UserService;
 use crate::features::{auth, gateway, health, users};
@@ -25,12 +27,19 @@ use crate::features::{auth, gateway, health, users};
 pub struct AppState {
     pub auth: Arc<AuthService>,
     pub users: Arc<UserService>,
+    pub conversations: Arc<ConversationService>,
     pub tokens: Arc<TokenService>,
     pub limiter: Arc<RateLimiter>,
 }
 
 pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Result<Router> {
     let pool = crate::common::db::connect(&config.database_url).await?;
+    let scylla = crate::common::scylla::connect(
+        &config.scylla_nodes,
+        &config.scylla_keyspace,
+        config.scylla_replication,
+    )
+    .await?;
     let ids = Arc::new(Snowflake::new(config.machine_id));
     let tokens = Arc::new(TokenService::from_key_file(
         &config.signing_key_file,
@@ -48,6 +57,11 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
             user_repo.clone(),
             auth_repo,
             tokens.clone(),
+            ids.clone(),
+        )),
+        conversations: Arc::new(ConversationService::new(
+            Arc::new(ScyllaConversationRepo::new(scylla).await?),
+            user_repo.clone(),
             ids,
         )),
         users: Arc::new(UserService::new(user_repo)),

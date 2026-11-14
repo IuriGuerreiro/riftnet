@@ -20,6 +20,17 @@ impl From<User> for UserDto {
     }
 }
 
+/// For the WebSocket (protobuf). IDs are real numbers there.
+impl From<&User> for protocol::v1::User {
+    fn from(u: &User) -> Self {
+        Self {
+            id: u.id as u64,
+            username: u.username.clone().unwrap_or_default(),
+            display_name: u.display_name.clone().unwrap_or_default(),
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct SetUsernameRequest {
     pub username: String,
