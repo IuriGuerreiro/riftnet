@@ -24,6 +24,10 @@ message Envelope {
     OpenDm open_dm = 14;
     ListConversations list_conversations = 15;
     Sync sync = 16;
+    CreateGroup create_group = 17;
+    AddMember add_member = 18;
+    LeaveGroup leave_group = 19;
+    RenameGroup rename_group = 20;
 
     // server -> client (replies)
     Pong pong = 50;
@@ -38,6 +42,7 @@ message Envelope {
     // server -> client (pushes, id = 0)
     MessageCreated message_created = 54;
     UserUpdated user_updated = 55;
+    ConversationUpdated conversation_updated = 60;
   }
 }
 

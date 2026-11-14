@@ -14,6 +14,7 @@ impl From<&Conversation> for v1::Conversation {
             } as i32,
             members: c.members.iter().map(v1::User::from).collect(),
             last_seq: c.last_seq as u64,
+            name: c.name.clone(),
         }
     }
 }
