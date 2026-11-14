@@ -17,6 +17,8 @@ pub async fn dispatch(
         Payload::Ping(_) => Ok(Payload::Pong(v1::Pong {})),
         Payload::OpenDm(req) => open_dm(state, session, req).await,
         Payload::ListConversations(_) => list_conversations(state, session).await,
+        Payload::SendMessage(req) => send_message(state, session, req).await,
+        Payload::GetHistory(req) => get_history(state, session, req).await,
         Payload::Authenticate(_) => Err(ApiError::bad_request(
             "already_authenticated",
             "already authenticated",
@@ -46,5 +48,45 @@ async fn list_conversations(state: &AppState, session: &Session) -> Result<Paylo
     let convs = state.conversations.list(session.user_id).await?;
     Ok(Payload::Conversations(v1::Conversations {
         conversations: convs.iter().map(Into::into).collect(),
+    }))
+}
+
+async fn send_message(
+    state: &AppState,
+    session: &Session,
+    req: v1::SendMessage,
+) -> Result<Payload, ApiError> {
+    let message = state
+        .messages
+        .send(
+            session.user_id,
+            req.conversation_id as i64,
+            req.content,
+            &req.nonce,
+        )
+        .await?;
+    Ok(Payload::MessageAck(v1::MessageAck {
+        nonce: req.nonce,
+        message: Some((&message).into()),
+    }))
+}
+
+async fn get_history(
+    state: &AppState,
+    session: &Session,
+    req: v1::GetHistory,
+) -> Result<Payload, ApiError> {
+    let before = (req.before_id != 0).then_some(req.before_id as i64);
+    let messages = state
+        .messages
+        .history(
+            session.user_id,
+            req.conversation_id as i64,
+            before,
+            req.limit,
+        )
+        .await?;
+    Ok(Payload::History(v1::History {
+        messages: messages.iter().map(Into::into).collect(),
     }))
 }

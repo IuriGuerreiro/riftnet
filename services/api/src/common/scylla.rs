@@ -5,9 +5,14 @@ use std::sync::Arc;
 
 use scylla::client::session::Session;
 use scylla::client::session_builder::SessionBuilder;
+use scylla::response::query_result::QueryRowsResult;
+use scylla::value::Row;
 
 /// Schema files in `scylla/`, applied in order on every start (all IF NOT EXISTS).
-const SCHEMA: &[&str] = &[include_str!("../../scylla/001_conversations.cql")];
+const SCHEMA: &[&str] = &[
+    include_str!("../../scylla/001_conversations.cql"),
+    include_str!("../../scylla/002_messages.cql"),
+];
 
 /// Connects, creates the keyspace if needed, and applies the schema.
 /// Tablets are off: in Scylla 2025 they don't support lightweight
@@ -38,6 +43,24 @@ pub async fn connect(
         }
     }
     Ok(Arc::new(session))
+}
+
+/// For statements with `IF ...` (lightweight transactions): did the write
+/// happen? Scylla puts the answer in the first column, named `[applied]`.
+/// When it's false, the other columns hold the row that already existed.
+pub fn lwt_applied(reply: &QueryRowsResult) -> anyhow::Result<bool> {
+    let row = reply
+        .rows::<Row>()?
+        .next()
+        .transpose()?
+        .ok_or_else(|| anyhow::anyhow!("LWT reply has no row"))?;
+    Ok(row
+        .columns
+        .first()
+        .cloned()
+        .flatten()
+        .and_then(|v| v.as_boolean())
+        == Some(true))
 }
 
 /// Splits a .cql file into statements, skipping `--` comments.

@@ -19,3 +19,7 @@ pub const GET_CONVERSATION: &str =
 
 pub const LIST_BY_USER: &str =
     "SELECT conversation_id FROM conversations_by_user WHERE user_id = ? LIMIT 200";
+
+/// Compare-and-set (LWT): only applies if `last_seq` is still the value we read.
+/// Values: new last_seq, conversation id, the last_seq we expect.
+pub const BUMP_SEQ: &str = "UPDATE conversations SET last_seq = ? WHERE id = ? IF last_seq = ?";

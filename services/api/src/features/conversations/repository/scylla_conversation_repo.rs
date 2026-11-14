@@ -23,6 +23,7 @@ pub struct ScyllaConversationRepo {
     pub(super) insert_by_user: PreparedStatement,
     pub(super) get_conversation: PreparedStatement,
     pub(super) list_by_user: PreparedStatement,
+    pub(super) bump_seq: PreparedStatement,
 }
 
 /// Columns of `GET_CONVERSATION`, in order.
@@ -41,11 +42,12 @@ impl ScyllaConversationRepo {
             insert_by_user: prepare(q::INSERT_BY_USER).await?,
             get_conversation: prepare(q::GET_CONVERSATION).await?,
             list_by_user: prepare(q::LIST_BY_USER).await?,
+            bump_seq: prepare(q::BUMP_SEQ).await?,
             session,
         })
     }
 
-    pub(super) async fn get(&self, id: i64) -> Result<Option<ConversationRecord>, RepoError> {
+    pub(super) async fn get_by_id(&self, id: i64) -> Result<Option<ConversationRecord>, RepoError> {
         let rows = self
             .session
             .execute_unpaged(&self.get_conversation, (id,))

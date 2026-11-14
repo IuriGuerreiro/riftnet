@@ -3,6 +3,7 @@
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { AuthenticateSchema, EnvelopeSchema, PingSchema, type Envelope } from "../../../client/src/gen/v1/envelope_pb.ts";
 import { ListConversationsSchema, OpenDmSchema } from "../../../client/src/gen/v1/conversations_pb.ts";
+import { GetHistorySchema, SendMessageSchema } from "../../../client/src/gen/v1/messages_pb.ts";
 
 const HTTP = process.env.API_HTTP ?? "http://127.0.0.1:7100";
 const WS = HTTP.replace(/^http/, "ws") + "/ws";
@@ -98,5 +99,53 @@ r = await talk([auth(alice.token), openDm("nobody_" + Date.now()), openDm(alice.
 check("unknown user → user_not_found", errCode(r.replies[1]) === "user_not_found");
 check("yourself → cannot_dm_self", errCode(r.replies[2]) === "cannot_dm_self");
 check("invalid username → user_not_found", errCode(r.replies[3]) === "user_not_found");
+
+// --- messages ---
+const enc = new TextEncoder(), dec = new TextDecoder();
+const send = (conversationId: bigint, text: string, nonce: string) => ({
+  case: "sendMessage" as const,
+  value: create(SendMessageSchema, { conversationId, content: enc.encode(text), nonce }),
+});
+const history = (conversationId: bigint, beforeId = 0n, limit = 0) => ({
+  case: "getHistory" as const,
+  value: create(GetHistorySchema, { conversationId, beforeId, limit }),
+});
+const ack = (e?: Envelope) => (e?.payload.case === "messageAck" ? e.payload.value : undefined);
+const dm = dmId!;
+
+r = await talk([auth(alice.token), send(dm, "hello bob", "n1"), send(dm, "second", "n2"), send(dm, "hello bob", "n1")], 4);
+const a1 = ack(r.replies[1]), a2 = ack(r.replies[2]), a3 = ack(r.replies[3]);
+check("send → ack with same nonce", a1?.nonce === "n1" && dec.decode(a1.message?.content) === "hello bob");
+check("seq goes 1, 2", a1?.message?.seq === 1n && a2?.message?.seq === 2n);
+check("retry same nonce → same message, no duplicate", a3?.message?.id === a1?.message?.id && a3?.message?.seq === 1n);
+
+r = await talk([auth(bob.token), send(dm, "hi alice", "n1")], 2);
+check("bob can reuse nonce n1 (nonces are per sender)", ack(r.replies[1])?.message?.seq === 3n);
+
+// 10 sends at the same time from two sockets: every seq is unique, no gaps.
+const burst = await Promise.all([
+  talk([auth(alice.token), ...Array.from({ length: 5 }, (_, i) => send(dm, `a${i}`, `burst-a${i}`))], 6),
+  talk([auth(bob.token), ...Array.from({ length: 5 }, (_, i) => send(dm, `b${i}`, `burst-b${i}`))], 6),
+]);
+const seqs = burst.flatMap((b) => b.replies.slice(1).map((e) => ack(e)?.message?.seq ?? 0n)).sort((x, y) => Number(x - y));
+check("parallel sends → seq 4..13, unique", seqs.join(",") === "4,5,6,7,8,9,10,11,12,13", seqs.join(","));
+
+r = await talk([auth(bob.token), history(dm), history(dm, 0n, 5)], 3);
+const h = r.replies[1]?.payload.case === "history" ? r.replies[1].payload.value.messages : [];
+const h5 = r.replies[2]?.payload.case === "history" ? r.replies[2].payload.value.messages : [];
+check("history has all 13, newest first", h.length === 13 && h[0].seq === 13n && h[12].seq === 1n, `${h.length}`);
+check("limit 5 → 5 newest", h5.length === 5 && h5[0].seq === 13n);
+r = await talk([auth(bob.token), history(dm, h5[4].id, 5)], 2);
+const older = r.replies[1]?.payload.case === "history" ? r.replies[1].payload.value.messages : [];
+check("before_id → the next 5 older", older.length === 5 && older[0].seq === h5[4].seq - 1n);
+
+r = await talk([auth(carol.token), send(dm, "let me in", "x"), history(dm)], 3);
+check("non-member can't send", errCode(r.replies[1]) === "conversation_not_found");
+check("non-member can't read", errCode(r.replies[2]) === "conversation_not_found");
+
+r = await talk([auth(alice.token), send(dm, "", "e"), send(dm, "x".repeat(9000), "big"), send(dm, "no nonce", "")], 4);
+check("empty → empty_message", errCode(r.replies[1]) === "empty_message");
+check("9000 bytes → message_too_long", errCode(r.replies[2]) === "message_too_long");
+check("no nonce → bad_nonce", errCode(r.replies[3]) === "bad_nonce");
 
 process.exit(failed ? 1 : 0);

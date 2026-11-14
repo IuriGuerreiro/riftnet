@@ -17,8 +17,10 @@ use crate::features::auth::identity::ZitadelClient;
 use crate::features::auth::repository::PgAuthRepo;
 use crate::features::auth::service::AuthService;
 use crate::features::auth::tokens::TokenService;
-use crate::features::conversations::repository::ScyllaConversationRepo;
+use crate::features::conversations::repository::{ConversationRepo, ScyllaConversationRepo};
 use crate::features::conversations::service::ConversationService;
+use crate::features::messages::repository::ScyllaMessageRepo;
+use crate::features::messages::service::MessageService;
 use crate::features::users::repository::{PgUserRepo, UserRepo};
 use crate::features::users::service::UserService;
 use crate::features::{auth, gateway, health, users};
@@ -28,6 +30,7 @@ pub struct AppState {
     pub auth: Arc<AuthService>,
     pub users: Arc<UserService>,
     pub conversations: Arc<ConversationService>,
+    pub messages: Arc<MessageService>,
     pub tokens: Arc<TokenService>,
     pub limiter: Arc<RateLimiter>,
 }
@@ -51,6 +54,10 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
     let auth_repo = Arc::new(PgAuthRepo::new(pool.clone()));
     let identity = Arc::new(ZitadelClient::new(&config.zitadel_url, &config.zitadel_pat));
 
+    let conversation_repo: Arc<dyn ConversationRepo> =
+        Arc::new(ScyllaConversationRepo::new(scylla.clone()).await?);
+    let message_repo = Arc::new(ScyllaMessageRepo::new(scylla).await?);
+
     let state = AppState {
         auth: Arc::new(AuthService::new(
             identity,
@@ -59,8 +66,13 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
             tokens.clone(),
             ids.clone(),
         )),
+        messages: Arc::new(MessageService::new(
+            message_repo,
+            conversation_repo.clone(),
+            ids.clone(),
+        )),
         conversations: Arc::new(ConversationService::new(
-            Arc::new(ScyllaConversationRepo::new(scylla).await?),
+            conversation_repo.clone(),
             user_repo.clone(),
             ids,
         )),
