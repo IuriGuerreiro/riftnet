@@ -1,42 +1,66 @@
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
-import { EnvelopeSchema, type Envelope } from "../gen/v1/envelope_pb";
+import { AuthenticateSchema, EnvelopeSchema, type Envelope } from "../gen/v1/envelope_pb";
+import type { User } from "../gen/v1/users_pb";
 import { platform } from "../platform";
 
-// Minimal request/response client over the WebSocket: id in, same id out.
-// WebSocket client, parked until DMs.
-export class WsClient {
-  private ws: WebSocket;
-  private nextId = 1n;
-  private pending = new Map<bigint, (env: Envelope) => void>();
-  onPush: (env: Envelope) => void = () => {};
+type Payload = Envelope["payload"];
 
-  constructor(url = platform.wsUrl) {
-    this.ws = new WebSocket(url);
-    this.ws.binaryType = "arraybuffer";
-    this.ws.onmessage = (ev) => {
-      const env = fromBinary(EnvelopeSchema, new Uint8Array(ev.data as ArrayBuffer));
-      const resolve = this.pending.get(env.id);
-      if (resolve) {
-        this.pending.delete(env.id);
-        resolve(env);
-      } else {
-        this.onPush(env);
-      }
+// Thrown when the server answers a request with an `Error` frame.
+export class WsError extends Error {
+  constructor(public code: string, message: string) {
+    super(message);
+  }
+}
+
+// One WebSocket to the api. Request/response by `id`; id 0 = server push.
+//
+//   const ws = await WsClient.connect(token);   // opens + authenticates
+//   const reply = await ws.request({ case: "ping", value: create(PingSchema) });
+export class WsClient {
+  private nextId = 1n;
+  private pending = new Map<bigint, { resolve: (p: Payload) => void; reject: (e: Error) => void }>();
+  onPush: (payload: Payload) => void = () => {};
+  onClose: (code: number) => void = () => {};
+
+  private constructor(private ws: WebSocket) {
+    ws.binaryType = "arraybuffer";
+    ws.onmessage = (ev) => this.receive(new Uint8Array(ev.data as ArrayBuffer));
+    ws.onclose = (ev) => {
+      for (const p of this.pending.values()) p.reject(new WsError("closed", "connection closed"));
+      this.pending.clear();
+      this.onClose(ev.code);
     };
   }
 
-  ready(): Promise<void> {
-    if (this.ws.readyState === WebSocket.OPEN) return Promise.resolve();
-    return new Promise((res, rej) => {
-      this.ws.addEventListener("open", () => res(), { once: true });
-      this.ws.addEventListener("error", () => rej(new Error("connection failed")), { once: true });
+  // Open the socket, then send `authenticate` as the first frame.
+  static async connect(accessToken: string, url = platform.wsUrl): Promise<{ ws: WsClient; user: User | undefined }> {
+    const socket = new WebSocket(url);
+    await new Promise<void>((res, rej) => {
+      socket.addEventListener("open", () => res(), { once: true });
+      socket.addEventListener("error", () => rej(new WsError("connect_failed", "can't reach the server")), { once: true });
     });
+    const ws = new WsClient(socket);
+    const reply = await ws.request({ case: "authenticate", value: create(AuthenticateSchema, { accessToken }) });
+    if (reply.case !== "authOk") throw new WsError("bad_reply", `expected authOk, got ${reply.case}`);
+    return { ws, user: reply.value.user };
   }
 
-  request(payload: Envelope["payload"]): Promise<Envelope> {
+  request(payload: Payload): Promise<Payload> {
     const id = this.nextId++;
-    const env = create(EnvelopeSchema, { id, payload });
-    this.ws.send(toBinary(EnvelopeSchema, env));
-    return new Promise((resolve) => this.pending.set(id, resolve));
+    this.ws.send(toBinary(EnvelopeSchema, create(EnvelopeSchema, { id, payload })));
+    return new Promise((resolve, reject) => this.pending.set(id, { resolve, reject }));
+  }
+
+  close() {
+    this.ws.close();
+  }
+
+  private receive(bytes: Uint8Array) {
+    const env = fromBinary(EnvelopeSchema, bytes);
+    const waiting = this.pending.get(env.id);
+    if (!waiting) return this.onPush(env.payload); // id 0 (or unknown) = push
+    this.pending.delete(env.id);
+    if (env.payload.case === "error") waiting.reject(new WsError(env.payload.value.code, env.payload.value.message));
+    else waiting.resolve(env.payload);
   }
 }

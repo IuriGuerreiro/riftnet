@@ -5,7 +5,8 @@
   "license": "AGPL-3.0-only",
   "description": "Fake API for UI work. Speaks the same protobuf contracts as services/api.",
   "scripts": {
-    "start": "tsx src/server.ts"
+    "start": "tsx src/server.ts",
+    "smoke:ws": "tsx src/smoke-ws.ts"
   },
   "dependencies": {
     "@bufbuild/protobuf": "^2.17.0",

@@ -55,6 +55,12 @@ async function parse<T>(res: Response): Promise<T> {
   return data as T;
 }
 
+// A valid access token (refreshed first if it's about to expire), for the WebSocket.
+export async function freshAccessToken(): Promise<string | null> {
+  await refreshIfExpiring();
+  return useAuth.getState().accessToken;
+}
+
 // Refresh a bit before the access token expires, so requests don't fail.
 async function refreshIfExpiring() {
   const { accessExpiresAt, refreshToken } = useAuth.getState();
