@@ -4,6 +4,7 @@
 mod controller;
 pub mod dto;
 pub mod identity;
+pub mod metrics;
 pub mod models;
 pub mod repository;
 pub mod service;

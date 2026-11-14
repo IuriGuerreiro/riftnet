@@ -51,6 +51,10 @@ services:
       ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: app
       ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD: app
       ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: disable
+      # bcrypt cost 12 (~0.25s per login) instead of Zitadel's default 14 (~1s).
+      # Each step doubles the time. See docs/architecture/identity-auth.md.
+      ZITADEL_SYSTEMDEFAULTS_PASSWORDHASHER_HASHER_ALGORITHM: bcrypt
+      ZITADEL_SYSTEMDEFAULTS_PASSWORDHASHER_HASHER_COST: 12
       # First boot creates a service account for the api and writes its token
       # (PAT) to infra/.secrets/api.pat. Only on a fresh database.
       ZITADEL_FIRSTINSTANCE_PATPATH: /secrets/api.pat

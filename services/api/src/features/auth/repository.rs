@@ -50,6 +50,7 @@ impl PgAuthRepo {
 
 #[async_trait]
 impl AuthRepo for PgAuthRepo {
+    #[tracing::instrument(name = "db INSERT devices", skip_all, err(Display), fields(otel.kind = "client", db.system = "postgresql", db.operation = "INSERT", db.collection.name = "devices"))]
     async fn create_device(
         &self,
         id: i64,
@@ -66,6 +67,7 @@ impl AuthRepo for PgAuthRepo {
         Ok(())
     }
 
+    #[tracing::instrument(name = "db INSERT refresh_tokens", skip_all, err(Display), fields(otel.kind = "client", db.system = "postgresql", db.operation = "INSERT", db.collection.name = "refresh_tokens"))]
     async fn insert_refresh_token(
         &self,
         id: i64,
@@ -85,6 +87,7 @@ impl AuthRepo for PgAuthRepo {
         Ok(())
     }
 
+    #[tracing::instrument(name = "db SELECT refresh_tokens", skip_all, err(Display), fields(otel.kind = "client", db.system = "postgresql", db.operation = "SELECT", db.collection.name = "refresh_tokens"))]
     async fn find_refresh_token(
         &self,
         hash: &[u8],
@@ -100,6 +103,7 @@ impl AuthRepo for PgAuthRepo {
         .await?)
     }
 
+    #[tracing::instrument(name = "db UPDATE refresh_tokens", skip_all, err(Display), fields(otel.kind = "client", db.system = "postgresql", db.operation = "UPDATE", db.collection.name = "refresh_tokens"))]
     async fn rotate_refresh_token(
         &self,
         old_id: i64,
@@ -135,6 +139,7 @@ impl AuthRepo for PgAuthRepo {
         Ok(true)
     }
 
+    #[tracing::instrument(name = "db UPDATE devices", skip_all, err(Display), fields(otel.kind = "client", db.system = "postgresql", db.operation = "UPDATE", db.collection.name = "devices"))]
     async fn revoke_device(&self, device_id: i64) -> Result<(), RepoError> {
         sqlx::query("UPDATE devices SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL")
             .bind(device_id)
