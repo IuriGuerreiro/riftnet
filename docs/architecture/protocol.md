@@ -22,12 +22,27 @@ Protobuf is the "phone ringing". WebRTC is "the call".
 - `.proto` files are public, so anyone can generate a client or bot in one command.
 - Dev mode: dump messages as JSON for debugging.
 
-## WebSocket-only API (+ a little HTTP)
+## REST for requests, WebSocket for live stuff
 
-- **All API calls go over one WebSocket** (`/ws`), opened after login.
-- **Plain HTTP only for:** `/auth/*` (you need a token before the socket), `/me`, files later, `/health`, `/metrics`.
+- **REST (HTTP + JSON)** for normal request → reply calls: `/auth/*`, `/me`, `/users/search`, files later, `/health`, `/metrics`.
+  Easy to test with `curl`, cacheable, no socket needed.
+- **WebSocket (`/ws`)** for things that are live or stream: messaging, chat sync on reconnect, pushes
+  (`message_created`, presence), and later call signaling / streaming. Audio and video media itself goes over WebRTC.
+- Rule of thumb: if the server never needs to push to you about it, it's REST.
 - `/ws` is only the door: after the upgrade (HTTP `101`) there are no routes, just frames.
   A `match` on the payload type picks the handler (`features/gateway/handlers.rs`).
+
+### REST endpoints
+
+| Method + path                      | Reply                            | Notes                                                   |
+| ---------------------------------- | -------------------------------- | ------------------------------------------------------- |
+| `GET /me`                          | `{id, username, display_name}`   |                                                         |
+| `PUT /me/username {username}`      | `{id, username, display_name}`   | `409 username_taken`                                    |
+| `GET /users/search?q=mon&limit=20` | `[{id, username, display_name}]` | prefix match, case-insensitive, excludes you; see below |
+
+**User search:** `q` is 1–32 chars (letters, numbers, `_`, `.`), else `400 invalid_query`.
+`limit` defaults to 20, max 50. Sorted by username. Users without a username never show up.
+Never returns email. Rate limited to 30 per 10s per user (`429`). Uses the `users_username_prefix_idx` index.
 
 ### Frames
 
