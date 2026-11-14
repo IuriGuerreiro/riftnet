@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package app.v1;
+
+import "v1/users.proto";
+
+// A DM (2 people) or a group DM (up to 5).
+message Conversation {
+  uint64 id = 1;
+  ConversationKind kind = 2;
+  repeated User members = 3;
+  uint64 last_seq = 4;      // seq of the newest message (0 = empty)
+}
+
+enum ConversationKind {
+  CONVERSATION_KIND_UNSPECIFIED = 0;
+  CONVERSATION_KIND_DM = 1;
+  CONVERSATION_KIND_GROUP = 2;
+}
+
+// Open (or create) the 1-on-1 DM with someone, by username.
+message OpenDm {
+  string username = 1;
+}
+
+message ConversationResult {
+  Conversation conversation = 1;
+}
+
+message ListConversations {}
+
+message Conversations {
+  repeated Conversation conversations = 1;
+}
