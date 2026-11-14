@@ -29,3 +29,5 @@ async-trait = "0.1.92"
 tower-http = { version = "0.6", features = ["cors"] }
 scylla = "1.10.0"
 futures = "0.3.34"
+async-nats = "0.52.0"
+bytes = "1.12.1"

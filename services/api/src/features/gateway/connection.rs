@@ -2,7 +2,8 @@
 //!
 //! 1. Wait (max 10s) for the first frame. It must be `Authenticate`.
 //! 2. Check the access token, the same way HTTP does (`TokenService`).
-//! 3. Reply `AuthOk { user }`, then handle requests until the socket closes.
+//! 3. Reply `AuthOk { user }`, subscribe to this user's live events (NATS),
+//!    then handle requests and forward pushes until the socket closes.
 //!
 //! Anything wrong in step 1–2 → an `Error` frame, then close with code 4001.
 //! Requests are handled in `handlers.rs`.
@@ -12,6 +13,8 @@ use std::time::Duration;
 use axum::extract::ws::{CloseFrame, Message as WsMessage, WebSocket};
 use protocol::Message;
 use protocol::v1::{AuthOk, Envelope, Error, envelope::Payload};
+
+use futures::StreamExt;
 
 use super::handlers;
 
@@ -51,16 +54,39 @@ pub async fn run(mut socket: WebSocket, state: AppState) {
     );
     metrics::gauge!("ws_connections").increment(1.0);
 
-    while let Some(Ok(frame)) = socket.recv().await {
-        let WsMessage::Binary(bytes) = frame else {
-            continue; // ping/pong/text frames: ignore
-        };
-        let reply = match Envelope::decode(bytes) {
-            Ok(req) => handle(&state, &session, req).await,
-            Err(_) => error(0, "bad_frame", "not a valid Envelope"),
-        };
-        if send(&mut socket, reply).await.is_err() {
-            break;
+    // Live events for this user (new messages...), from any api server.
+    let mut pushes = match state.events.subscribe_user(session.user_id).await {
+        Ok(stream) => stream,
+        Err(err) => {
+            tracing::error!(error = %err, "subscribe failed");
+            metrics::gauge!("ws_connections").decrement(1.0);
+            return;
+        }
+    };
+
+    // Wait for whichever comes first: a frame from the client, or a push.
+    loop {
+        tokio::select! {
+            frame = socket.recv() => {
+                let Some(Ok(frame)) = frame else { break }; // closed or broken
+                let WsMessage::Binary(bytes) = frame else {
+                    continue; // ping/pong/text frames: ignore
+                };
+                let reply = match Envelope::decode(bytes) {
+                    Ok(req) => handle(&state, &session, req).await,
+                    Err(_) => error(0, "bad_frame", "not a valid Envelope"),
+                };
+                if send(&mut socket, reply).await.is_err() {
+                    break;
+                }
+            }
+            push = pushes.next() => {
+                let Some(bytes) = push else { break }; // NATS gone: client reconnects
+                // Already an encoded Envelope (id 0): forward as is.
+                if socket.send(WsMessage::Binary(bytes)).await.is_err() {
+                    break;
+                }
+            }
         }
     }
 

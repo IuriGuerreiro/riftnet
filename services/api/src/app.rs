@@ -10,6 +10,7 @@ use common::snowflake::Snowflake;
 use metrics_exporter_prometheus::PrometheusHandle;
 use tower_http::cors::CorsLayer;
 
+use crate::common::events::{EventBus, NatsEventBus};
 use crate::common::middleware::http_metrics;
 use crate::common::middleware::rate_limit::RateLimiter;
 use crate::config::Config;
@@ -33,6 +34,7 @@ pub struct AppState {
     pub messages: Arc<MessageService>,
     pub tokens: Arc<TokenService>,
     pub limiter: Arc<RateLimiter>,
+    pub events: Arc<dyn EventBus>,
 }
 
 pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Result<Router> {
@@ -43,6 +45,7 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
         config.scylla_replication,
     )
     .await?;
+    let events: Arc<dyn EventBus> = Arc::new(NatsEventBus::connect(&config.nats_url).await?);
     let ids = Arc::new(Snowflake::new(config.machine_id));
     let tokens = Arc::new(TokenService::from_key_file(
         &config.signing_key_file,
@@ -69,6 +72,7 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
         messages: Arc::new(MessageService::new(
             message_repo,
             conversation_repo.clone(),
+            events.clone(),
             ids.clone(),
         )),
         conversations: Arc::new(ConversationService::new(
@@ -79,6 +83,7 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
         users: Arc::new(UserService::new(user_repo)),
         tokens,
         limiter: Arc::new(RateLimiter::default()),
+        events,
     };
 
     let origins: Vec<HeaderValue> = config

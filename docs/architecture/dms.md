@@ -76,6 +76,24 @@ sequenceDiagram
 the other retries and gets N+2. Known gap: a crash between taking a seq and saving the message skips that
 number forever, so sync must tolerate holes.
 
+### Live delivery (NATS)
+
+```mermaid
+flowchart LR
+    A["Alice's socket<br/>api server 1"] -- send_message --> S1["api 1: save in Scylla"]
+    S1 -- "publish user.bob, user.alice" --> N(("NATS"))
+    N --> B["api 2: Bob's socket<br/>push {id 0, message_created}"]
+    N --> P["api 1: Alice's phone<br/>same push"]
+```
+
+- After auth, every socket subscribes to **`user.<its user id>`**.
+- After saving, the server publishes the encoded `message_created` Envelope to `user.<id>` of **every member**.
+  NATS delivers it to whichever api servers hold those sockets; they forward the bytes as is.
+- Per-user subjects (not per conversation): a new DM needs no re-subscribing, and all your devices get it.
+- The sender's own socket also gets the push; the app ignores it (it already has the ack, same `id`).
+- If publishing fails, the message is still saved: the other person gets it from history / sync. Logged as a warning.
+- Code: `common/events.rs` (`EventBus` trait + NATS), the `select!` loop in `gateway/connection.rs`.
+
 ### Rules
 
 - Not a member, or no such conversation → the same `conversation_not_found` (don't reveal what exists).
@@ -120,5 +138,5 @@ Possible fixes if needed: rely on WebRTC's automatic quality drop, encode once f
 
 ## Open questions
 
-- Live delivery (NATS) and sync on reconnect are next.
+- Sync on reconnect is next.
 - DM list order: by creation for now; should be by latest message.

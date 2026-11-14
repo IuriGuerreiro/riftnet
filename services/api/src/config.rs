@@ -9,6 +9,7 @@ pub struct Config {
     pub env: String,
     pub addr: SocketAddr,
     pub database_url: String,
+    pub nats_url: String,
     pub scylla_nodes: Vec<String>,
     pub scylla_keyspace: String,
     /// Copies of each row: 1 in dev, 3 in production.
@@ -36,6 +37,7 @@ impl Config {
             env: env_or("APP_ENV", "development"),
             addr: env_or("API_ADDR", "127.0.0.1:7100").parse()?,
             database_url: env_or("DATABASE_URL", "postgres://app:app@127.0.0.1:55432/app"),
+            nats_url: env_or("NATS_URL", "nats://127.0.0.1:4222"),
             scylla_nodes: env_or("SCYLLA_NODES", "127.0.0.1:9042")
                 .split(',')
                 .map(|s| s.trim().to_string())

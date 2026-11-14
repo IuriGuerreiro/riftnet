@@ -73,7 +73,7 @@ sequenceDiagram
 | `send_message {conversation_id, content, nonce}`  | `message_ack {nonce, message}` | see [dms.md](dms.md#sending) |
 | `get_history {conversation_id, before_id, limit}` | `history` (newest first)       | limit default 50, max 100    |
 | `sync {conversation_id, after_seq}`               | `sync_result`                  | not built yet                |
-| — (push, id 0)                                    | `message_created`              | not built yet (NATS)         |
+| — (push, id 0)                                    | `message_created`              | live, via NATS (see dms.md)  |
 
 Example session (written as JSON; on the wire it's binary protobuf):
 

@@ -13,6 +13,23 @@ const check = (name: string, ok: boolean, extra = "") => {
   if (!ok) failed++;
 };
 
+// Opens a socket, authenticates, and collects pushes (id 0) until stop().
+async function listen(token: string, wsUrl = WS) {
+  const ws = new WebSocket(wsUrl);
+  ws.binaryType = "arraybuffer";
+  const pushes: Envelope[] = [];
+  await new Promise<void>((res) => {
+    ws.onopen = () => ws.send(toBinary(EnvelopeSchema, create(EnvelopeSchema, { id: 1n, payload: auth(token) })));
+    ws.onmessage = (ev) => {
+      const env = fromBinary(EnvelopeSchema, new Uint8Array(ev.data as ArrayBuffer));
+      if (env.payload.case === "authOk") res();
+      else if (env.id === 0n) pushes.push(env);
+    };
+  });
+  return { pushes, stop: () => ws.close() };
+}
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 // Opens a socket, sends the frames, collects replies until `want` frames or close.
 function talk(payloads: Envelope["payload"][], want: number): Promise<{ replies: Envelope[]; closeCode?: number }> {
   return new Promise((resolve) => {
@@ -147,5 +164,20 @@ r = await talk([auth(alice.token), send(dm, "", "e"), send(dm, "x".repeat(9000),
 check("empty → empty_message", errCode(r.replies[1]) === "empty_message");
 check("9000 bytes → message_too_long", errCode(r.replies[2]) === "message_too_long");
 check("no nonce → bad_nonce", errCode(r.replies[3]) === "bad_nonce");
+
+// --- live delivery (NATS) ---
+const created = (e: Envelope) => (e.payload.case === "messageCreated" ? e.payload.value.message : undefined);
+const WS2 = process.env.API_HTTP_2 ? process.env.API_HTTP_2.replace(/^http/, "ws") + "/ws" : WS;
+const bobLive = await listen(bob.token, WS2); // on the 2nd api server, if given
+const alicePhone = await listen(alice.token); // alice's other device
+const carolLive = await listen(carol.token); // not in the DM
+r = await talk([auth(alice.token), send(dm, "live?", "live-1")], 2);
+await sleep(300);
+const sent = ack(r.replies[1])?.message;
+const got = bobLive.pushes.map(created).find((m) => m?.id === sent?.id);
+check(`bob gets it live${WS2 !== WS ? " (via another api server)" : ""}`, !!got && dec.decode(got.content) === "live?");
+check("alice's other device gets it too", alicePhone.pushes.some((e) => created(e)?.id === sent?.id));
+check("non-member gets nothing", carolLive.pushes.length === 0);
+[bobLive, alicePhone, carolLive].forEach((l) => l.stop());
 
 process.exit(failed ? 1 : 0);
