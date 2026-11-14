@@ -190,6 +190,11 @@ On a **fresh** database, Zitadel's first boot creates a service account for the 
 
 The api creates its token signing key at `infra/.secrets/api_signing_key` on first start.
 
+Passwords are hashed with **bcrypt cost 12** (~0.25s per check), set in
+`infra/docker-compose.yml`. Zitadel's default is 14 (~1s, too slow for login).
+Each step doubles the time. Users with an older hash are re-hashed at their next
+login. Production must pick its own value.
+
 To reset everything: `docker compose -f infra/docker-compose.yml down -v`, then `up -d --wait`.
 
 ## Testing
