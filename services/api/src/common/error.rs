@@ -67,6 +67,8 @@ impl IntoResponse for ApiError {
                 )
             }
         };
+        // Shows on the request span (declared in http_metrics). Codes are fixed strings.
+        tracing::Span::current().record("error.code", code);
         (status, Json(json!({ "code": code, "message": message }))).into_response()
     }
 }

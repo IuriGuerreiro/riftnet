@@ -53,18 +53,31 @@ docker compose -f infra/docker-compose.yml up -d --wait
 Zitadel console: http://localhost:7102/ui/console (first boot takes ~1 min).
 Default admin: `zitadel-admin@zitadel.localhost` / `Password1!` (local dev only).
 
+## Observability (optional)
+
+Send logs, traces and metrics to SigNoz (runs separately on :8080):
+
+```sh
+OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4317 cargo run -p api
+```
+
+Or set it in `.env` (see [.env.example](.env.example)). Then open
+http://127.0.0.1:8080 → Services → `api`. Unset = stdout logs only.
+Details and how to add logs, spans and metrics: [docs/architecture/observability.md](docs/architecture/observability.md).
+
 ## Local ports
 
-| Service  | Port  |
-| -------- | ----- |
-| api      | 7100  |
-| mock     | 7101  |
-| Zitadel  | 7102  |
-| Postgres | 55432 |
-| Scylla   | 9042  |
-| NATS     | 4222  |
-| Redis    | 6379  |
-| Vite dev | 7104  |
+| Service  | Port                   |
+| -------- | ---------------------- |
+| api      | 7100                   |
+| mock     | 7101                   |
+| Zitadel  | 7102                   |
+| Postgres | 55432                  |
+| Scylla   | 9042                   |
+| NATS     | 4222                   |
+| Redis    | 6379                   |
+| Vite dev | 7104                   |
+| SigNoz   | 8080 (UI), 4317 (OTLP) |
 
 ## Testing from other devices (Tailscale)
 

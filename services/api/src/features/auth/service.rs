@@ -4,6 +4,7 @@ use chrono::{Duration, Utc};
 use common::snowflake::Snowflake;
 
 use super::identity::{IdentityError, IdentityProvider};
+use super::metrics;
 use super::models::NewDevice;
 use super::repository::AuthRepo;
 use super::tokens::{REFRESH_TTL_DAYS, TokenService, hash_refresh_token};
@@ -44,7 +45,25 @@ impl AuthService {
         }
     }
 
+    #[tracing::instrument(name = "auth.register", skip_all, fields(user.id = tracing::field::Empty, device.id = tracing::field::Empty, outcome = tracing::field::Empty))]
     pub async fn register(
+        &self,
+        email: &str,
+        password: &str,
+        device: NewDevice,
+    ) -> Result<Session, ApiError> {
+        let result = self.register_inner(email, password, device).await;
+        let outcome = match &result {
+            Ok(_) => "ok",
+            Err(ApiError::BadRequest { .. } | ApiError::Conflict { .. }) => "rejected",
+            Err(_) => "error",
+        };
+        tracing::Span::current().record("outcome", outcome);
+        metrics::registration(outcome);
+        result
+    }
+
+    async fn register_inner(
         &self,
         email: &str,
         password: &str,
@@ -70,7 +89,25 @@ impl AuthService {
         self.start_session(user, device).await
     }
 
+    #[tracing::instrument(name = "auth.login", skip_all, fields(user.id = tracing::field::Empty, device.id = tracing::field::Empty, outcome = tracing::field::Empty))]
     pub async fn login(
+        &self,
+        email: &str,
+        password: &str,
+        device: NewDevice,
+    ) -> Result<Session, ApiError> {
+        let result = self.login_inner(email, password, device).await;
+        let outcome = match &result {
+            Ok(_) => "ok",
+            Err(ApiError::Unauthorized(_) | ApiError::BadRequest { .. }) => "failed",
+            Err(_) => "error",
+        };
+        tracing::Span::current().record("outcome", outcome);
+        metrics::login(outcome);
+        result
+    }
+
+    async fn login_inner(
         &self,
         email: &str,
         password: &str,
@@ -92,7 +129,16 @@ impl AuthService {
         self.start_session(user, device).await
     }
 
+    #[tracing::instrument(name = "auth.refresh", skip_all, fields(user.id = tracing::field::Empty, device.id = tracing::field::Empty, outcome = tracing::field::Empty))]
     pub async fn refresh(&self, refresh_token: &str) -> Result<Session, ApiError> {
+        let result = self.refresh_inner(refresh_token).await;
+        let outcome = refresh_outcome(&result);
+        tracing::Span::current().record("outcome", outcome);
+        metrics::refresh(outcome);
+        result
+    }
+
+    async fn refresh_inner(&self, refresh_token: &str) -> Result<Session, ApiError> {
         let hash = hash_refresh_token(refresh_token);
         let record = self
             .repo
@@ -100,6 +146,9 @@ impl AuthService {
             .await?
             .ok_or(ApiError::Unauthorized("invalid_refresh_token"))?;
 
+        let span = tracing::Span::current();
+        span.record("user.id", record.user_id);
+        span.record("device.id", record.device_id);
         if record.device_revoked_at.is_some() {
             return Err(ApiError::Unauthorized("session_revoked"));
         }
@@ -153,6 +202,7 @@ impl AuthService {
         })
     }
 
+    #[tracing::instrument(name = "auth.logout", skip_all, fields(device.id = device_id))]
     pub async fn logout(&self, device_id: i64) -> Result<(), ApiError> {
         self.repo.revoke_device(device_id).await?;
         Ok(())
@@ -167,6 +217,9 @@ impl AuthService {
 
     async fn start_session(&self, user: User, device: NewDevice) -> Result<Session, ApiError> {
         let device_id = self.next_id();
+        let span = tracing::Span::current();
+        span.record("user.id", user.id);
+        span.record("device.id", device_id);
         self.repo.create_device(device_id, user.id, &device).await?;
 
         let (refresh_token, hash) = self.tokens.new_refresh_token();
@@ -205,6 +258,21 @@ fn superseded() -> ApiError {
         "refresh_superseded",
         "this refresh token was just rotated by another request; use the newer one",
     )
+}
+
+fn refresh_outcome(result: &Result<Session, ApiError>) -> &'static str {
+    match result {
+        Ok(_) => "ok",
+        Err(ApiError::Conflict {
+            code: "refresh_superseded",
+            ..
+        }) => "superseded",
+        Err(ApiError::Unauthorized("refresh_token_reused")) => "reused",
+        Err(ApiError::Unauthorized("session_revoked")) => "revoked",
+        Err(ApiError::Unauthorized("refresh_token_expired")) => "expired",
+        Err(ApiError::Unauthorized(_)) => "invalid",
+        Err(_) => "error",
+    }
 }
 
 fn identity_internal(err: IdentityError) -> ApiError {
@@ -258,6 +326,19 @@ fn validate_device(device: NewDevice) -> Result<NewDevice, ApiError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn refresh_outcomes() {
+        assert_eq!(refresh_outcome(&Err(superseded())), "superseded");
+        assert_eq!(
+            refresh_outcome(&Err(ApiError::Unauthorized("refresh_token_reused"))),
+            "reused"
+        );
+        assert_eq!(
+            refresh_outcome(&Err(ApiError::Unauthorized("invalid_refresh_token"))),
+            "invalid"
+        );
+    }
 
     #[test]
     fn email_rules() {
