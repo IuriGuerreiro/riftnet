@@ -46,9 +46,11 @@ impl From<RepoError> for ApiError {
     }
 }
 
-impl IntoResponse for ApiError {
-    fn into_response(self) -> Response {
-        let (status, code, message) = match &self {
+impl ApiError {
+    /// Status, error code and safe message. Used by HTTP responses and
+    /// WebSocket `Error` frames. Logs internal errors (their details stay server-side).
+    pub fn describe(&self) -> (StatusCode, &'static str, String) {
+        match self {
             Self::BadRequest { code, message } => (StatusCode::BAD_REQUEST, *code, message.clone()),
             Self::Unauthorized(code) => (StatusCode::UNAUTHORIZED, *code, "unauthorized".into()),
             Self::Conflict { code, message } => (StatusCode::CONFLICT, *code, message.clone()),
@@ -66,7 +68,13 @@ impl IntoResponse for ApiError {
                     "something went wrong".into(),
                 )
             }
-        };
+        }
+    }
+}
+
+impl IntoResponse for ApiError {
+    fn into_response(self) -> Response {
+        let (status, code, message) = self.describe();
         // Shows on the request span (declared in http_metrics). Codes are fixed strings.
         tracing::Span::current().record("error.code", code);
         (status, Json(json!({ "code": code, "message": message }))).into_response()

@@ -10,6 +10,9 @@ use crate::common::error::RepoError;
 pub trait UserRepo: Send + Sync {
     async fn find_by_id(&self, id: i64) -> Result<Option<User>, RepoError>;
     async fn find_by_zitadel_id(&self, zitadel_id: &str) -> Result<Option<User>, RepoError>;
+    async fn find_by_ids(&self, ids: &[i64]) -> Result<Vec<User>, RepoError>;
+    /// `username` must already be normalized (lowercase).
+    async fn find_by_username(&self, username: &str) -> Result<Option<User>, RepoError>;
     async fn create(&self, id: i64, zitadel_id: &str) -> Result<User, RepoError>;
     /// `Err(Conflict)` if the username is taken.
     async fn set_username(&self, id: i64, username: &str) -> Result<Option<User>, RepoError>;
@@ -40,6 +43,22 @@ impl UserRepo for PgUserRepo {
         Ok(sqlx::query_as("SELECT * FROM users WHERE zitadel_id = $1")
             .bind(zitadel_id)
             .fetch_optional(&self.pool)
+            .await?)
+    }
+
+    #[tracing::instrument(name = "db SELECT users", skip_all, err(Display), fields(otel.kind = "client", db.system = "postgresql", db.operation = "SELECT", db.collection.name = "users"))]
+    async fn find_by_username(&self, username: &str) -> Result<Option<User>, RepoError> {
+        Ok(sqlx::query_as("SELECT * FROM users WHERE username = $1")
+            .bind(username)
+            .fetch_optional(&self.pool)
+            .await?)
+    }
+
+    #[tracing::instrument(name = "db SELECT users", skip_all, err(Display), fields(otel.kind = "client", db.system = "postgresql", db.operation = "SELECT", db.collection.name = "users"))]
+    async fn find_by_ids(&self, ids: &[i64]) -> Result<Vec<User>, RepoError> {
+        Ok(sqlx::query_as("SELECT * FROM users WHERE id = ANY($1)")
+            .bind(ids)
+            .fetch_all(&self.pool)
             .await?)
     }
 

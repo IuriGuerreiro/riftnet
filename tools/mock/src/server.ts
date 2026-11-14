@@ -3,7 +3,8 @@
 // Uses the TS types generated in client/src/gen (run `pnpm gen` first).
 import { WebSocketServer } from "ws";
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
-import { EnvelopeSchema, PongSchema, ErrorSchema, type Envelope } from "../../../client/src/gen/v1/envelope_pb.ts";
+import { EnvelopeSchema, PongSchema, ErrorSchema, AuthOkSchema, type Envelope } from "../../../client/src/gen/v1/envelope_pb.ts";
+import { UserSchema } from "../../../client/src/gen/v1/users_pb.ts";
 import { HistorySchema, MessageSchema, MessageAckSchema } from "../../../client/src/gen/v1/messages_pb.ts";
 
 const PORT = Number(process.env.MOCK_PORT ?? 7101);
@@ -19,6 +20,8 @@ const history = [
 
 function handle(req: Envelope): Envelope["payload"] {
   switch (req.payload.case) {
+    case "authenticate": // mock accepts any token
+      return { case: "authOk", value: create(AuthOkSchema, { user: create(UserSchema, { id: 1n, username: "mock_user" }) }) };
     case "ping":
       return { case: "pong", value: create(PongSchema) };
     case "getHistory":

@@ -9,6 +9,11 @@ pub struct Config {
     pub env: String,
     pub addr: SocketAddr,
     pub database_url: String,
+    pub nats_url: String,
+    pub scylla_nodes: Vec<String>,
+    pub scylla_keyspace: String,
+    /// Copies of each row: 1 in dev, 3 in production.
+    pub scylla_replication: u8,
     pub zitadel_url: String,
     pub zitadel_pat: String,
     pub signing_key_file: PathBuf,
@@ -32,6 +37,13 @@ impl Config {
             env: env_or("APP_ENV", "development"),
             addr: env_or("API_ADDR", "127.0.0.1:7100").parse()?,
             database_url: env_or("DATABASE_URL", "postgres://app:app@127.0.0.1:55432/app"),
+            nats_url: env_or("NATS_URL", "nats://127.0.0.1:4222"),
+            scylla_nodes: env_or("SCYLLA_NODES", "127.0.0.1:9042")
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .collect(),
+            scylla_keyspace: env_or("SCYLLA_KEYSPACE", "app"),
+            scylla_replication: env_or("SCYLLA_REPLICATION", "1").parse()?,
             zitadel_url: env_or("ZITADEL_URL", "http://localhost:7102"),
             zitadel_pat,
             signing_key_file: env_or("API_SIGNING_KEY_FILE", "infra/.secrets/api_signing_key")

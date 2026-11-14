@@ -10,6 +10,7 @@ use common::snowflake::Snowflake;
 use metrics_exporter_prometheus::PrometheusHandle;
 use tower_http::cors::CorsLayer;
 
+use crate::common::events::{EventBus, NatsEventBus};
 use crate::common::middleware::http_metrics;
 use crate::common::middleware::rate_limit::RateLimiter;
 use crate::config::Config;
@@ -17,6 +18,10 @@ use crate::features::auth::identity::ZitadelClient;
 use crate::features::auth::repository::PgAuthRepo;
 use crate::features::auth::service::AuthService;
 use crate::features::auth::tokens::TokenService;
+use crate::features::conversations::repository::{ConversationRepo, ScyllaConversationRepo};
+use crate::features::conversations::service::ConversationService;
+use crate::features::messages::repository::ScyllaMessageRepo;
+use crate::features::messages::service::MessageService;
 use crate::features::users::repository::{PgUserRepo, UserRepo};
 use crate::features::users::service::UserService;
 use crate::features::{auth, gateway, health, users};
@@ -25,12 +30,22 @@ use crate::features::{auth, gateway, health, users};
 pub struct AppState {
     pub auth: Arc<AuthService>,
     pub users: Arc<UserService>,
+    pub conversations: Arc<ConversationService>,
+    pub messages: Arc<MessageService>,
     pub tokens: Arc<TokenService>,
     pub limiter: Arc<RateLimiter>,
+    pub events: Arc<dyn EventBus>,
 }
 
 pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Result<Router> {
     let pool = crate::common::db::connect(&config.database_url).await?;
+    let scylla = crate::common::scylla::connect(
+        &config.scylla_nodes,
+        &config.scylla_keyspace,
+        config.scylla_replication,
+    )
+    .await?;
+    let events: Arc<dyn EventBus> = Arc::new(NatsEventBus::connect(&config.nats_url).await?);
     let ids = Arc::new(Snowflake::new(config.machine_id));
     let tokens = Arc::new(TokenService::from_key_file(
         &config.signing_key_file,
@@ -42,17 +57,33 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
     let auth_repo = Arc::new(PgAuthRepo::new(pool.clone()));
     let identity = Arc::new(ZitadelClient::new(&config.zitadel_url, &config.zitadel_pat));
 
+    let conversation_repo: Arc<dyn ConversationRepo> =
+        Arc::new(ScyllaConversationRepo::new(scylla.clone()).await?);
+    let message_repo = Arc::new(ScyllaMessageRepo::new(scylla).await?);
+
     let state = AppState {
         auth: Arc::new(AuthService::new(
             identity,
             user_repo.clone(),
             auth_repo,
             tokens.clone(),
+            ids.clone(),
+        )),
+        messages: Arc::new(MessageService::new(
+            message_repo,
+            conversation_repo.clone(),
+            events.clone(),
+            ids.clone(),
+        )),
+        conversations: Arc::new(ConversationService::new(
+            conversation_repo.clone(),
+            user_repo.clone(),
             ids,
         )),
         users: Arc::new(UserService::new(user_repo)),
         tokens,
         limiter: Arc::new(RateLimiter::default()),
+        events,
     };
 
     let origins: Vec<HeaderValue> = config
