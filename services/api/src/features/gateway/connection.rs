@@ -90,6 +90,8 @@ pub async fn run(mut socket: WebSocket, state: AppState) {
         }
     }
 
+    // Socket gone: this device can't be in a call anymore.
+    state.calls.device_disconnected(session.device_id).await;
     metrics::gauge!("ws_connections").decrement(1.0);
     tracing::info!(user.id = session.user_id, "ws disconnected");
 }
