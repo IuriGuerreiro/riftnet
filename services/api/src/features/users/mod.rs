@@ -1,4 +1,4 @@
-//! Users: profile of the logged-in user, picking a username.
+//! Users: profile of the logged-in user, picking a username, search.
 
 mod controller;
 pub mod dto;
@@ -15,4 +15,5 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/me", get(controller::get_me))
         .route("/me/username", put(controller::set_username))
+        .route("/users/search", get(controller::search_users))
 }
