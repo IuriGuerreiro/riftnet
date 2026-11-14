@@ -1,0 +1,62 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>SFU audio spike</title>
+<body style="font-family: sans-serif; max-width: 600px; margin: 2rem auto">
+<h1>SFU audio spike</h1>
+<p>Open this page in two tabs (or two machines) and press Join in both. Use headphones.</p>
+<button id="join">Join</button> <button id="leave" disabled>Leave</button>
+<p>Status: <b id="status">idle</b></p>
+<p>Mic level: <meter id="lvl" max="1" style="width:200px"></meter></p>
+<audio id="remote" autoplay></audio>
+<pre id="stats"></pre>
+<script>
+let pc, stream, timer;
+const $ = id => document.getElementById(id);
+const status = s => ($("status").textContent = s);
+
+$("join").onclick = async () => {
+  $("join").disabled = true;
+  stream = await navigator.mediaDevices.getUserMedia({
+    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+  });
+  pc = new RTCPeerConnection();
+  // One two-way audio track: we send our mic, the SFU sends us the other person on the same track.
+  pc.addTransceiver(stream.getAudioTracks()[0], { direction: "sendrecv", streams: [stream] });
+  pc.ontrack = e => ($("remote").srcObject = new MediaStream([e.track]));
+  pc.onconnectionstatechange = () => status(pc.connectionState);
+
+  const offer = await pc.createOffer();
+  // Opus settings from calls.md: FEC + DTX on, 64 kbps.
+  offer.sdp = offer.sdp.replace(/(a=fmtp:111 [^\r\n]*)/,
+    "$1;usedtx=1;maxaveragebitrate=64000");
+  await pc.setLocalDescription(offer);
+
+  const res = await fetch("/join?room=test", { method: "POST", body: JSON.stringify(pc.localDescription) });
+  if (!res.ok) return status("join failed: " + (await res.text()));
+  await pc.setRemoteDescription(await res.json());
+  $("leave").disabled = false;
+  timer = setInterval(showStats, 1000);
+};
+
+$("leave").onclick = () => {
+  clearInterval(timer);
+  pc.close();
+  stream.getTracks().forEach(t => t.stop());
+  status("left");
+  $("leave").disabled = true;
+  $("join").disabled = false;
+};
+
+async function showStats() {
+  const out = [];
+  (await pc.getStats()).forEach(r => {
+    if (r.type === "media-source") $("lvl").value = r.audioLevel ?? 0;
+    if (r.type === "candidate-pair" && r.nominated)
+      out.push(`RTT to SFU: ${Math.round((r.currentRoundTripTime ?? 0) * 1000)} ms`);
+    if (r.type === "inbound-rtp")
+      out.push(`received: ${r.packetsReceived} pkts, lost: ${r.packetsLost}, jitter: ${Math.round(r.jitter * 1000)} ms`);
+    if (r.type === "outbound-rtp") out.push(`sent: ${r.packetsSent} pkts`);
+  });
+  $("stats").textContent = out.join("\n");
+}
+</script>

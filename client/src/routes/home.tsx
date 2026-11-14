@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useLogout } from "../api/auth";
 import type { Conversation } from "../gen/v1/conversations_pb";
+import { CallBar } from "../call/CallBar";
 import { useChat } from "../stores/chat";
 import { useConnection } from "../stores/connection";
 
@@ -74,7 +75,10 @@ export function HomePage() {
       <section className="flex min-w-0 flex-1 flex-col">
         {selected ? (
           <>
-            <header className="border-b border-zinc-800 p-4 font-semibold">@{other(selected)?.username}</header>
+            <header className="flex items-center justify-between border-b border-zinc-800 p-4 font-semibold">
+              @{other(selected)?.username}
+              <CallBar conversationId={selected.id} />
+            </header>
             <Messages conversationId={selected.id} myId={me?.id} />
             <Composer disabled={!ws} onSend={(text) => ws && me && chat.send(ws, me.id, text)} />
           </>
