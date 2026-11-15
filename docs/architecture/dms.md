@@ -153,3 +153,14 @@ Possible fixes if needed: rely on WebRTC's automatic quality drop, encode once f
 ## Open questions
 
 - DM list order: by creation for now; should be by latest message.
+
+## Typing indicator
+
+- Ephemeral: never stored, no database. `features/typing`.
+- Client sends `start_typing {conversation_id}` with **id 0** while the user types (at most once per 3s). No reply, not even an error.
+- Server: first a spam guard of 10 per 10s per user (any conversation), checked before the database lookup;
+  then must be a member (else dropped), then at most **1 per 3s per user per conversation** (extras dropped silently),
+  then pushes `typing_started {conversation_id, user_id}` to every **other** member.
+- Client shows "X is typing…" / "X and Y are typing…" / "Several people are typing…" under the messages,
+  for 8s, or until that user's `message_created` arrives.
+- Throttle is in memory per api instance. Fine while typing is cosmetic; move to Redis with the rate limiter if needed.

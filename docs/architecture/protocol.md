@@ -95,6 +95,8 @@ sequenceDiagram
 | `call_start` / `call_accept` / `call_decline` / `call_join` / `call_leave` | `call_result` / `call_joined` | voice, see [calls.md](calls.md) |
 | — (push, id 0) | `call_incoming` / `call_updated` / `call_ended` | voice calls |
 | — (push, id 0)                                    | `friend_updated {user, state}` | see [friends.md](friends.md) |
+| `start_typing {conversation_id}` (id 0)           | — none                         | fire-and-forget, see [dms.md](dms.md#typing-indicator) |
+| — (push, id 0)                                    | `typing_started {conversation_id, user_id}` | to the other members |
 
 Example session (written as JSON; on the wire it's binary protobuf):
 

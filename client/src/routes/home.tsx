@@ -7,6 +7,7 @@ import { CallBar, IncomingCall } from "../call/CallBar";
 import { useCalls } from "../stores/calls";
 import { useChat, type ChatMessage } from "../stores/chat";
 import { useFriends } from "../stores/friends";
+import { typingText, useTyping } from "../stores/typing";
 import { useConnection } from "../stores/connection";
 
 const dot = { online: "bg-green-500", connecting: "bg-yellow-500", offline: "bg-red-500" };
@@ -22,7 +23,10 @@ export function HomePage() {
   // Keep the socket open while this page is shown.
   useEffect(() => {
     void connect();
-    return disconnect;
+    return () => {
+      disconnect();
+      useTyping.getState().reset(); // logout / leaving the page
+    };
   }, [connect, disconnect]);
 
   // Every (re)connect: listen for pushes, reload the list, sync what we missed.
@@ -31,6 +35,7 @@ export function HomePage() {
     if (me) void useChat.getState().attach(ws, me.id);
     useCalls.getState().attach(ws, me?.id); // after chat: it chains onto chat's push handler
     void useFriends.getState().attach(ws);
+    if (me) useTyping.getState().attach(ws, me.id);
   }, [ws, me]);
 
   const selected = chat.conversations.find((c) => c.id === chat.selected);
@@ -106,7 +111,11 @@ export function HomePage() {
               </header>
             )}
             <Messages conversationId={selected.id} myId={me?.id} />
-            <Composer disabled={!ws} onSend={(text) => ws && me && chat.send(ws, me.id, text)} />
+            <TypingIndicator conversation={selected} />
+            <Composer
+              disabled={!ws}
+              onType={() => ws && useTyping.getState().typed(ws, selected.id)}
+              onSend={(text) => ws && me && chat.send(ws, me.id, text)} />
           </>
         ) : (
           <p className="m-auto text-sm text-zinc-500">Pick a conversation, or start a DM or a group.</p>
@@ -406,7 +415,25 @@ function MessageRow({ m, mine }: { m: ChatMessage; mine: boolean }) {
   );
 }
 
-function Composer({ disabled, onSend }: { disabled: boolean; onSend: (text: string) => void }) {
+// "ana is typing…" under the message list. The line keeps its height so the
+// list doesn't jump when it appears.
+function TypingIndicator({ conversation }: { conversation: Conversation }) {
+  const typing = useTyping((s) => s.typing[conversation.id.toString()]);
+  const names = Object.keys(typing ?? {}).map(
+    (id) => conversation.members.find((m) => m.id.toString() === id)?.username ?? "someone",
+  );
+  return <p className="h-5 truncate px-4 text-xs italic text-zinc-400">{typingText(names)}</p>;
+}
+
+function Composer({
+  disabled,
+  onType,
+  onSend,
+}: {
+  disabled: boolean;
+  onType: () => void;
+  onSend: (text: string) => void;
+}) {
   const [text, setText] = useState("");
   return (
     <form
@@ -420,7 +447,10 @@ function Composer({ disabled, onSend }: { disabled: boolean; onSend: (text: stri
     >
       <input
         value={text}
-        onChange={(e) => setText(e.target.value)}
+        onChange={(e) => {
+          setText(e.target.value);
+          if (e.target.value.trim()) onType();
+        }}
         placeholder="Message"
         maxLength={4000}
         className="min-w-0 flex-1 rounded-lg bg-zinc-800 px-3 py-2 text-sm outline-none ring-brand focus:ring-2"

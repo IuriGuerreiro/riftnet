@@ -13,6 +13,7 @@ import {
   MessageDeletedSchema,
   MessageSchema,
   MessageUpdatedSchema,
+  TypingStartedSchema,
 } from "../../../client/src/gen/v1/messages_pb.ts";
 
 const PORT = Number(process.env.MOCK_PORT ?? 7101);
@@ -81,6 +82,19 @@ wss.on("connection", (ws) => {
   console.log("client connected");
   ws.on("message", (data) => {
     const req = fromBinary(EnvelopeSchema, new Uint8Array(data as Buffer));
+    // Fire-and-forget, no reply. Everyone here is user 1, so fake the other
+    // side: user 2 "types back" a second later (shows for ~8s on the client).
+    if (req.payload.case === "startTyping") {
+      const conversationId = req.payload.value.conversationId;
+      setTimeout(() => {
+        const push = create(EnvelopeSchema, {
+          id: 0n,
+          payload: { case: "typingStarted", value: create(TypingStartedSchema, { conversationId, userId: 2n }) },
+        });
+        if (ws.readyState === ws.OPEN) ws.send(toBinary(EnvelopeSchema, push));
+      }, 1000);
+      return;
+    }
     const reply = create(EnvelopeSchema, { id: req.id, payload: handle(req) });
     ws.send(toBinary(EnvelopeSchema, reply));
   });
