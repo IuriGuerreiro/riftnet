@@ -30,6 +30,8 @@ message Envelope {
     AddMember add_member = 18;
     LeaveGroup leave_group = 19;
     RenameGroup rename_group = 20;
+    EditMessage edit_message = 21;
+    DeleteMessage delete_message = 22;
 
     // server -> client (replies)
     Pong pong = 50;
@@ -40,12 +42,16 @@ message Envelope {
     ConversationResult conversation = 57;
     Conversations conversations = 58;
     SyncResult sync_result = 59;
+    EditMessageAck edit_message_ack = 62;
+    DeleteMessageAck delete_message_ack = 63;
 
     // server -> client (pushes, id = 0)
     MessageCreated message_created = 54;
     UserUpdated user_updated = 55;
     ConversationUpdated conversation_updated = 60;
     FriendUpdated friend_updated = 61;
+    MessageUpdated message_updated = 64;
+    MessageDeleted message_deleted = 65;
 
     // calls (100-139 reserved, see docs/architecture/calls.md)
     // client -> server

@@ -14,6 +14,7 @@ const SCHEMA: &[&str] = &[
     include_str!("../../scylla/001_conversations.cql"),
     include_str!("../../scylla/002_messages.cql"),
     include_str!("../../scylla/003_group_dms.cql"),
+    include_str!("../../scylla/004_message_edits.cql"),
 ];
 
 /// Connects, creates the keyspace if needed, and applies the schema.

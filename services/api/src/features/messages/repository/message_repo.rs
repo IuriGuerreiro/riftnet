@@ -4,11 +4,12 @@
 use anyhow::Context;
 use async_trait::async_trait;
 use scylla::statement::Consistency;
+use scylla::statement::batch::{Batch, BatchType};
 
 use super::scylla_message_repo::{Row, ScyllaMessageRepo, to_message};
 use crate::common::error::RepoError;
 use crate::common::scylla::lwt_applied;
-use crate::features::messages::models::{Message, bucket_at, bucket_of};
+use crate::features::messages::models::{ChangeKind, Message, MessageChange, bucket_at, bucket_of};
 
 #[async_trait]
 pub trait MessageRepo: Send + Sync {
@@ -41,6 +42,20 @@ pub trait MessageRepo: Send + Sync {
         limit: usize,
         oldest_id: i64,
     ) -> Result<Vec<Message>, RepoError>;
+    /// Logs the edit as change `change_seq`, then saves the new content and
+    /// `edited_at`. Returns false if the message no longer exists.
+    async fn edit(&self, message: &Message, change_seq: i64) -> Result<bool, RepoError>;
+    /// Removes the message for good and logs it as change `change_seq`
+    /// (both or neither).
+    async fn delete(&self, conversation_id: i64, id: i64, change_seq: i64)
+    -> Result<(), RepoError>;
+    /// Edits/deletes with `seq > after_seq`, oldest first, at most `limit`.
+    async fn changes_since(
+        &self,
+        conversation_id: i64,
+        after_seq: i64,
+        limit: usize,
+    ) -> Result<Vec<MessageChange>, RepoError>;
 }
 
 #[async_trait]
@@ -194,6 +209,92 @@ impl MessageRepo for ScyllaMessageRepo {
             }
         }
 
+        Ok(out)
+    }
+
+    #[tracing::instrument(name = "db UPDATE messages", skip_all, err(Display), fields(otel.kind = "client", db.system = "scylladb", db.operation = "UPDATE", db.collection.name = "messages"))]
+    async fn edit(&self, m: &Message, change_seq: i64) -> Result<bool, RepoError> {
+        // Log first: an LWT can't share a batch with other partitions. If the
+        // update then finds no message, sync just skips this log row.
+        self.session
+            .execute_unpaged(
+                &self.insert_change,
+                (m.conversation_id, change_seq, m.id, ChangeKind::Edit as i8),
+            )
+            .await
+            .context("log edit")?;
+        let reply = self
+            .session
+            .execute_unpaged(
+                &self.edit_message,
+                (
+                    &m.content,
+                    m.edited_at,
+                    m.conversation_id,
+                    bucket_of(m.id),
+                    m.id,
+                ),
+            )
+            .await
+            .context("edit message")?
+            .into_rows_result()
+            .context("edit message")?;
+        Ok(lwt_applied(&reply).context("edit message")?)
+    }
+
+    #[tracing::instrument(name = "db DELETE messages", skip_all, err(Display), fields(otel.kind = "client", db.system = "scylladb", db.operation = "DELETE", db.collection.name = "messages"))]
+    async fn delete(
+        &self,
+        conversation_id: i64,
+        id: i64,
+        change_seq: i64,
+    ) -> Result<(), RepoError> {
+        // Logged batch: the delete and its log row go in together, so an
+        // offline client always hears about it on sync.
+        let mut batch = Batch::new(BatchType::Logged);
+        batch.append_statement(self.delete_message.clone());
+        batch.append_statement(self.insert_change.clone());
+        self.session
+            .batch(
+                &batch,
+                (
+                    (conversation_id, bucket_of(id), id),
+                    (conversation_id, change_seq, id, ChangeKind::Delete as i8),
+                ),
+            )
+            .await
+            .context("delete message")?;
+        Ok(())
+    }
+
+    #[tracing::instrument(name = "db SELECT message_changes", skip_all, err(Display), fields(otel.kind = "client", db.system = "scylladb", db.operation = "SELECT", db.collection.name = "message_changes"))]
+    async fn changes_since(
+        &self,
+        conversation_id: i64,
+        after_seq: i64,
+        limit: usize,
+    ) -> Result<Vec<MessageChange>, RepoError> {
+        let rows = self
+            .session
+            .execute_unpaged(
+                &self.changes_since,
+                (conversation_id, after_seq, limit as i32),
+            )
+            .await
+            .context("changes since")?
+            .into_rows_result()
+            .context("changes since")?;
+        let mut out = Vec::new();
+        for row in rows.rows::<(i64, i64, i8)>().context("changes since")? {
+            let (seq, message_id, kind) = row.context("changes since")?;
+            if let Some(kind) = ChangeKind::from_i8(kind) {
+                out.push(MessageChange {
+                    seq,
+                    message_id,
+                    kind,
+                });
+            }
+        }
         Ok(out)
     }
 }
