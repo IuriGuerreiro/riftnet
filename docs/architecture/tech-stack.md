@@ -12,8 +12,8 @@
 
 ## Client
 
-- **React + TypeScript + Vite**, one UI codebase for desktop (Tauri), web and mobile (Tauri 2). Never Electron.
-- A `Platform` interface hides the difference: desktop/mobile use the Rust core; web uses browser APIs (WebSocket, browser WebRTC, `getDisplayMedia`). Web screen share is lower quality; desktop is the real 60fps.
+- **React + TypeScript + Vite**, one UI codebase for desktop (Tauri) and web. Never Electron.
+- A `Platform` interface hides the difference: desktop uses the Rust core (mobile: via UniFFI); web uses browser APIs (WebSocket, browser WebRTC, `getDisplayMedia`). Web screen share is lower quality; desktop is the real 60fps.
 - **Rust core** inside the app does the heavy work: networking, media, capture, encode, decode.
 
 ### Tauri vs Electron
@@ -22,7 +22,7 @@
 - The webview still costs RAM. Keeping "<1 GB" is on **our UI code**, not just Tauri.
 - Each OS uses a different engine: WebView2 (Windows), WKWebView (macOS), WebKitGTK (Linux, weak WebRTC/video). So we test on 3 engines.
 - **Rule: media never runs in the webview.** It lives in the Rust core, and video is rendered natively. See [voice-video.md](voice-video.md).
-- Tauri 2 supports iOS and Android, so mobile is possible later.
+- **Mobile:** React Native app, sharing types/schemas with the client. See [mobile.md](mobile.md).
 
 ## Media
 
