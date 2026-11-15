@@ -1,4 +1,5 @@
 [package]
+publish = false
 name = "client-core"
 description = "Client brain: API connection, state, media. No Tauri/UI code here."
 version.workspace = true

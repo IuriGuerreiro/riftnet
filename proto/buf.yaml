@@ -1,0 +1,14 @@
+version: v2
+lint:
+  use:
+    - STANDARD
+  except:
+    # Files live in proto/v1, package is app.v1. Moving them would change
+    # every import path in Rust and TS for no real gain.
+    - PACKAGE_DIRECTORY_MATCH
+    # ENCRYPTION_NONE is a real value (plain text), not "unset". Renaming it
+    # would break the JSON wire format.
+    - ENUM_ZERO_VALUE_SUFFIX
+breaking:
+  use:
+    - WIRE_JSON

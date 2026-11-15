@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+
 import type { Session, User } from "../api/types";
 
 // Auth state for the whole app.
@@ -29,7 +30,8 @@ export const useAuth = create<AuthState>()(
           user: s.user,
         }),
       setUser: (user) => set({ user }),
-      clear: () => set({ accessToken: null, accessExpiresAt: null, refreshToken: null, user: null }),
+      clear: () =>
+        set({ accessToken: null, accessExpiresAt: null, refreshToken: null, user: null }),
     }),
     { name: "auth" },
   ),

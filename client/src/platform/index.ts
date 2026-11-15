@@ -15,6 +15,8 @@ export const platform: Platform = {
   httpUrl: import.meta.env.VITE_API_HTTP ?? defaultHttpUrl(),
   // Real api by default (same host as HTTP). Mock: VITE_API_WS=ws://127.0.0.1:7101/ws
   wsUrl: import.meta.env.VITE_API_WS ?? defaultHttpUrl().replace(/^http/, "ws") + "/ws",
+  // navigator.platform is deprecated but fine for a display label.
+  // eslint-disable-next-line @typescript-eslint/no-deprecated
   deviceName: isTauri ? "Desktop app" : `Web (${navigator.platform || "browser"})`,
 };
 

@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { useEffect, useRef, useState } from "react";
+
 import { useLogout } from "../api/auth";
-import type { Conversation } from "../gen/v1/conversations_pb";
 import { CallBar, IncomingCall, RemoteScreen } from "../call/CallBar";
+import type { Conversation } from "../gen/v1/conversations_pb";
 import { useCalls } from "../stores/calls";
 import { useChat } from "../stores/chat";
 import { useConnection } from "../stores/connection";
@@ -39,7 +40,8 @@ export function HomePage() {
       <IncomingCall
         ws={ws}
         callerName={(id) =>
-          chat.conversations.flatMap((c) => c.members).find((m) => m.id === id)?.username ?? "someone"
+          chat.conversations.flatMap((c) => c.members).find((m) => m.id === id)?.username ??
+          "someone"
         }
       />
       {/* --- sidebar --- */}
@@ -67,14 +69,16 @@ export function HomePage() {
               @{other(c)?.username}
             </button>
           ))}
-          {chat.conversations.length === 0 && <p className="p-4 text-xs text-zinc-500">No DMs yet.</p>}
+          {chat.conversations.length === 0 && (
+            <p className="p-4 text-xs text-zinc-500">No DMs yet.</p>
+          )}
         </nav>
 
         <button
           className="border-t border-zinc-800 p-3 text-sm text-zinc-400 hover:text-zinc-100"
           onClick={() => {
             disconnect();
-            logout.mutate(undefined, { onSettled: () => navigate({ to: "/login" }) });
+            logout.mutate(undefined, { onSettled: () => void navigate({ to: "/login" }) });
           }}
         >
           Log out
@@ -119,7 +123,10 @@ function NewDm({ disabled, onOpen }: { disabled: boolean; onOpen: (username: str
         placeholder="username"
         className="min-w-0 flex-1 rounded-md bg-zinc-800 px-2 py-1 text-sm outline-none ring-brand focus:ring-2"
       />
-      <button disabled={disabled} className="rounded-md bg-brand px-2 text-sm font-semibold text-zinc-950 disabled:opacity-50">
+      <button
+        disabled={disabled}
+        className="rounded-md bg-brand px-2 text-sm font-semibold text-zinc-950 disabled:opacity-50"
+      >
         DM
       </button>
     </form>
@@ -174,7 +181,10 @@ function Composer({ disabled, onSend }: { disabled: boolean; onSend: (text: stri
         maxLength={4000}
         className="min-w-0 flex-1 rounded-lg bg-zinc-800 px-3 py-2 text-sm outline-none ring-brand focus:ring-2"
       />
-      <button disabled={disabled} className="rounded-lg bg-brand px-4 font-semibold text-zinc-950 disabled:opacity-50">
+      <button
+        disabled={disabled}
+        className="rounded-lg bg-brand px-4 font-semibold text-zinc-950 disabled:opacity-50"
+      >
         Send
       </button>
     </form>

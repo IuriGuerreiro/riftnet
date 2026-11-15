@@ -1,9 +1,19 @@
 import { create as createProto } from "@bufbuild/protobuf";
 import { create } from "zustand";
+
 import type { WsClient } from "../api/ws";
-import { ListConversationsSchema, OpenDmSchema, type Conversation } from "../gen/v1/conversations_pb";
+import {
+  type Conversation,
+  ListConversationsSchema,
+  OpenDmSchema,
+} from "../gen/v1/conversations_pb";
 import type { Envelope } from "../gen/v1/envelope_pb";
-import { GetHistorySchema, SendMessageSchema, SyncSchema, type Message } from "../gen/v1/messages_pb";
+import {
+  GetHistorySchema,
+  type Message,
+  SendMessageSchema,
+  SyncSchema,
+} from "../gen/v1/messages_pb";
 
 // Test chat state: DMs, their messages, and what we've seen (lastSeq).
 //
@@ -28,8 +38,8 @@ export interface ChatMessage {
 
 interface ChatState {
   conversations: Conversation[];
-  messages: Record<Key, ChatMessage[]>; // oldest first
-  lastSeq: Record<Key, bigint>; // highest seq we have, per conversation
+  messages: Partial<Record<Key, ChatMessage[]>>; // oldest first
+  lastSeq: Partial<Record<Key, bigint>>; // highest seq we have, per conversation
   selected: bigint | null;
   error: string | null;
 
@@ -43,7 +53,12 @@ interface ChatState {
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 const key = (id: bigint): Key => id.toString();
-const toChat = (m: Message): ChatMessage => ({ id: m.id, seq: m.seq, authorId: m.authorId, text: dec.decode(m.content) });
+const toChat = (m: Message): ChatMessage => ({
+  id: m.id,
+  seq: m.seq,
+  authorId: m.authorId,
+  text: dec.decode(m.content),
+});
 
 export const useChat = create<ChatState>()((set, get) => {
   // Merge into a conversation: replace by id (or by nonce for my pending
@@ -54,13 +69,19 @@ export const useChat = create<ChatState>()((set, get) => {
     for (const m of incoming) {
       // My own push can arrive before my ack, so a message can match both a
       // pending bubble (by nonce) and a pushed copy (by id). Fold all into one.
-      const same = (x: ChatMessage) => (m.id !== 0n && x.id === m.id) || (!!m.nonce && x.nonce === m.nonce);
-      const merged = Object.assign({}, ...list.filter(same), m, { pending: m.pending, failed: m.failed });
+      const same = (x: ChatMessage) =>
+        (m.id !== 0n && x.id === m.id) || (!!m.nonce && x.nonce === m.nonce);
+      const merged: ChatMessage = Object.assign({}, ...list.filter(same), m, {
+        pending: m.pending,
+        failed: m.failed,
+      }) as ChatMessage;
       list = [...list.filter((x) => !same(x)), merged];
     }
     // Pending ones (seq 0) stay at the bottom.
     list.sort((a, b) => (a.pending ? 1 : 0) - (b.pending ? 1 : 0) || Number(a.seq - b.seq));
-    const seen = incoming.filter((m) => !m.pending).reduce((max, m) => (m.seq > max ? m.seq : max), get().lastSeq[k] ?? 0n);
+    const seen = incoming
+      .filter((m) => !m.pending)
+      .reduce((max, m) => (m.seq > max ? m.seq : max), get().lastSeq[k] ?? 0n);
     set((s) => ({ messages: { ...s.messages, [k]: list }, lastSeq: { ...s.lastSeq, [k]: seen } }));
   }
 
@@ -68,7 +89,10 @@ export const useChat = create<ChatState>()((set, get) => {
   // there's more; if too much was missed, start over from the newest.
   async function sync(ws: WsClient, conversationId: bigint) {
     const after = get().lastSeq[key(conversationId)] ?? 0n;
-    const reply = await ws.request({ case: "sync", value: createProto(SyncSchema, { conversationId, afterSeq: after }) });
+    const reply = await ws.request({
+      case: "sync",
+      value: createProto(SyncSchema, { conversationId, afterSeq: after }),
+    });
     if (reply.case !== "syncResult") return;
     if (!reply.value.complete) {
       // Too far behind: drop the old copy, keep the newest page.
@@ -78,7 +102,10 @@ export const useChat = create<ChatState>()((set, get) => {
   }
 
   async function loadConversations(ws: WsClient) {
-    const reply = await ws.request({ case: "listConversations", value: createProto(ListConversationsSchema) });
+    const reply = await ws.request({
+      case: "listConversations",
+      value: createProto(ListConversationsSchema),
+    });
     if (reply.case === "conversations") set({ conversations: reply.value.conversations });
   }
 
@@ -114,7 +141,10 @@ export const useChat = create<ChatState>()((set, get) => {
 
     openDm: async (ws, username) => {
       try {
-        const reply = await ws.request({ case: "openDm", value: createProto(OpenDmSchema, { username }) });
+        const reply = await ws.request({
+          case: "openDm",
+          value: createProto(OpenDmSchema, { username }),
+        });
         if (reply.case !== "conversation" || !reply.value.conversation) return;
         await loadConversations(ws);
         await get().select(ws, reply.value.conversation.id);
@@ -133,7 +163,9 @@ export const useChat = create<ChatState>()((set, get) => {
         value: createProto(GetHistorySchema, { conversationId, limit: 50 }),
       });
       if (reply.case === "history") addMessages(conversationId, reply.value.messages.map(toChat));
-      set((s) => ({ lastSeq: { ...s.lastSeq, [key(conversationId)]: s.lastSeq[key(conversationId)] ?? 0n } }));
+      set((s) => ({
+        lastSeq: { ...s.lastSeq, [key(conversationId)]: s.lastSeq[key(conversationId)] ?? 0n },
+      }));
     },
 
     send: async (ws, myId, text) => {
@@ -141,17 +173,25 @@ export const useChat = create<ChatState>()((set, get) => {
       if (!conversationId || !text.trim()) return;
       // The nonce makes a retry safe and lets us swap the pending bubble for the real one.
       const nonce = crypto.randomUUID();
-      addMessages(conversationId, [{ id: 0n, nonce, seq: 0n, authorId: myId, text, pending: true }]);
+      addMessages(conversationId, [
+        { id: 0n, nonce, seq: 0n, authorId: myId, text, pending: true },
+      ]);
       try {
         const reply = await ws.request({
           case: "sendMessage",
-          value: createProto(SendMessageSchema, { conversationId, content: enc.encode(text), nonce }),
+          value: createProto(SendMessageSchema, {
+            conversationId,
+            content: enc.encode(text),
+            nonce,
+          }),
         });
         if (reply.case === "messageAck" && reply.value.message) {
           addMessages(conversationId, [{ ...toChat(reply.value.message), nonce, pending: false }]);
         }
       } catch (e) {
-        addMessages(conversationId, [{ id: 0n, nonce, seq: 0n, authorId: myId, text, pending: true, failed: true }]);
+        addMessages(conversationId, [
+          { id: 0n, nonce, seq: 0n, authorId: myId, text, pending: true, failed: true },
+        ]);
         set({ error: (e as Error).message });
       }
     },

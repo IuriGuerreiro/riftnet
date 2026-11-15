@@ -47,7 +47,7 @@ function send(path: string, opts: Options, auth: boolean): Promise<Response> {
 
 async function parse<T>(res: Response): Promise<T> {
   if (res.status === 204) return undefined as T;
-  const data = await res.json().catch(() => null);
+  const data: unknown = await res.json().catch(() => null);
   if (!res.ok) {
     const err = data as ApiErrorBody | null;
     throw new ApiError(res.status, err?.code ?? "unknown", err?.message ?? res.statusText);
@@ -90,7 +90,11 @@ async function doRefresh(startedWith: string | null): Promise<boolean> {
   if (refreshToken !== startedWith) return true; // someone else already did it
 
   try {
-    const res = await send("/auth/refresh", { method: "POST", body: { refresh_token: refreshToken } }, false);
+    const res = await send(
+      "/auth/refresh",
+      { method: "POST", body: { refresh_token: refreshToken } },
+      false,
+    );
     useAuth.getState().setSession(await parse<Session>(res));
     return true;
   } catch (err) {

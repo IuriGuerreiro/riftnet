@@ -9,7 +9,7 @@ message Conversation {
   uint64 id = 1;
   ConversationKind kind = 2;
   repeated User members = 3;
-  uint64 last_seq = 4;      // seq of the newest message (0 = empty)
+  uint64 last_seq = 4; // seq of the newest message (0 = empty)
 }
 
 enum ConversationKind {
