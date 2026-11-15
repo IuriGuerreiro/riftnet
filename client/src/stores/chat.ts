@@ -1,7 +1,15 @@
 import { create as createProto } from "@bufbuild/protobuf";
 import { create } from "zustand";
 import type { WsClient } from "../api/ws";
-import { ListConversationsSchema, OpenDmSchema, type Conversation } from "../gen/v1/conversations_pb";
+import {
+  AddMemberSchema,
+  CreateGroupSchema,
+  LeaveGroupSchema,
+  ListConversationsSchema,
+  OpenDmSchema,
+  RenameGroupSchema,
+  type Conversation,
+} from "../gen/v1/conversations_pb";
 import type { Envelope } from "../gen/v1/envelope_pb";
 import { GetHistorySchema, SendMessageSchema, SyncSchema, type Message } from "../gen/v1/messages_pb";
 
@@ -34,7 +42,11 @@ interface ChatState {
   error: string | null;
 
   /** Socket (re)connected: listen for pushes, refresh the list, catch up. */
-  attach: (ws: WsClient) => Promise<void>;
+  attach: (ws: WsClient, myId: bigint) => Promise<void>;
+  createGroup: (ws: WsClient, name: string, usernames: string[]) => Promise<void>;
+  addMember: (ws: WsClient, username: string) => Promise<void>;
+  renameGroup: (ws: WsClient, name: string) => Promise<void>;
+  leaveGroup: (ws: WsClient) => Promise<void>;
   openDm: (ws: WsClient, username: string) => Promise<void>;
   select: (ws: WsClient, conversationId: bigint) => Promise<void>;
   send: (ws: WsClient, myId: bigint, text: string) => Promise<void>;
@@ -82,7 +94,35 @@ export const useChat = create<ChatState>()((set, get) => {
     if (reply.case === "conversations") set({ conversations: reply.value.conversations });
   }
 
+  // Add or replace a conversation in the list (newest changes on top).
+  // If I'm no longer a member (I left, maybe on another device), drop it.
+  function upsertConversation(c: Conversation, myId: bigint) {
+    const stillMember = c.members.some((m) => m.id === myId);
+    set((s) => ({
+      conversations: stillMember ? [c, ...s.conversations.filter((x) => x.id !== c.id)] : s.conversations.filter((x) => x.id !== c.id),
+      selected: !stillMember && s.selected === c.id ? null : s.selected,
+    }));
+  }
+
+  // Run a group request; show its error (e.g. group_full) instead of throwing.
+  async function groupRequest(ws: WsClient, payload: Envelope["payload"]) {
+    try {
+      const reply = await ws.request(payload);
+      if (reply.case === "conversation" && reply.value.conversation) upsertConversation(reply.value.conversation, myId);
+      set({ error: null });
+      return reply;
+    } catch (e) {
+      set({ error: (e as Error).message });
+    }
+  }
+
+  let myId = 0n;
+
   function onPush(payload: Envelope["payload"], ws: WsClient) {
+    // A group changed (created, someone joined/left, renamed).
+    if (payload.case === "conversationUpdated" && payload.value.conversation) {
+      return upsertConversation(payload.value.conversation, myId);
+    }
     if (payload.case !== "messageCreated" || !payload.value.message) return;
     const m = payload.value.message;
     const k = key(m.conversationId);
@@ -101,7 +141,8 @@ export const useChat = create<ChatState>()((set, get) => {
     selected: null,
     error: null,
 
-    attach: async (ws) => {
+    attach: async (ws, me) => {
+      myId = me;
       ws.onPush = (p) => onPush(p, ws);
       try {
         await loadConversations(ws);
@@ -122,6 +163,28 @@ export const useChat = create<ChatState>()((set, get) => {
       } catch (e) {
         set({ error: (e as Error).message });
       }
+    },
+
+    createGroup: async (ws, name, usernames) => {
+      const reply = await groupRequest(ws, { case: "createGroup", value: createProto(CreateGroupSchema, { name, usernames }) });
+      if (reply?.case === "conversation" && reply.value.conversation) await get().select(ws, reply.value.conversation.id);
+    },
+
+    addMember: async (ws, username) => {
+      const conversationId = get().selected;
+      if (conversationId) await groupRequest(ws, { case: "addMember", value: createProto(AddMemberSchema, { conversationId, username }) });
+    },
+
+    renameGroup: async (ws, name) => {
+      const conversationId = get().selected;
+      if (conversationId) await groupRequest(ws, { case: "renameGroup", value: createProto(RenameGroupSchema, { conversationId, name }) });
+    },
+
+    leaveGroup: async (ws) => {
+      const conversationId = get().selected;
+      if (!conversationId) return;
+      const reply = await groupRequest(ws, { case: "leaveGroup", value: createProto(LeaveGroupSchema, { conversationId }) });
+      if (reply) set((s) => ({ conversations: s.conversations.filter((c) => c.id !== conversationId), selected: null }));
     },
 
     select: async (ws, conversationId) => {

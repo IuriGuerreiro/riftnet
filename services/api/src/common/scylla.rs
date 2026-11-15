@@ -8,10 +8,12 @@ use scylla::client::session_builder::SessionBuilder;
 use scylla::response::query_result::QueryRowsResult;
 use scylla::value::Row;
 
-/// Schema files in `scylla/`, applied in order on every start (all IF NOT EXISTS).
+/// Schema files in `scylla/`, applied in order on every start. Everything is
+/// IF NOT EXISTS, except `ALTER TABLE .. ADD` (see `already_applied`).
 const SCHEMA: &[&str] = &[
     include_str!("../../scylla/001_conversations.cql"),
     include_str!("../../scylla/002_messages.cql"),
+    include_str!("../../scylla/003_group_dms.cql"),
 ];
 
 /// Connects, creates the keyspace if needed, and applies the schema.
@@ -39,7 +41,11 @@ pub async fn connect(
 
     for file in SCHEMA {
         for statement in statements(file) {
-            session.query_unpaged(statement, ()).await?;
+            if let Err(err) = session.query_unpaged(statement.as_str(), ()).await
+                && !already_applied(&statement, &err.to_string())
+            {
+                return Err(err.into());
+            }
         }
     }
     Ok(Arc::new(session))
@@ -61,6 +67,16 @@ pub fn lwt_applied(reply: &QueryRowsResult) -> anyhow::Result<bool> {
         .flatten()
         .and_then(|v| v.as_boolean())
         == Some(true))
+}
+
+/// Scylla has no `ALTER TABLE .. ADD IF NOT EXISTS`, so adding a column fails
+/// on every start after the first. That one error means "already done".
+fn already_applied(statement: &str, error: &str) -> bool {
+    statement
+        .trim_start()
+        .to_uppercase()
+        .starts_with("ALTER TABLE")
+        && error.contains("conflicts with an existing column")
 }
 
 /// Splits a .cql file into statements, skipping `--` comments.

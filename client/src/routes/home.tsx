@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useLogout } from "../api/auth";
-import type { Conversation } from "../gen/v1/conversations_pb";
+import { ConversationKind, type Conversation } from "../gen/v1/conversations_pb";
 import { CallBar, IncomingCall } from "../call/CallBar";
 import { useCalls } from "../stores/calls";
 import { useChat } from "../stores/chat";
@@ -26,12 +26,15 @@ export function HomePage() {
   // Every (re)connect: listen for pushes, reload the list, sync what we missed.
   useEffect(() => {
     if (!ws) return;
-    void useChat.getState().attach(ws);
+    if (me) void useChat.getState().attach(ws, me.id);
     useCalls.getState().attach(ws, me?.id); // after chat: it chains onto chat's push handler
-  }, [ws, me?.id]);
+  }, [ws, me]);
 
   const selected = chat.conversations.find((c) => c.id === chat.selected);
   const other = (c: Conversation) => c.members.find((m) => m.id !== me?.id) ?? c.members[0];
+  const isGroup = (c: Conversation) => c.kind === ConversationKind.GROUP;
+  // Groups show their name, DMs the other person.
+  const title = (c: Conversation) => (isGroup(c) ? `# ${c.name}` : `@${other(c)?.username}`);
 
   return (
     <div className="flex h-full w-full max-w-5xl overflow-hidden rounded-xl bg-zinc-900 shadow-lg">
@@ -55,6 +58,7 @@ export function HomePage() {
         </header>
 
         <NewDm disabled={!ws} onOpen={(username) => ws && chat.openDm(ws, username)} />
+        <NewGroup disabled={!ws} onCreate={(name, usernames) => ws && chat.createGroup(ws, name, usernames)} />
 
         <nav className="flex-1 overflow-y-auto">
           {chat.conversations.map((c) => (
@@ -63,10 +67,10 @@ export function HomePage() {
               onClick={() => ws && chat.select(ws, c.id)}
               className={`block w-full px-4 py-2 text-left text-sm hover:bg-zinc-800 ${c.id === chat.selected ? "bg-zinc-800 text-brand" : ""}`}
             >
-              @{other(c)?.username}
+              {title(c)}
             </button>
           ))}
-          {chat.conversations.length === 0 && <p className="p-4 text-xs text-zinc-500">No DMs yet.</p>}
+          {chat.conversations.length === 0 && <p className="p-4 text-xs text-zinc-500">No conversations yet.</p>}
         </nav>
 
         <button
@@ -84,21 +88,109 @@ export function HomePage() {
       <section className="flex min-w-0 flex-1 flex-col">
         {selected ? (
           <>
-            <header className="flex items-center justify-between border-b border-zinc-800 p-4 font-semibold">
-              @{other(selected)?.username}
-              <CallBar ws={ws} conversationId={selected.id} />
-            </header>
+            {isGroup(selected) ? (
+              <GroupHeader
+                group={selected}
+                onAdd={(username) => ws && chat.addMember(ws, username)}
+                onRename={(name) => ws && chat.renameGroup(ws, name)}
+                onLeave={() => ws && chat.leaveGroup(ws)}
+              />
+            ) : (
+              <header className="flex items-center justify-between border-b border-zinc-800 p-4 font-semibold">
+                {title(selected)}
+                <CallBar ws={ws} conversationId={selected.id} />
+              </header>
+            )}
             <Messages conversationId={selected.id} myId={me?.id} />
             <Composer disabled={!ws} onSend={(text) => ws && me && chat.send(ws, me.id, text)} />
           </>
         ) : (
-          <p className="m-auto text-sm text-zinc-500">Pick a DM, or start one with a username.</p>
+          <p className="m-auto text-sm text-zinc-500">Pick a conversation, or start a DM or a group.</p>
         )}
         {chat.error && <p className="px-4 pb-2 text-xs text-red-400">{chat.error}</p>}
       </section>
     </div>
   );
 }
+
+// Group name + 2-4 usernames, comma separated (3-5 people with you).
+function NewGroup({ disabled, onCreate }: { disabled: boolean; onCreate: (name: string, usernames: string[]) => void }) {
+  const [name, setName] = useState("");
+  const [usernames, setUsernames] = useState("");
+  return (
+    <form
+      className="space-y-2 border-b border-zinc-800 p-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        const list = usernames.split(",").map((u) => u.trim()).filter(Boolean);
+        if (!name.trim() || list.length === 0) return;
+        onCreate(name.trim(), list);
+        setName("");
+        setUsernames("");
+      }}
+    >
+      <input value={name} onChange={(e) => setName(e.target.value)} placeholder="group name" className={field} />
+      <div className="flex gap-2">
+        <input value={usernames} onChange={(e) => setUsernames(e.target.value)} placeholder="ana, bob, carl" className={field} />
+        <button disabled={disabled} className="rounded-md bg-brand px-2 text-sm font-semibold text-zinc-950 disabled:opacity-50">
+          Group
+        </button>
+      </div>
+    </form>
+  );
+}
+
+// Group chat header: name (click to rename), members, add someone, leave.
+function GroupHeader({
+  group,
+  onAdd,
+  onRename,
+  onLeave,
+}: {
+  group: Conversation;
+  onAdd: (username: string) => void;
+  onRename: (name: string) => void;
+  onLeave: () => void;
+}) {
+  const [username, setUsername] = useState("");
+  return (
+    <header className="space-y-2 border-b border-zinc-800 p-4">
+      <div className="flex items-center gap-3">
+        <button
+          className="font-semibold hover:text-brand"
+          title="Rename"
+          onClick={() => {
+            const name = prompt("New group name", group.name);
+            if (name?.trim()) onRename(name.trim());
+          }}
+        >
+          # {group.name}
+        </button>
+        <span className="text-xs text-zinc-500">{group.members.length}/5</span>
+        <button className="ml-auto text-xs text-red-400 hover:text-red-300" onClick={onLeave}>
+          Leave
+        </button>
+      </div>
+      <p className="text-xs text-zinc-400">{group.members.map((m) => `@${m.username}`).join(", ")}</p>
+      {group.members.length < 5 && (
+        <form
+          className="flex gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!username.trim()) return;
+            onAdd(username.trim());
+            setUsername("");
+          }}
+        >
+          <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="add username" className={field} />
+          <button className="rounded-md bg-zinc-700 px-2 text-sm hover:bg-zinc-600">Add</button>
+        </form>
+      )}
+    </header>
+  );
+}
+
+const field = "min-w-0 flex-1 rounded-md bg-zinc-800 px-2 py-1 text-sm outline-none ring-brand focus:ring-2";
 
 function NewDm({ disabled, onOpen }: { disabled: boolean; onOpen: (username: string) => void }) {
   const [username, setUsername] = useState("");
