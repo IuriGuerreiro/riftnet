@@ -1,7 +1,7 @@
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { AuthenticateSchema, EnvelopeSchema, type Envelope } from "../gen/v1/envelope_pb";
 import type { User } from "../gen/v1/users_pb";
-import { platform } from "../platform";
+import { platform } from "../platform/current";
 
 type Payload = Envelope["payload"];
 

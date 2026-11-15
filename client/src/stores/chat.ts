@@ -11,6 +11,7 @@ import {
   type Conversation,
 } from "../gen/v1/conversations_pb";
 import type { Envelope } from "../gen/v1/envelope_pb";
+import { platform } from "../platform/current";
 import { GetHistorySchema, SendMessageSchema, SyncSchema, type Message } from "../gen/v1/messages_pb";
 
 // Test chat state: DMs, their messages, and what we've seen (lastSeq).
@@ -203,7 +204,7 @@ export const useChat = create<ChatState>()((set, get) => {
       const conversationId = get().selected;
       if (!conversationId || !text.trim()) return;
       // The nonce makes a retry safe and lets us swap the pending bubble for the real one.
-      const nonce = crypto.randomUUID();
+      const nonce = platform.randomId();
       addMessages(conversationId, [{ id: 0n, nonce, seq: 0n, authorId: myId, text, pending: true }]);
       try {
         const reply = await ws.request({
