@@ -20,6 +20,8 @@ interface TypingState {
   attach: (ws: WsClient, myId: bigint) => void;
   /** Call on every keystroke; throttled here. */
   typed: (ws: WsClient, conversationId: bigint) => void;
+  /** Forget everything: timers, state, throttle, push listener. */
+  reset: () => void;
 }
 
 export const useTyping = create<TypingState>()((set, get) => {
@@ -36,7 +38,11 @@ export const useTyping = create<TypingState>()((set, get) => {
     if (!current?.[u]) return;
     const rest = { ...current };
     delete rest[u];
-    set((s) => ({ typing: { ...s.typing, [k]: rest } }));
+    set((s) => {
+      const typing = { ...s.typing, [k]: rest };
+      if (Object.keys(rest).length === 0) delete typing[k]; // no empty leftovers
+      return { typing };
+    });
   }
 
   function show(conversationId: bigint, userId: bigint) {
@@ -51,7 +57,9 @@ export const useTyping = create<TypingState>()((set, get) => {
     typing: {},
 
     attach: (ws, myId) => {
-      stopListening?.();
+      // New socket (reconnect or other account): start clean. Indicators
+      // from before are stale and pushes missed while offline are gone.
+      get().reset();
       stopListening = ws.addPushListener((payload) => {
         if (payload.case === "typingStarted" && payload.value.userId !== myId) {
           show(payload.value.conversationId, payload.value.userId);
@@ -66,9 +74,20 @@ export const useTyping = create<TypingState>()((set, get) => {
     typed: (ws, conversationId) => {
       const k = conversationId.toString();
       const now = Date.now();
+      // Old entries can't throttle anything any more: drop them.
+      for (const [c, at] of lastSent) if (now - at >= SEND_EVERY) lastSent.delete(c);
       if (now - (lastSent.get(k) ?? 0) < SEND_EVERY) return;
       lastSent.set(k, now);
       ws.notify({ case: "startTyping", value: createProto(StartTypingSchema, { conversationId }) });
+    },
+
+    reset: () => {
+      stopListening?.();
+      stopListening = undefined;
+      for (const t of timers.values()) clearTimeout(t);
+      timers.clear();
+      lastSent.clear();
+      set({ typing: {} });
     },
   };
 });

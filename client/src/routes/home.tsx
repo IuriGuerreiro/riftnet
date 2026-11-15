@@ -23,7 +23,10 @@ export function HomePage() {
   // Keep the socket open while this page is shown.
   useEffect(() => {
     void connect();
-    return disconnect;
+    return () => {
+      disconnect();
+      useTyping.getState().reset(); // logout / leaving the page
+    };
   }, [connect, disconnect]);
 
   // Every (re)connect: listen for pushes, reload the list, sync what we missed.

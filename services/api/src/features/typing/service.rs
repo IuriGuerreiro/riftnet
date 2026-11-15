@@ -16,12 +16,20 @@ use crate::features::conversations::repository::ConversationRepo;
 /// At most one typing event per user per conversation in this window.
 pub const THROTTLE: Duration = Duration::from_secs(3);
 
+/// Cap on incoming `start_typing` per user (any conversation), checked
+/// before the membership lookup so spam can't turn into database reads.
+/// A real client sends ~1 per 3s per conversation, far below this.
+pub const INGRESS_LIMIT: u32 = 10;
+pub const INGRESS_WINDOW: Duration = Duration::from_secs(10);
+
 pub struct TypingService {
     conversations: Arc<dyn ConversationRepo>,
     events: Arc<dyn EventBus>,
     /// (user, conversation) → when we last fanned out. In memory, per api
     /// instance: good enough while typing is purely cosmetic.
     last_sent: Mutex<HashMap<(i64, i64), Instant>>,
+    /// user → (window start, requests in it).
+    ingress: Mutex<HashMap<i64, (Instant, u32)>>,
 }
 
 impl TypingService {
@@ -30,6 +38,7 @@ impl TypingService {
             conversations,
             events,
             last_sent: Mutex::new(HashMap::new()),
+            ingress: Mutex::new(HashMap::new()),
         }
     }
 
@@ -41,6 +50,11 @@ impl TypingService {
     /// `start` with an explicit clock, for tests.
     /// Returns `Ok` when throttled too: the event is just dropped.
     async fn start_at(&self, me: i64, conversation_id: i64, now: Instant) -> Result<(), ApiError> {
+        // 1. Spam guard (no I/O). 2. Membership. 3. Per-conversation throttle.
+        // Nothing is ever sent before the membership check passes.
+        if !self.ingress_allowed(me, now) {
+            return Ok(());
+        }
         let conversation = self
             .conversations
             .get(conversation_id)
@@ -79,6 +93,20 @@ impl TypingService {
         Ok(())
     }
 
+    /// Fixed window per user: at most `INGRESS_LIMIT` per `INGRESS_WINDOW`.
+    fn ingress_allowed(&self, me: i64, now: Instant) -> bool {
+        let mut ingress = self.ingress.lock().expect("typing mutex poisoned");
+        if ingress.len() > 10_000 {
+            ingress.retain(|_, (start, _)| now.saturating_duration_since(*start) < INGRESS_WINDOW);
+        }
+        let entry = ingress.entry(me).or_insert((now, 0));
+        if now.saturating_duration_since(entry.0) >= INGRESS_WINDOW {
+            *entry = (now, 0);
+        }
+        entry.1 += 1;
+        entry.1 <= INGRESS_LIMIT
+    }
+
     /// True (and records `now`) if the last event is older than `THROTTLE`.
     fn allow(&self, me: i64, conversation_id: i64, now: Instant) -> bool {
         let mut last = self.last_sent.lock().expect("typing mutex poisoned");
@@ -112,7 +140,10 @@ mod tests {
     const DM: i64 = 100;
     const GROUP: i64 = 200;
 
-    struct FakeConversations;
+    #[derive(Default)]
+    struct FakeConversations {
+        gets: std::sync::atomic::AtomicUsize,
+    }
     #[async_trait]
     impl ConversationRepo for FakeConversations {
         async fn get_or_create_dm(
@@ -136,6 +167,7 @@ mod tests {
             unimplemented!()
         }
         async fn get(&self, id: i64) -> Result<Option<ConversationRecord>, RepoError> {
+            self.gets.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             let (kind, member_ids) = match id {
                 DM => (Kind::Dm, vec![ALICE, BOB]),
                 GROUP => (Kind::Group, vec![ALICE, BOB, CAROL]),
@@ -175,11 +207,22 @@ mod tests {
     }
 
     fn setup() -> (TypingService, Arc<FakeEvents>) {
+        let (svc, events, _) = setup_with_repo();
+        (svc, events)
+    }
+
+    fn setup_with_repo() -> (TypingService, Arc<FakeEvents>, Arc<FakeConversations>) {
         let events = Arc::new(FakeEvents::default());
+        let repo = Arc::new(FakeConversations::default());
         (
-            TypingService::new(Arc::new(FakeConversations), events.clone()),
+            TypingService::new(repo.clone(), events.clone()),
             events,
+            repo,
         )
+    }
+
+    fn gets(repo: &FakeConversations) -> usize {
+        repo.gets.load(std::sync::atomic::Ordering::SeqCst)
     }
 
     fn sent(events: &FakeEvents) -> Vec<(i64, u64, u64)> {
@@ -240,5 +283,32 @@ mod tests {
         assert!(typers.contains(&(DM as u64, ALICE as u64)));
         assert!(typers.contains(&(GROUP as u64, ALICE as u64)));
         assert!(typers.contains(&(DM as u64, BOB as u64)));
+    }
+
+    #[tokio::test]
+    async fn flood_is_cut_off_before_the_database() {
+        let (svc, events, repo) = setup_with_repo();
+        let t0 = Instant::now();
+        // Made-up conversation ids: each would be a fresh lookup.
+        for i in 0..100 {
+            let _ = svc.start_at(MALLORY, 10_000 + i, t0).await;
+        }
+        assert_eq!(gets(&repo), INGRESS_LIMIT as usize);
+        assert!(sent(&events).is_empty());
+
+        // Next window: allowed again.
+        let _ = svc.start_at(MALLORY, 10_000, t0 + INGRESS_WINDOW).await;
+        assert_eq!(gets(&repo), INGRESS_LIMIT as usize + 1);
+    }
+
+    #[tokio::test]
+    async fn ingress_limit_is_per_user() {
+        let (svc, events, _) = setup_with_repo();
+        let t0 = Instant::now();
+        for i in 0..100 {
+            let _ = svc.start_at(MALLORY, 10_000 + i, t0).await;
+        }
+        svc.start_at(ALICE, DM, t0).await.unwrap();
+        assert_eq!(sent(&events), [(BOB, DM as u64, ALICE as u64)]);
     }
 }
