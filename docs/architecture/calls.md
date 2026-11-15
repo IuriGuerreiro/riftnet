@@ -151,6 +151,26 @@ The SFU doesn't care which client it talks to. A `Platform`/`MediaTransport` tra
 - `call_screen_share` (envelope 104) tells the api who shares. `Call.sharing_user_ids` tells viewers when to show or hide the video. We can't infer this from the video itself: a static screen sends no frames.
 - Tested with headless Chrome (fake animated 1080p canvas): 1920x1080 at 50–60 fps, 0 lost, panel closes ~150 ms after stop.
 
+**Desktop gate spike: GO, with caveats** (`spikes/desktop-gate`, Linux, AMD Vega iGPU, X11).
+
+A small Rust program: LiveKit `libwebrtc` 0.4.0 → our api (login, call) → `services/media` → a browser viewer.
+
+| | VA-API (hardware) | OpenH264 (software) |
+|---|---|---|
+| Sent | 1920x1080 @ 60 fps | 1280x720 (`limit=Cpu`) |
+| App CPU (4 cores) | ~45% (capture + BGRA→I420) | 78–119% |
+| Viewer | 1080p, 30–60 fps, 0 lost | 720p |
+
+What we learned:
+- **Build:** needs `libva-dev` (or hardware encode is silently left out) and clang ≥ 21 (`CC/CXX` → clang-22 on Debian 13). Link `gio/gobject/glib` ourselves (`build.rs`).
+- **H.264 profile:** VA-API only serves `42e01f` / `4d0032`. Any other profile silently falls back to OpenH264. Offer exactly those.
+- **Start bitrate:** set `set_bitrate(start 4 Mbps, min 1 Mbps)`. Otherwise a still screen keeps the estimate low and libwebrtc shrinks the picture.
+- **CBR filler:** the crate's VA-API wrapper hard-codes `VA_RC_CBR`. The AMD encoder pads every frame with filler NALs up to the cap (~8 Mbps sent, ~2–4 Mbps real). str0m drops filler when it repacketizes, so viewers don't pay for it, but the sender's uplink does. It also likely triggers libwebrtc's frame dropper (fps 30–60). Fix: VBR in the wrapper (patch or upstream), or our own encoder via the crate's pre-encoded path.
+- **SFU:** tick str0m again right away when its timeout is already due. Waiting ≥ 1 ms for the next UDP packet throttled outgoing video.
+
+Not done yet: native video *rendering* in Tauri, Windows/macOS, Wayland (PipeWire portal), zero-copy capture (DMA-BUF/NV12).
+
+
 
 - Bitrate: ~6–8 Mbps H.264, ~4–5 Mbps AV1. Uplink must hold it, so add **simulcast** (e.g. 1080p60 + 720p30) and let the SFU pick per viewer.
 - SFU needs: forward video, pick simulcast layer per viewer, react to **PLI/FIR** (viewer asks "send me a full frame"), pass **TWCC** feedback (bandwidth estimate). str0m supports these; we write the layer-picking logic.
