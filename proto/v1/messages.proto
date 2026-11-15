@@ -53,3 +53,17 @@ message SyncResult {
 message MessageCreated {
   Message message = 1;
 }
+
+// Client -> server: "I'm typing here". Fire-and-forget (id 0, no reply).
+// Ephemeral, never stored. At most one per 3s per user per conversation;
+// extras are dropped silently.
+message StartTyping {
+  uint64 conversation_id = 1;
+}
+
+// Push to the other members: show "X is typing…" for ~8s,
+// or until X's next message arrives.
+message TypingStarted {
+  uint64 conversation_id = 1;
+  uint64 user_id = 2;
+}
