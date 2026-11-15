@@ -153,7 +153,7 @@ The SFU doesn't care which client it talks to. A `Platform`/`MediaTransport` tra
 - `call_screen_share` (envelope 104) tells the api who shares. `Call.sharing_user_ids` tells viewers when to show or hide the video. We can't infer this from the video itself: a static screen sends no frames.
 - Tested with headless Chrome (fake animated 1080p canvas): 1920x1080 at 50–60 fps, 0 lost, panel closes ~150 ms after stop.
 
-**Desktop gate spike: GO, with caveats** (`spikes/desktop-gate`, Linux, AMD Vega iGPU, X11).
+**Desktop gate spike: GO, with caveats** (Linux, AMD Vega iGPU, X11; also ran on Windows). The spike code is deleted; it is in git history at commit `e632626` (`spikes/desktop-gate`).
 
 A small Rust program: LiveKit `libwebrtc` 0.4.0 → our api (login, call) → `services/media` → a browser viewer.
 
@@ -170,7 +170,9 @@ What we learned:
 - **CBR filler:** the crate's VA-API wrapper hard-codes `VA_RC_CBR`. The AMD encoder pads every frame with filler NALs up to the cap (~8 Mbps sent, ~2–4 Mbps real). str0m drops filler when it repacketizes, so viewers don't pay for it, but the sender's uplink does. It also likely triggers libwebrtc's frame dropper (fps 30–60). Fix: VBR in the wrapper (patch or upstream), or our own encoder via the crate's pre-encoded path.
 - **SFU:** tick str0m again right away when its timeout is already due. Waiting ≥ 1 ms for the next UDP packet throttled outgoing video.
 
-Not done yet: native video *rendering* in Tauri, Windows/macOS, Wayland (PipeWire portal), zero-copy capture (DMA-BUF/NV12).
+Windows: builds and sends after small changes (gate the GLib linking in `build.rs` to Linux, pick a Windows encoder instead of VA-API). The Tauri app's web screen share also works there.
+
+Not done yet: native video *rendering* in Tauri, macOS (untested, no Mac), Wayland (PipeWire portal), zero-copy capture (DMA-BUF/NV12).
 
 
 
