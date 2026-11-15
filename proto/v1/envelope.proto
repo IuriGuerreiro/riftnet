@@ -4,6 +4,7 @@ package app.v1;
 
 import "v1/calls.proto";
 import "v1/conversations.proto";
+import "v1/friends.proto";
 import "v1/messages.proto";
 import "v1/users.proto";
 
@@ -24,6 +25,10 @@ message Envelope {
     OpenDm open_dm = 14;
     ListConversations list_conversations = 15;
     Sync sync = 16;
+    CreateGroup create_group = 17;
+    AddMember add_member = 18;
+    LeaveGroup leave_group = 19;
+    RenameGroup rename_group = 20;
 
     Pong pong = 50;
     Error error = 51;
@@ -36,6 +41,8 @@ message Envelope {
 
     MessageCreated message_created = 54;
     UserUpdated user_updated = 55;
+    ConversationUpdated conversation_updated = 60;
+    FriendUpdated friend_updated = 61;
 
     // calls: field numbers 100-139 are reserved for them
     CallStart call_start = 100;

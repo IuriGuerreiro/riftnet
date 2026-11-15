@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package app.v1;
+
+import "v1/users.proto";
+
+// Friend actions are HTTP (/friends). The socket only gets this push, sent to
+// both people (all their devices) whenever their relationship changes.
+// `state` is from the receiver's side, so the client just replaces its entry.
+message FriendUpdated {
+  User user = 1; // the other person
+  FriendState state = 2;
+}
+
+enum FriendState {
+  FRIEND_STATE_NONE = 0; // declined, cancelled or removed
+  FRIEND_STATE_INCOMING = 1; // they sent me a request
+  FRIEND_STATE_OUTGOING = 2; // I sent them a request
+  FRIEND_STATE_FRIEND = 3;
+}

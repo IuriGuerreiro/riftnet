@@ -3,6 +3,7 @@ use protocol::v1::{self, envelope::Payload};
 use super::connection::Session;
 use crate::app::AppState;
 use crate::common::error::ApiError;
+use crate::features::conversations::models::Conversation;
 
 pub async fn dispatch(
     state: &AppState,
@@ -16,6 +17,10 @@ pub async fn dispatch(
         Payload::SendMessage(req) => send_message(state, session, req).await,
         Payload::GetHistory(req) => get_history(state, session, req).await,
         Payload::Sync(req) => sync(state, session, req).await,
+        Payload::CreateGroup(req) => create_group(state, session, req).await,
+        Payload::AddMember(req) => add_member(state, session, req).await,
+        Payload::LeaveGroup(req) => leave_group(state, session, req).await,
+        Payload::RenameGroup(req) => rename_group(state, session, req).await,
         Payload::CallStart(req) => call_start(state, session, req).await,
         Payload::CallAccept(req) => call_result(
             state
@@ -133,6 +138,62 @@ async fn sync(state: &AppState, session: &Session, req: v1::Sync) -> Result<Payl
         messages: messages.iter().map(Into::into).collect(),
         complete,
     }))
+}
+
+async fn create_group(
+    state: &AppState,
+    session: &Session,
+    req: v1::CreateGroup,
+) -> Result<Payload, ApiError> {
+    let group = state
+        .conversations
+        .create_group(session.user_id, &req.name, &req.usernames)
+        .await?;
+    Ok(conversation_result(&group))
+}
+
+async fn add_member(
+    state: &AppState,
+    session: &Session,
+    req: v1::AddMember,
+) -> Result<Payload, ApiError> {
+    let group = state
+        .conversations
+        .add_member(session.user_id, req.conversation_id as i64, &req.username)
+        .await?;
+    Ok(conversation_result(&group))
+}
+
+async fn leave_group(
+    state: &AppState,
+    session: &Session,
+    req: v1::LeaveGroup,
+) -> Result<Payload, ApiError> {
+    state
+        .conversations
+        .leave_group(session.user_id, req.conversation_id as i64)
+        .await?;
+    Ok(Payload::Conversation(v1::ConversationResult {
+        conversation: None,
+    }))
+}
+
+async fn rename_group(
+    state: &AppState,
+    session: &Session,
+    req: v1::RenameGroup,
+) -> Result<Payload, ApiError> {
+    let group = state
+        .conversations
+        .rename_group(session.user_id, req.conversation_id as i64, &req.name)
+        .await?;
+    Ok(conversation_result(&group))
+}
+
+fn conversation_result(conversation: &Conversation) -> Payload {
+    Payload::Conversation(v1::ConversationResult {
+        conversation: Some(conversation.into()),
+    })
 }
 
 async fn call_start(

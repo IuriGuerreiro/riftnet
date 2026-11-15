@@ -3,9 +3,14 @@ import { create } from "zustand";
 
 import type { WsClient } from "../api/ws";
 import {
+  AddMemberSchema,
   type Conversation,
+  ConversationKind,
+  CreateGroupSchema,
+  LeaveGroupSchema,
   ListConversationsSchema,
   OpenDmSchema,
+  RenameGroupSchema,
 } from "../gen/v1/conversations_pb";
 import type { Envelope } from "../gen/v1/envelope_pb";
 import {
@@ -29,12 +34,16 @@ export interface ChatMessage {
 
 interface ChatState {
   conversations: Conversation[];
-  messages: Partial<Record<Key, ChatMessage[]>>;
-  lastSeq: Partial<Record<Key, bigint>>;
+  messages: Record<Key, ChatMessage[]>;
+  lastSeq: Record<Key, bigint>;
   selected: bigint | null;
   error: string | null;
 
-  attach: (ws: WsClient) => Promise<void>;
+  attach: (ws: WsClient, myId: bigint) => Promise<void>;
+  createGroup: (ws: WsClient, name: string, usernames: string[]) => Promise<void>;
+  addMember: (ws: WsClient, username: string) => Promise<void>;
+  renameGroup: (ws: WsClient, name: string) => Promise<void>;
+  leaveGroup: (ws: WsClient) => Promise<void>;
   openDm: (ws: WsClient, username: string) => Promise<void>;
   select: (ws: WsClient, conversationId: bigint) => Promise<void>;
   send: (ws: WsClient, myId: bigint, text: string) => Promise<void>;
@@ -50,15 +59,16 @@ const toChat = (m: Message): ChatMessage => ({
   text: dec.decode(m.content),
 });
 
+export const isGroup = (c: Conversation) => c.kind === ConversationKind.GROUP;
+
 export const useChat = create<ChatState>()((set, get) => {
   function addMessages(conversationId: bigint, incoming: ChatMessage[]) {
     const k = key(conversationId);
     let list = get().messages[k] ?? [];
     for (const m of incoming) {
-      // INVARIANT: a push can arrive before its ack; merge by id and by nonce into one message.
       const same = (x: ChatMessage) =>
         (m.id !== 0n && x.id === m.id) || (!!m.nonce && x.nonce === m.nonce);
-      const merged: ChatMessage = Object.assign({}, ...list.filter(same), m, {
+      const merged = Object.assign({}, ...list.filter(same), m, {
         pending: m.pending,
         failed: m.failed,
       }) as ChatMessage;
@@ -92,7 +102,35 @@ export const useChat = create<ChatState>()((set, get) => {
     if (reply.case === "conversations") set({ conversations: reply.value.conversations });
   }
 
+  function upsertConversation(c: Conversation, myId: bigint) {
+    const stillMember = c.members.some((m) => m.id === myId);
+    set((s) => ({
+      conversations: stillMember
+        ? [c, ...s.conversations.filter((x) => x.id !== c.id)]
+        : s.conversations.filter((x) => x.id !== c.id),
+      selected: !stillMember && s.selected === c.id ? null : s.selected,
+    }));
+  }
+
+  async function groupRequest(ws: WsClient, payload: Envelope["payload"]) {
+    try {
+      const reply = await ws.request(payload);
+      if (reply.case === "conversation" && reply.value.conversation)
+        upsertConversation(reply.value.conversation, myId);
+      set({ error: null });
+      return reply;
+    } catch (e) {
+      set({ error: (e as Error).message });
+    }
+  }
+
+  let myId = 0n;
+
   function onPush(payload: Envelope["payload"], ws: WsClient) {
+    if (payload.case === "conversationUpdated" && payload.value.conversation) {
+      upsertConversation(payload.value.conversation, myId);
+      return;
+    }
     if (payload.case !== "messageCreated" || !payload.value.message) return;
     const m = payload.value.message;
     const k = key(m.conversationId);
@@ -109,7 +147,8 @@ export const useChat = create<ChatState>()((set, get) => {
     selected: null,
     error: null,
 
-    attach: async (ws) => {
+    attach: async (ws, me) => {
+      myId = me;
       ws.onPush = (p) => onPush(p, ws);
       try {
         await loadConversations(ws);
@@ -132,6 +171,47 @@ export const useChat = create<ChatState>()((set, get) => {
       } catch (e) {
         set({ error: (e as Error).message });
       }
+    },
+
+    createGroup: async (ws, name, usernames) => {
+      const reply = await groupRequest(ws, {
+        case: "createGroup",
+        value: createProto(CreateGroupSchema, { name, usernames }),
+      });
+      if (reply?.case === "conversation" && reply.value.conversation)
+        await get().select(ws, reply.value.conversation.id);
+    },
+
+    addMember: async (ws, username) => {
+      const conversationId = get().selected;
+      if (conversationId)
+        await groupRequest(ws, {
+          case: "addMember",
+          value: createProto(AddMemberSchema, { conversationId, username }),
+        });
+    },
+
+    renameGroup: async (ws, name) => {
+      const conversationId = get().selected;
+      if (conversationId)
+        await groupRequest(ws, {
+          case: "renameGroup",
+          value: createProto(RenameGroupSchema, { conversationId, name }),
+        });
+    },
+
+    leaveGroup: async (ws) => {
+      const conversationId = get().selected;
+      if (!conversationId) return;
+      const reply = await groupRequest(ws, {
+        case: "leaveGroup",
+        value: createProto(LeaveGroupSchema, { conversationId }),
+      });
+      if (reply)
+        set((s) => ({
+          conversations: s.conversations.filter((c) => c.id !== conversationId),
+          selected: null,
+        }));
     },
 
     select: async (ws, conversationId) => {

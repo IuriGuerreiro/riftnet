@@ -305,7 +305,6 @@ mod tests {
 
     use async_trait::async_trait;
     use futures::stream::BoxStream;
-    use protocol::Message as _;
 
     use super::*;
     use crate::common::error::RepoError;
@@ -331,11 +330,21 @@ mod tests {
         async fn list_for_user(&self, _: i64) -> Result<Vec<ConversationRecord>, RepoError> {
             unimplemented!()
         }
+        async fn create_group(&self, _: &ConversationRecord) -> Result<(), RepoError> {
+            unimplemented!()
+        }
+        async fn set_members(&self, _: i64, _: &[i64], _: &[i64]) -> Result<bool, RepoError> {
+            unimplemented!()
+        }
+        async fn rename(&self, _: i64, _: &str) -> Result<(), RepoError> {
+            unimplemented!()
+        }
         async fn get(&self, id: i64) -> Result<Option<ConversationRecord>, RepoError> {
             Ok((id == DM).then(|| ConversationRecord {
                 id,
                 kind: Kind::Dm,
                 last_seq: 0,
+                name: String::new(),
                 member_ids: vec![ALICE, BOB],
             }))
         }

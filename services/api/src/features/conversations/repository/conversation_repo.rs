@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use anyhow::Context;
 use async_trait::async_trait;
+use scylla::statement::batch::{Batch, BatchType};
 
 use super::scylla_conversation_repo::ScyllaConversationRepo;
 use crate::common::error::RepoError;
@@ -19,6 +20,15 @@ pub trait ConversationRepo: Send + Sync {
     async fn list_for_user(&self, user_id: i64) -> Result<Vec<ConversationRecord>, RepoError>;
     async fn get(&self, id: i64) -> Result<Option<ConversationRecord>, RepoError>;
     async fn next_seq(&self, id: i64) -> Result<i64, RepoError>;
+
+    async fn create_group(&self, group: &ConversationRecord) -> Result<(), RepoError>;
+    async fn set_members(
+        &self,
+        id: i64,
+        expected: &[i64],
+        new_members: &[i64],
+    ) -> Result<bool, RepoError>;
+    async fn rename(&self, id: i64, name: &str) -> Result<(), RepoError>;
 }
 
 #[async_trait]
@@ -62,11 +72,12 @@ impl ConversationRepo for ScyllaConversationRepo {
             return Ok(existing);
         }
         let members = [a, b];
-        self.write_conversation(id, Kind::Dm, &members).await?;
+        self.write_conversation(id, Kind::Dm, "", &members).await?;
         Ok(ConversationRecord {
             id,
             kind: Kind::Dm,
             last_seq: 0,
+            name: String::new(),
             member_ids: members.to_vec(),
         })
     }
@@ -125,5 +136,58 @@ impl ConversationRepo for ScyllaConversationRepo {
         Err(RepoError::Other(anyhow::anyhow!(
             "next_seq: too much contention on {id}"
         )))
+    }
+
+    #[tracing::instrument(name = "db BATCH conversations", skip_all, err(Display), fields(otel.kind = "client", db.system = "scylladb", db.operation = "BATCH", db.collection.name = "conversations"))]
+    async fn create_group(&self, group: &ConversationRecord) -> Result<(), RepoError> {
+        self.write_conversation(group.id, Kind::Group, &group.name, &group.member_ids)
+            .await
+    }
+
+    #[tracing::instrument(name = "db UPDATE conversations members", skip_all, err(Display), fields(otel.kind = "client", db.system = "scylladb", db.operation = "UPDATE", db.collection.name = "conversations"))]
+    async fn set_members(
+        &self,
+        id: i64,
+        expected: &[i64],
+        new_members: &[i64],
+    ) -> Result<bool, RepoError> {
+        let update_reply = self
+            .session
+            .execute_unpaged(&self.set_members, (new_members, id, expected))
+            .await
+            .context("set members")?
+            .into_rows_result()
+            .context("set members")?;
+        let members_changed = lwt_applied(&update_reply).context("set members")?;
+        if !members_changed {
+            return Ok(false);
+        }
+
+        let mut batch = Batch::new(BatchType::Logged);
+        let mut values: Vec<(i64, i64)> = Vec::new();
+        for joined in new_members.iter().filter(|m| !expected.contains(m)) {
+            batch.append_statement(self.insert_by_user.clone());
+            values.push((*joined, id));
+        }
+        for left in expected.iter().filter(|m| !new_members.contains(m)) {
+            batch.append_statement(self.delete_by_user.clone());
+            values.push((*left, id));
+        }
+        if !values.is_empty() {
+            self.session
+                .batch(&batch, values)
+                .await
+                .context("update member lists")?;
+        }
+        Ok(true)
+    }
+
+    #[tracing::instrument(name = "db UPDATE conversations name", skip_all, err(Display), fields(otel.kind = "client", db.system = "scylladb", db.operation = "UPDATE", db.collection.name = "conversations"))]
+    async fn rename(&self, id: i64, name: &str) -> Result<(), RepoError> {
+        self.session
+            .execute_unpaged(&self.rename, (name, id))
+            .await
+            .context("rename")?;
+        Ok(())
     }
 }

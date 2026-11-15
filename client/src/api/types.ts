@@ -16,3 +16,17 @@ export interface ApiErrorBody {
   code: string;
   message: string;
 }
+
+export type FriendState = "friend" | "incoming" | "outgoing";
+
+export interface Friend {
+  user: User;
+  state: FriendState;
+  since: string;
+}
+
+export interface FriendsList {
+  friends: Friend[];
+  incoming: Friend[];
+  outgoing: Friend[];
+}

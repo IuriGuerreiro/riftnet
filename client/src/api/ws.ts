@@ -22,6 +22,7 @@ export class WsClient {
     { resolve: (p: Payload) => void; reject: (e: Error) => void }
   >();
   onPush: (payload: Payload) => void = () => {};
+  private pushListeners = new Set<(payload: Payload) => void>();
   onClose: (code: number) => void = () => {};
 
   private constructor(private ws: WebSocket) {
@@ -63,6 +64,11 @@ export class WsClient {
     return new Promise((resolve, reject) => this.pending.set(id, { resolve, reject }));
   }
 
+  addPushListener(listener: (payload: Payload) => void): () => void {
+    this.pushListeners.add(listener);
+    return () => this.pushListeners.delete(listener);
+  }
+
   close() {
     this.ws.close();
   }
@@ -72,6 +78,7 @@ export class WsClient {
     const waiting = this.pending.get(env.id);
     if (!waiting) {
       this.onPush(env.payload);
+      for (const listener of this.pushListeners) listener(env.payload);
       return;
     }
     this.pending.delete(env.id);

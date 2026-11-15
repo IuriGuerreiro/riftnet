@@ -18,6 +18,7 @@ pub struct ConversationRecord {
     pub id: i64,
     pub kind: Kind,
     pub last_seq: i64,
+    pub name: String,
     pub member_ids: Vec<i64>,
 }
 
@@ -26,12 +27,17 @@ pub struct Conversation {
     pub id: i64,
     pub kind: Kind,
     pub last_seq: i64,
+    pub name: String,
     pub members: Vec<User>,
 }
 
 pub fn dm_key(a: i64, b: i64) -> String {
     format!("{}:{}", a.min(b), a.max(b))
 }
+
+pub const MIN_GROUP_MEMBERS: usize = 3;
+pub const MAX_GROUP_MEMBERS: usize = 5;
+pub const MAX_GROUP_NAME_CHARS: usize = 100;
 
 #[cfg(test)]
 mod tests {

@@ -2,11 +2,13 @@ import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 
 import { useLogout } from "../api/auth";
+import type { Friend } from "../api/types";
 import { CallBar, IncomingCall, RemoteScreen } from "../call/CallBar";
 import type { Conversation } from "../gen/v1/conversations_pb";
 import { useCalls } from "../stores/calls";
-import { useChat } from "../stores/chat";
+import { isGroup, useChat } from "../stores/chat";
 import { useConnection } from "../stores/connection";
+import { useFriends } from "../stores/friends";
 
 const dot = { online: "bg-green-500", connecting: "bg-yellow-500", offline: "bg-red-500" };
 
@@ -23,12 +25,14 @@ export function HomePage() {
 
   useEffect(() => {
     if (!ws) return;
-    void useChat.getState().attach(ws);
+    if (me) void useChat.getState().attach(ws, me.id);
     useCalls.getState().attach(ws, me?.id);
-  }, [ws, me?.id]);
+    void useFriends.getState().attach(ws);
+  }, [ws, me]);
 
   const selected = chat.conversations.find((c) => c.id === chat.selected);
   const other = (c: Conversation) => c.members.find((m) => m.id !== me?.id) ?? c.members[0];
+  const title = (c: Conversation) => (isGroup(c) ? `# ${c.name}` : `@${other(c)?.username}`);
 
   return (
     <div className="flex h-full w-full max-w-5xl overflow-hidden rounded-xl bg-zinc-900 shadow-lg">
@@ -54,6 +58,11 @@ export function HomePage() {
         </header>
 
         <NewDm disabled={!ws} onOpen={(username) => ws && chat.openDm(ws, username)} />
+        <NewGroup
+          disabled={!ws}
+          onCreate={(name, usernames) => ws && chat.createGroup(ws, name, usernames)}
+        />
+        <FriendsPanel onDm={(username) => ws && chat.openDm(ws, username)} />
 
         <nav className="flex-1 overflow-y-auto">
           {chat.conversations.map((c) => (
@@ -62,11 +71,11 @@ export function HomePage() {
               onClick={() => ws && chat.select(ws, c.id)}
               className={`block w-full px-4 py-2 text-left text-sm hover:bg-zinc-800 ${c.id === chat.selected ? "bg-zinc-800 text-brand" : ""}`}
             >
-              @{other(c)?.username}
+              {title(c)}
             </button>
           ))}
           {chat.conversations.length === 0 && (
-            <p className="p-4 text-xs text-zinc-500">No DMs yet.</p>
+            <p className="p-4 text-xs text-zinc-500">No conversations yet.</p>
           )}
         </nav>
 
@@ -85,21 +94,261 @@ export function HomePage() {
       <section className="flex min-w-0 flex-1 flex-col">
         {selected ? (
           <>
-            <header className="flex items-center justify-between border-b border-zinc-800 p-4 font-semibold">
-              @{other(selected)?.username}
-              <CallBar ws={ws} conversationId={selected.id} />
-            </header>
+            {isGroup(selected) ? (
+              <GroupHeader
+                group={selected}
+                onAdd={(username) => ws && chat.addMember(ws, username)}
+                onRename={(name) => ws && chat.renameGroup(ws, name)}
+                onLeave={() => ws && chat.leaveGroup(ws)}
+              />
+            ) : (
+              <header className="flex items-center justify-between border-b border-zinc-800 p-4 font-semibold">
+                {title(selected)}
+                <CallBar ws={ws} conversationId={selected.id} />
+              </header>
+            )}
             <Messages conversationId={selected.id} myId={me?.id} />
             <Composer disabled={!ws} onSend={(text) => ws && me && chat.send(ws, me.id, text)} />
           </>
         ) : (
-          <p className="m-auto text-sm text-zinc-500">Pick a DM, or start one with a username.</p>
+          <p className="m-auto text-sm text-zinc-500">
+            Pick a conversation, or start a DM or a group.
+          </p>
         )}
         {chat.error && <p className="px-4 pb-2 text-xs text-red-400">{chat.error}</p>}
       </section>
     </div>
   );
 }
+
+function NewGroup({
+  disabled,
+  onCreate,
+}: {
+  disabled: boolean;
+  onCreate: (name: string, usernames: string[]) => void;
+}) {
+  const [name, setName] = useState("");
+  const [usernames, setUsernames] = useState("");
+  return (
+    <form
+      className="space-y-2 border-b border-zinc-800 p-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        const list = usernames
+          .split(",")
+          .map((u) => u.trim())
+          .filter(Boolean);
+        if (!name.trim() || list.length === 0) return;
+        onCreate(name.trim(), list);
+        setName("");
+        setUsernames("");
+      }}
+    >
+      <input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="group name"
+        className={field}
+      />
+      <div className="flex gap-2">
+        <input
+          value={usernames}
+          onChange={(e) => setUsernames(e.target.value)}
+          placeholder="ana, bob, carl"
+          className={field}
+        />
+        <button
+          disabled={disabled}
+          className="rounded-md bg-brand px-2 text-sm font-semibold text-zinc-950 disabled:opacity-50"
+        >
+          Group
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function GroupHeader({
+  group,
+  onAdd,
+  onRename,
+  onLeave,
+}: {
+  group: Conversation;
+  onAdd: (username: string) => void;
+  onRename: (name: string) => void;
+  onLeave: () => void;
+}) {
+  const [username, setUsername] = useState("");
+  return (
+    <header className="space-y-2 border-b border-zinc-800 p-4">
+      <div className="flex items-center gap-3">
+        <button
+          className="font-semibold hover:text-brand"
+          title="Rename"
+          onClick={() => {
+            const name = prompt("New group name", group.name);
+            if (name?.trim()) onRename(name.trim());
+          }}
+        >
+          # {group.name}
+        </button>
+        <span className="text-xs text-zinc-500">{group.members.length}/5</span>
+        <button className="ml-auto text-xs text-red-400 hover:text-red-300" onClick={onLeave}>
+          Leave
+        </button>
+      </div>
+      <p className="text-xs text-zinc-400">
+        {group.members.map((m) => `@${m.username}`).join(", ")}
+      </p>
+      {group.members.length < 5 && (
+        <form
+          className="flex gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!username.trim()) return;
+            onAdd(username.trim());
+            setUsername("");
+          }}
+        >
+          <input
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="add username"
+            className={field}
+          />
+          <button className="rounded-md bg-zinc-700 px-2 text-sm hover:bg-zinc-600">Add</button>
+        </form>
+      )}
+    </header>
+  );
+}
+
+function FriendsPanel({ onDm }: { onDm: (username: string) => void }) {
+  const { list, error, sendRequest, accept, deleteRequest, removeFriend } = useFriends();
+  const [open, setOpen] = useState(true);
+  const [username, setUsername] = useState("");
+  const name = (f: Friend) => `@${f.user.username ?? f.user.id}`;
+  const pendingCount = list.incoming.length;
+
+  return (
+    <section className="border-b border-zinc-800">
+      <button
+        className="flex w-full items-center justify-between px-3 py-2 text-xs font-semibold uppercase tracking-wide text-zinc-400 hover:text-zinc-100"
+        onClick={() => setOpen(!open)}
+      >
+        <span>
+          Friends ({list.friends.length})
+          {pendingCount > 0 && (
+            <span className="ml-2 rounded-full bg-brand px-1.5 text-zinc-950">{pendingCount}</span>
+          )}
+        </span>
+        <span>{open ? "−" : "+"}</span>
+      </button>
+
+      {open && (
+        <div className="max-h-72 space-y-2 overflow-y-auto px-3 pb-3">
+          <form
+            className="flex gap-2"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              if (!username.trim()) return;
+              if (await sendRequest(username.trim())) setUsername("");
+            }}
+          >
+            <input
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="add friend"
+              className={field}
+            />
+            <button className="rounded-md bg-zinc-700 px-2 text-sm hover:bg-zinc-600">Add</button>
+          </form>
+          {error && <p className="text-xs text-red-400">{error}</p>}
+
+          {list.incoming.map((f) => (
+            <FriendRow key={f.user.id} label={name(f)} hint="wants to be friends">
+              <RowButton onClick={() => accept(f.user.id)} className="text-green-400">
+                Accept
+              </RowButton>
+              <RowButton onClick={() => deleteRequest(f.user.id)} className="text-red-400">
+                Decline
+              </RowButton>
+            </FriendRow>
+          ))}
+          {list.outgoing.map((f) => (
+            <FriendRow key={f.user.id} label={name(f)} hint="request sent">
+              <RowButton onClick={() => deleteRequest(f.user.id)} className="text-zinc-400">
+                Cancel
+              </RowButton>
+            </FriendRow>
+          ))}
+          {list.friends.map((f) => (
+            <FriendRow key={f.user.id} label={name(f)}>
+              <RowButton
+                onClick={() => f.user.username && onDm(f.user.username)}
+                className="text-brand"
+              >
+                DM
+              </RowButton>
+              <RowButton
+                onClick={() =>
+                  confirm(`Remove ${name(f)} from friends?`) && removeFriend(f.user.id)
+                }
+                className="text-red-400"
+              >
+                Remove
+              </RowButton>
+            </FriendRow>
+          ))}
+          {list.friends.length + list.incoming.length + list.outgoing.length === 0 && (
+            <p className="text-xs text-zinc-500">No friends yet. Add someone by username.</p>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function FriendRow({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-2 text-sm">
+      <div className="min-w-0 flex-1">
+        <p className="truncate">{label}</p>
+        {hint && <p className="text-xs text-zinc-500">{hint}</p>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function RowButton({
+  onClick,
+  className,
+  children,
+}: {
+  onClick: () => void;
+  className: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <button onClick={onClick} className={`text-xs hover:underline ${className}`}>
+      {children}
+    </button>
+  );
+}
+
+const field =
+  "min-w-0 flex-1 rounded-md bg-zinc-800 px-2 py-1 text-sm outline-none ring-brand focus:ring-2";
 
 function NewDm({ disabled, onOpen }: { disabled: boolean; onOpen: (username: string) => void }) {
   const [username, setUsername] = useState("");

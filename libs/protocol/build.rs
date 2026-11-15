@@ -6,6 +6,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "v1/calls.proto",
         "v1/media.proto",
         "v1/conversations.proto",
+        "v1/friends.proto",
         "v1/messages.proto",
         "v1/users.proto",
     ];
