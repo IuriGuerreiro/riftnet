@@ -12,6 +12,7 @@ import {
   HistorySchema,
   MessageAckSchema,
   MessageSchema,
+  TypingStartedSchema,
 } from "../../../client/src/gen/v1/messages_pb.ts";
 import { UserSchema } from "../../../client/src/gen/v1/users_pb.ts";
 
@@ -85,6 +86,20 @@ wss.on("connection", (ws) => {
   console.log("client connected");
   ws.on("message", (data) => {
     const req = fromBinary(EnvelopeSchema, new Uint8Array(data as Buffer));
+    if (req.payload.case === "startTyping") {
+      const conversationId = req.payload.value.conversationId;
+      setTimeout(() => {
+        const push = create(EnvelopeSchema, {
+          id: 0n,
+          payload: {
+            case: "typingStarted",
+            value: create(TypingStartedSchema, { conversationId, userId: 2n }),
+          },
+        });
+        if (ws.readyState === ws.OPEN) ws.send(toBinary(EnvelopeSchema, push));
+      }, 1000);
+      return;
+    }
     const reply = create(EnvelopeSchema, { id: req.id, payload: handle(req) });
     ws.send(toBinary(EnvelopeSchema, reply));
   });

@@ -60,6 +60,10 @@ pub async fn run(mut socket: WebSocket, state: AppState) {
                     continue;
                 };
                 let reply = match Envelope::decode(bytes) {
+                    Ok(Envelope { payload: Some(Payload::StartTyping(req)), .. }) => {
+                        start_typing(&state, &session, req).await;
+                        continue;
+                    }
                     Ok(req) => handle(&state, &session, req).await,
                     Err(_) => error(0, "bad_frame", "not a valid Envelope"),
                 };
@@ -119,6 +123,17 @@ async fn authenticate(socket: &mut WebSocket, state: &AppState) -> Result<Sessio
     };
     send(socket, ok).await.map_err(|_| "closed")?;
     Ok(session)
+}
+
+async fn start_typing(state: &AppState, session: &Session, req: protocol::v1::StartTyping) {
+    metrics::counter!("ws_requests_total").increment(1);
+    if let Err(err) = state
+        .typing
+        .start(session.user_id, req.conversation_id as i64)
+        .await
+    {
+        tracing::debug!(error = ?err, "start_typing rejected");
+    }
 }
 
 async fn handle(state: &AppState, session: &Session, req: Envelope) -> Envelope {

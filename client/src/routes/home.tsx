@@ -9,6 +9,7 @@ import { useCalls } from "../stores/calls";
 import { isGroup, useChat } from "../stores/chat";
 import { useConnection } from "../stores/connection";
 import { useFriends } from "../stores/friends";
+import { typingText, useTyping } from "../stores/typing";
 
 const dot = { online: "bg-green-500", connecting: "bg-yellow-500", offline: "bg-red-500" };
 
@@ -20,7 +21,10 @@ export function HomePage() {
 
   useEffect(() => {
     void connect();
-    return disconnect;
+    return () => {
+      disconnect();
+      useTyping.getState().reset();
+    };
   }, [connect, disconnect]);
 
   useEffect(() => {
@@ -28,6 +32,7 @@ export function HomePage() {
     if (me) void useChat.getState().attach(ws, me.id);
     useCalls.getState().attach(ws, me?.id);
     void useFriends.getState().attach(ws);
+    if (me) useTyping.getState().attach(ws, me.id);
   }, [ws, me]);
 
   const selected = chat.conversations.find((c) => c.id === chat.selected);
@@ -108,7 +113,12 @@ export function HomePage() {
               </header>
             )}
             <Messages conversationId={selected.id} myId={me?.id} />
-            <Composer disabled={!ws} onSend={(text) => ws && me && chat.send(ws, me.id, text)} />
+            <TypingIndicator conversation={selected} />
+            <Composer
+              disabled={!ws}
+              onType={() => ws && useTyping.getState().typed(ws, selected.id)}
+              onSend={(text) => ws && me && chat.send(ws, me.id, text)}
+            />
           </>
         ) : (
           <p className="m-auto text-sm text-zinc-500">
@@ -407,7 +417,23 @@ function Messages({ conversationId, myId }: { conversationId: bigint; myId?: big
   );
 }
 
-function Composer({ disabled, onSend }: { disabled: boolean; onSend: (text: string) => void }) {
+function TypingIndicator({ conversation }: { conversation: Conversation }) {
+  const typing = useTyping((s) => s.typing[conversation.id.toString()]);
+  const names = Object.keys(typing ?? {}).map(
+    (id) => conversation.members.find((m) => m.id.toString() === id)?.username ?? "someone",
+  );
+  return <p className="h-5 truncate px-4 text-xs italic text-zinc-400">{typingText(names)}</p>;
+}
+
+function Composer({
+  disabled,
+  onType,
+  onSend,
+}: {
+  disabled: boolean;
+  onType: () => void;
+  onSend: (text: string) => void;
+}) {
   const [text, setText] = useState("");
   return (
     <form
@@ -421,7 +447,10 @@ function Composer({ disabled, onSend }: { disabled: boolean; onSend: (text: stri
     >
       <input
         value={text}
-        onChange={(e) => setText(e.target.value)}
+        onChange={(e) => {
+          setText(e.target.value);
+          if (e.target.value.trim()) onType();
+        }}
         placeholder="Message"
         maxLength={4000}
         className="min-w-0 flex-1 rounded-lg bg-zinc-800 px-3 py-2 text-sm outline-none ring-brand focus:ring-2"

@@ -64,6 +64,11 @@ export class WsClient {
     return new Promise((resolve, reject) => this.pending.set(id, { resolve, reject }));
   }
 
+  notify(payload: Payload) {
+    if (this.ws.readyState !== WebSocket.OPEN) return;
+    this.ws.send(toBinary(EnvelopeSchema, create(EnvelopeSchema, { id: 0n, payload })));
+  }
+
   addPushListener(listener: (payload: Payload) => void): () => void {
     this.pushListeners.add(listener);
     return () => this.pushListeners.delete(listener);
