@@ -14,3 +14,11 @@ CREATE TABLE IF NOT EXISTS message_changes (
     kind            tinyint,
     PRIMARY KEY ((conversation_id), seq)
 ) WITH CLUSTERING ORDER BY (seq ASC);
+
+-- Deleted message ids, kept a day (as long as message_nonces). A send retry
+-- whose nonce points at a deleted message must not insert it again.
+CREATE TABLE IF NOT EXISTS deleted_messages (
+    conversation_id bigint,
+    id              bigint,
+    PRIMARY KEY ((conversation_id), id)
+);

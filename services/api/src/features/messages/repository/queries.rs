@@ -33,3 +33,11 @@ pub const INSERT_CHANGE: &str = "INSERT INTO message_changes (conversation_id, s
 /// Oldest first (the table's order).
 pub const CHANGES_SINCE: &str = "SELECT seq, message_id, kind FROM message_changes \
      WHERE conversation_id = ? AND seq > ? LIMIT ?";
+
+/// Deleted ids, kept as long as nonces (a day), so a send retry can't
+/// re-insert a message that was deleted.
+pub const MARK_DELETED: &str = "INSERT INTO deleted_messages (conversation_id, id) \
+     VALUES (?, ?) USING TTL 86400";
+
+pub const WAS_DELETED: &str =
+    "SELECT id FROM deleted_messages WHERE conversation_id = ? AND id = ?";

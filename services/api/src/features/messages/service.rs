@@ -72,8 +72,14 @@ impl MessageService {
             .repo
             .claim_nonce(conversation_id, me, nonce, self.ids.next_id() as i64)
             .await?;
-        if !is_first_send && let Some(existing) = self.repo.get(conversation_id, id).await? {
-            return Ok(existing);
+        if !is_first_send {
+            if let Some(existing) = self.repo.get(conversation_id, id).await? {
+                return Ok(existing);
+            }
+            // Saved, then deleted: don't bring it back.
+            if self.repo.was_deleted(conversation_id, id).await? {
+                return Err(message_not_found());
+            }
         }
         // (A retry whose first attempt crashed before saving continues below
         // with the same id, so it still can't create a duplicate.)
@@ -127,6 +133,8 @@ impl MessageService {
     ) -> Result<SyncResult, ApiError> {
         let conversation = self.member_conversation(me, conversation_id).await?;
         // Common case: nothing new. The conversation row already says so.
+        // (`last_seq` there counts *reserved* seqs, including ones still being
+        // written, so below we only report seqs we actually saw.)
         if conversation.last_seq <= after_seq {
             return Ok(SyncResult {
                 complete: true,
@@ -143,7 +151,8 @@ impl MessageService {
             .repo
             .changes_since(conversation_id, after_seq, MAX_SYNC + 1)
             .await?;
-        // Too far behind: the client reloads everything, so changes don't matter.
+        // Too far behind: the client drops its copy and reloads, so changes
+        // don't matter and it can skip ahead to the newest seq.
         if messages.len() > MAX_SYNC || changes.len() > MAX_SYNC {
             messages.truncate(MAX_SYNC);
             messages.sort_by_key(|m| m.seq);
@@ -160,9 +169,11 @@ impl MessageService {
 
         // Latest change per message wins. New messages already come with
         // their current content, so skip those.
+        // `last_seq` = the highest seq we saw, not the conversation's: a seq
+        // still being written (reserved, not saved) must not be skipped.
         let mut result = SyncResult {
             complete: true,
-            last_seq: conversation.last_seq,
+            last_seq: after_seq,
             ..Default::default()
         };
         let mut seen = std::collections::HashSet::new();
@@ -377,6 +388,8 @@ mod tests {
     struct FakeMessages {
         messages: Mutex<Vec<Message>>,
         changes: Mutex<Vec<MessageChange>>,
+        nonces: Mutex<std::collections::HashMap<String, i64>>,
+        deleted: Mutex<Vec<i64>>,
     }
     #[async_trait]
     impl MessageRepo for FakeMessages {
@@ -384,10 +397,17 @@ mod tests {
             &self,
             _: i64,
             _: i64,
-            _: &str,
+            nonce: &str,
             new_id: i64,
         ) -> Result<(i64, bool), RepoError> {
-            Ok((new_id, true))
+            let mut nonces = self.nonces.lock().unwrap();
+            match nonces.get(nonce) {
+                Some(id) => Ok((*id, false)),
+                None => {
+                    nonces.insert(nonce.to_string(), new_id);
+                    Ok((new_id, true))
+                }
+            }
         }
         async fn get(&self, _: i64, id: i64) -> Result<Option<Message>, RepoError> {
             Ok(self
@@ -434,21 +454,25 @@ mod tests {
             Ok(out)
         }
         async fn edit(&self, m: &Message, change_seq: i64) -> Result<bool, RepoError> {
-            self.changes.lock().unwrap().push(MessageChange {
-                seq: change_seq,
-                message_id: m.id,
-                kind: ChangeKind::Edit,
-            });
             let mut all = self.messages.lock().unwrap();
             let Some(row) = all.iter_mut().find(|x| x.id == m.id) else {
                 return Ok(false);
             };
             row.content = m.content.clone();
             row.edited_at = m.edited_at;
+            self.changes.lock().unwrap().push(MessageChange {
+                seq: change_seq,
+                message_id: m.id,
+                kind: ChangeKind::Edit,
+            });
             Ok(true)
+        }
+        async fn was_deleted(&self, _: i64, id: i64) -> Result<bool, RepoError> {
+            Ok(self.deleted.lock().unwrap().contains(&id))
         }
         async fn delete(&self, _: i64, id: i64, change_seq: i64) -> Result<(), RepoError> {
             self.messages.lock().unwrap().retain(|m| m.id != id);
+            self.deleted.lock().unwrap().push(id);
             self.changes.lock().unwrap().push(MessageChange {
                 seq: change_seq,
                 message_id: id,
@@ -503,24 +527,31 @@ mod tests {
     struct Setup {
         svc: MessageService,
         repo: Arc<FakeMessages>,
+        conversations: Arc<FakeConversations>,
         events: Arc<FakeEvents>,
     }
 
     fn setup() -> Setup {
         let repo = Arc::new(FakeMessages::default());
         let events = Arc::new(FakeEvents::default());
+        let conversations = Arc::new(FakeConversations::default());
         let svc = MessageService::new(
             repo.clone(),
-            Arc::new(FakeConversations::default()),
+            conversations.clone(),
             events.clone(),
             Arc::new(Snowflake::new(1)),
         );
-        Setup { svc, repo, events }
+        Setup {
+            svc,
+            repo,
+            conversations,
+            events,
+        }
     }
 
     impl Setup {
         async fn send(&self, from: i64, text: &str) -> Message {
-            let nonce = format!("n-{}", self.repo.messages.lock().unwrap().len());
+            let nonce = format!("n-{}", self.repo.nonces.lock().unwrap().len());
             self.svc.send(from, DM, text.into(), &nonce).await.unwrap()
         }
         fn pushes(&self, user: i64) -> Vec<&'static str> {
@@ -673,5 +704,66 @@ mod tests {
         let r = t.svc.sync(BOB, DM, 2).await.unwrap();
         assert!(r.edited.iter().all(|m| m.id != a.id));
         assert_eq!(r.deleted_ids, [a.id]);
+    }
+
+    #[tokio::test]
+    async fn send_retry_does_not_bring_back_a_deleted_message() {
+        let t = setup();
+        let m = t
+            .svc
+            .send(ALICE, DM, "oops".into(), "retry-me")
+            .await
+            .unwrap();
+        t.svc.delete(ALICE, DM, m.id).await.unwrap();
+
+        // The ack was lost, so the app retries with the same nonce.
+        let err = t
+            .svc
+            .send(ALICE, DM, "oops".into(), "retry-me")
+            .await
+            .unwrap_err();
+
+        assert_eq!(code(err), "message_not_found");
+        assert!(t.repo.messages.lock().unwrap().is_empty());
+        assert_eq!(t.pushes(BOB), ["created", "deleted"]);
+    }
+
+    #[tokio::test]
+    async fn send_retry_still_returns_the_same_message() {
+        let t = setup();
+        let first = t.svc.send(ALICE, DM, "hi".into(), "same").await.unwrap();
+        let again = t.svc.send(ALICE, DM, "hi".into(), "same").await.unwrap();
+        assert_eq!(first.id, again.id);
+        assert_eq!(t.repo.messages.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn sync_never_skips_a_seq_still_being_written() {
+        let t = setup();
+        t.send(ALICE, "one").await; // 1
+        // An edit/send reserved seq 2 but hasn't saved yet.
+        t.conversations.next_seq(DM).await.unwrap();
+
+        let r = t.svc.sync(BOB, DM, 0).await.unwrap();
+
+        // Only up to what we saw, so the next sync still asks for seq 2.
+        assert_eq!(r.last_seq, 1);
+        let r = t.svc.sync(BOB, DM, 1).await.unwrap();
+        assert_eq!(r.last_seq, 1);
+        assert!(r.messages.is_empty());
+    }
+
+    #[tokio::test]
+    async fn edit_that_loses_to_a_delete_leaves_no_change_row() {
+        let t = setup();
+        let m = t.send(ALICE, "hi").await;
+        t.svc.delete(ALICE, DM, m.id).await.unwrap();
+        // Simulate the race at the repo: the row is gone when the edit lands.
+        let stale = Message {
+            content: b"late".to_vec(),
+            ..m
+        };
+        assert!(!t.repo.edit(&stale, 99).await.unwrap());
+        assert!(t.repo.changes.lock().unwrap().iter().all(|c| c.seq != 99));
     }
 }

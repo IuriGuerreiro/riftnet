@@ -156,7 +156,8 @@ check("history has all 13, newest first", h.length === 13 && h[0].seq === 13n &&
 check("limit 5 → 5 newest", h5.length === 5 && h5[0].seq === 13n);
 r = await talk([auth(bob.token), history(dm, h5[4].id, 5)], 2);
 const older = r.replies[1]?.payload.case === "history" ? r.replies[1].payload.value.messages : [];
-check("before_id → the next 5 older", older.length === 5 && older[0].seq === h5[4].seq - 1n);
+// History pages by id (time). Parallel sends can make id order != seq order, so compare ids.
+check("before_id → the next 5 older", older.length === 5 && older[0].id === h[5].id);
 
 r = await talk([auth(carol.token), send(dm, "let me in", "x"), history(dm)], 3);
 check("non-member can't send", errCode(r.replies[1]) === "conversation_not_found");

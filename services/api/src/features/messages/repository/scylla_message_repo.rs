@@ -21,6 +21,8 @@ pub struct ScyllaMessageRepo {
     pub(super) delete_message: PreparedStatement,
     pub(super) insert_change: PreparedStatement,
     pub(super) changes_since: PreparedStatement,
+    pub(super) mark_deleted: PreparedStatement,
+    pub(super) was_deleted: PreparedStatement,
 }
 
 /// Columns of `GET_MESSAGE` / `HISTORY`, in order.
@@ -55,6 +57,8 @@ impl ScyllaMessageRepo {
             delete_message: prepare(q::DELETE_MESSAGE).await?,
             insert_change: prepare(q::INSERT_CHANGE).await?,
             changes_since: prepare(q::CHANGES_SINCE).await?,
+            mark_deleted: prepare(q::MARK_DELETED).await?,
+            was_deleted: prepare(q::WAS_DELETED).await?,
             session,
         })
     }

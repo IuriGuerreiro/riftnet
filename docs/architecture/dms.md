@@ -100,13 +100,24 @@ flowchart LR
 - Only the **author** can edit or delete (`not_your_message`). Edits have the same limits as sends.
 - Delete is a **hard delete**: the row is gone, history skips it. Deleting twice is fine (ack `seq = 0`, no push).
 - Each edit/delete takes the **next conversation `seq`**, like a new message, and writes a `message_changes` row.
-  - Edit: log row first, then `UPDATE … IF EXISTS` (an LWT: a plain update would bring a deleted row back).
-  - Delete: the delete + its log row in one logged batch.
+  - Edit: `UPDATE … IF EXISTS` first (an LWT: a plain update would bring a deleted row back), then the log row.
+    So sync never sees a logged edit that isn't saved yet.
+  - Delete: the delete + its log row + a `deleted_messages` row (kept a day) in one logged batch.
+- A **send retry** whose message was deleted gets `message_not_found` instead of re-inserting it
+  (`deleted_messages` lives as long as nonces).
 - Pushes `message_updated {message, seq}` / `message_deleted {conversation_id, message_id, seq}` to every member.
   The app treats that `seq` like a message's: it bumps `lastSeq`, and a gap means "sync".
 - Sync also reads `message_changes > after_seq`: latest change per message wins → `edited` (current version)
   and `deleted_ids`, plus `last_seq` to use next time. More than 200 changes → `complete: false`.
-- Known gap: `message_changes` is one partition per conversation that grows forever. Bucket it later.
+- `last_seq` is the **highest seq sync actually saw**, not the conversation's counter: a seq that's
+  reserved but not saved yet must not be skipped.
+- Sync scans 10 s (of id time) past the first message you already have: ids are made before seqs, so
+  parallel sends can have seq 11 just below seq 10.
+- Known gaps:
+  - `message_changes` is one partition per conversation that grows forever. Bucket it later.
+  - Seqs aren't committed in order: if change 12 is saved while 11 is still being written, a sync in
+    that moment reports 12 and skips 11. Same for messages. Needs a "committed up to" watermark.
+  - A crash between an edit's save and its log row: offline clients miss that edit.
 
 ### Rules
 
