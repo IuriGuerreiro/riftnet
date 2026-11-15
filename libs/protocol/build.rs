@@ -4,6 +4,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-changed={root}");
     let files = [
         "v1/envelope.proto",
+        "v1/calls.proto",
+        "v1/media.proto",
         "v1/conversations.proto",
         "v1/messages.proto",
         "v1/users.proto",

@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod calls;
 pub mod conversations;
 pub mod gateway;
 pub mod health;
