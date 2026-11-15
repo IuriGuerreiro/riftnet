@@ -1,6 +1,5 @@
 use crate::features::users::models::User;
 
-/// Same numbers as `ConversationKind` in conversations.proto.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i8)]
 pub enum Kind {
@@ -14,7 +13,6 @@ impl Kind {
     }
 }
 
-/// What the database stores: members are just ids.
 #[derive(Debug, Clone)]
 pub struct ConversationRecord {
     pub id: i64,
@@ -23,7 +21,6 @@ pub struct ConversationRecord {
     pub member_ids: Vec<i64>,
 }
 
-/// What the app sends: members with their profiles (from the users table).
 #[derive(Debug, Clone)]
 pub struct Conversation {
     pub id: i64,
@@ -32,7 +29,6 @@ pub struct Conversation {
     pub members: Vec<User>,
 }
 
-/// The one DM between two users, whichever order they come in.
 pub fn dm_key(a: i64, b: i64) -> String {
     format!("{}:{}", a.min(b), a.max(b))
 }

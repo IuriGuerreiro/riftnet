@@ -1,9 +1,3 @@
-//! Where live calls are kept.
-//!
-//! In memory for now: correct only with ONE api server. With several, swap in
-//! a Redis implementation of `CallStore` (the service won't change).
-//! Calls are short-lived, so losing them on restart is OK: clients just call again.
-
 use std::collections::HashMap;
 use std::sync::Mutex;
 
@@ -16,12 +10,9 @@ pub type Update = Box<dyn FnOnce(&mut Call) + Send>;
 #[async_trait]
 pub trait CallStore: Send + Sync {
     async fn get(&self, call_id: i64) -> Option<Call>;
-    /// Saves `call`, unless the conversation already has one: then returns that one.
     async fn insert_if_none(&self, call: Call) -> Result<Call, Call>;
-    /// Changes a call in place (atomically). Returns the new version.
     async fn update(&self, call_id: i64, change: Update) -> Option<Call>;
     async fn remove(&self, call_id: i64) -> Option<Call>;
-    /// Calls this device is connected to.
     async fn with_device(&self, device_id: i64) -> Vec<Call>;
 }
 

@@ -1,4 +1,3 @@
-// Compiles ../../proto/**/*.proto with protox (pure Rust, no `protoc` needed).
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let root = "../../proto";
     println!("cargo:rerun-if-changed={root}");

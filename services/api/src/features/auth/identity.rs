@@ -1,6 +1,3 @@
-//! Identity provider: checks passwords and owns accounts. Only this file
-//! knows about Zitadel; swapping providers means a new `IdentityProvider` impl.
-
 use async_trait::async_trait;
 use serde::Deserialize;
 use serde_json::json;
@@ -19,13 +16,10 @@ pub enum IdentityError {
 
 #[async_trait]
 pub trait IdentityProvider: Send + Sync {
-    /// Creates an account. Returns the provider's user id.
     async fn create_user(&self, email: &str, password: &str) -> Result<String, IdentityError>;
-    /// Checks email + password. Returns the provider's user id.
     async fn verify_password(&self, email: &str, password: &str) -> Result<String, IdentityError>;
 }
 
-/// Talks to Zitadel's v2 User and Session APIs with a service account token.
 pub struct ZitadelClient {
     http: reqwest::Client,
     base_url: String,
@@ -93,7 +87,7 @@ impl IdentityProvider for ZitadelClient {
 
         let err = Self::error_of(res).await;
         let result = match err.code {
-            6 => IdentityError::EmailTaken, // ALREADY_EXISTS
+            6 => IdentityError::EmailTaken,
             3 if err.message.contains("Password") => {
                 IdentityError::WeakPassword(strip_id(&err.message))
             }
@@ -122,8 +116,6 @@ impl IdentityProvider for ZitadelClient {
         if !res.status().is_success() {
             let err = Self::error_of(res).await;
             let result = match err.code {
-                // INVALID_ARGUMENT (wrong password), NOT_FOUND (no user),
-                // FAILED_PRECONDITION (locked/inactive): all look the same to the client.
                 3 | 5 | 9 => IdentityError::InvalidCredentials,
                 _ => {
                     anyhow::anyhow!("zitadel create session: {} ({})", err.message, err.code).into()
@@ -141,7 +133,6 @@ impl IdentityProvider for ZitadelClient {
         }
         let session: Created = res.json().await.map_err(anyhow::Error::from)?;
 
-        // Read the session to learn which user it belongs to.
         let details: serde_json::Value = self
             .http
             .get(self.url(&format!("/v2/sessions/{}", session.session_id)))
@@ -158,7 +149,6 @@ impl IdentityProvider for ZitadelClient {
             .ok_or_else(|| anyhow::anyhow!("zitadel session has no user id"))?
             .to_string();
 
-        // We only needed the password check; don't leave sessions lying around.
         let delete = self
             .http
             .delete(self.url(&format!("/v2/sessions/{}", session.session_id)))
@@ -175,7 +165,6 @@ impl IdentityProvider for ZitadelClient {
     }
 }
 
-/// Error kind for spans. Never the message: Zitadel may echo user input.
 fn identity_outcome(err: &IdentityError) -> &'static str {
     match err {
         IdentityError::InvalidCredentials => "invalid_credentials",
@@ -185,7 +174,6 @@ fn identity_outcome(err: &IdentityError) -> &'static str {
     }
 }
 
-/// "Password is too short (COMMA-HuJf6)" -> "Password is too short"
 fn strip_id(message: &str) -> String {
     message.split(" (").next().unwrap_or(message).to_string()
 }

@@ -1,6 +1,3 @@
-//! Auth: register, login, refresh, logout. Zitadel checks passwords;
-//! we issue our own tokens. See docs/architecture/identity-auth.md.
-
 mod controller;
 pub mod dto;
 pub mod identity;

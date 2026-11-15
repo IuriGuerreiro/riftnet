@@ -8,7 +8,6 @@ pub struct DeviceInfo {
     pub platform: String,
 }
 
-/// Login and register take the same body.
 #[derive(Deserialize)]
 pub struct CredentialsRequest {
     pub email: String,
@@ -16,7 +15,6 @@ pub struct CredentialsRequest {
     pub device: DeviceInfo,
 }
 
-// Never print the password, even by accident in a debug log.
 impl std::fmt::Debug for CredentialsRequest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("CredentialsRequest")
@@ -34,7 +32,6 @@ pub struct RefreshRequest {
 #[derive(Serialize)]
 pub struct SessionResponse {
     pub access_token: String,
-    /// Unix seconds.
     pub access_expires_at: i64,
     pub refresh_token: String,
     pub user: UserDto,

@@ -1,6 +1,3 @@
-//! `AuthUser` extractor: add it to a handler's arguments to require a valid
-//! `Authorization: Bearer <access token>`. Checked without a DB lookup.
-
 use axum::extract::FromRequestParts;
 use axum::http::header::AUTHORIZATION;
 use axum::http::request::Parts;

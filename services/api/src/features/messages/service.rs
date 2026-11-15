@@ -33,8 +33,6 @@ impl MessageService {
         }
     }
 
-    /// Sends a message. Calling again with the same `nonce` (a retry after a
-    /// network drop) returns the same message instead of a duplicate.
     #[tracing::instrument(name = "messages.send", skip_all, fields(user.id = me, conversation.id = conversation_id))]
     pub async fn send(
         &self,
@@ -60,7 +58,6 @@ impl MessageService {
         }
         let conversation = self.member_conversation(me, conversation_id).await?;
 
-        // 1. Retry? Then the nonce already points at a message id.
         let (id, is_first_send) = self
             .repo
             .claim_nonce(conversation_id, me, nonce, self.ids.next_id() as i64)
@@ -68,10 +65,7 @@ impl MessageService {
         if !is_first_send && let Some(existing) = self.repo.get(conversation_id, id).await? {
             return Ok(existing);
         }
-        // (A retry whose first attempt crashed before saving continues below
-        // with the same id, so it still can't create a duplicate.)
 
-        // 2. Next number in this conversation, then save.
         let seq = self.conversations.next_seq(conversation_id).await?;
         let message = Message {
             id,
@@ -83,9 +77,6 @@ impl MessageService {
         };
         self.repo.insert(&message).await?;
 
-        // 3. Live: push to every member's open sockets (including my other devices).
-        //    The message is already saved, so if this fails, nobody loses it:
-        //    they get it from history / sync. Just log it.
         let push = Envelope {
             id: 0,
             payload: Some(Payload::MessageCreated(MessageCreated {
@@ -102,7 +93,6 @@ impl MessageService {
         Ok(message)
     }
 
-    /// Messages older than `before_id` (None = latest), newest first.
     #[tracing::instrument(name = "messages.history", skip_all, fields(user.id = me, conversation.id = conversation_id))]
     pub async fn history(
         &self,
@@ -119,9 +109,6 @@ impl MessageService {
             .await?)
     }
 
-    /// What I missed since `after_seq` (e.g. after a reconnect), oldest first.
-    /// `complete = false`: more than `MAX_SYNC` missed. You got the newest
-    /// `MAX_SYNC`; drop your local copy and load older ones with history.
     #[tracing::instrument(name = "messages.sync", skip_all, fields(user.id = me, conversation.id = conversation_id))]
     pub async fn sync(
         &self,
@@ -130,23 +117,20 @@ impl MessageService {
         after_seq: i64,
     ) -> Result<(Vec<Message>, bool), ApiError> {
         let conversation = self.member_conversation(me, conversation_id).await?;
-        // Common case: nothing new. The conversation row already says so.
         if conversation.last_seq <= after_seq {
             return Ok((Vec::new(), true));
         }
-        // Ask for one extra: if it comes back, there were more than MAX_SYNC.
         let mut messages = self
             .repo
             .since_seq(conversation_id, after_seq, MAX_SYNC + 1, conversation.id)
             .await?;
         let complete = messages.len() <= MAX_SYNC;
         messages.truncate(MAX_SYNC);
-        messages.reverse(); // newest first → oldest first
+        messages.reverse();
         Ok((messages, complete))
     }
 
-    /// The conversation, if `me` is in it. Same error whether it doesn't exist
-    /// or you're not a member (don't reveal which conversations exist).
+    // WARN: same error for missing and not-a-member, so we never reveal which conversations exist.
     async fn member_conversation(
         &self,
         me: i64,

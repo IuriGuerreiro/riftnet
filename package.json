@@ -9,6 +9,7 @@
     "mock": "pnpm --filter mock start",
     "lint": "eslint .",
     "build": "pnpm -r build",
+    "lint:comments": "node tools/lint/check-rust-comments.mjs",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

@@ -4,7 +4,6 @@ package app.v1;
 
 import "v1/users.proto";
 
-// A DM (2 people) or a group DM (up to 5).
 message Conversation {
   uint64 id = 1;
   ConversationKind kind = 2;
@@ -18,7 +17,6 @@ enum ConversationKind {
   CONVERSATION_KIND_GROUP = 2;
 }
 
-// Open (or create) the 1-on-1 DM with someone, by username.
 message OpenDm {
   string username = 1;
 }

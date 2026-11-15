@@ -1,15 +1,11 @@
-//! Snowflake IDs: 41 bits time (ms since EPOCH) | 10 bits machine | 12 bits sequence.
-//! IDs sort by creation time.
-
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-/// 2026-01-01T00:00:00Z
 pub const EPOCH_MS: u64 = 1_767_225_600_000;
 
 pub struct Snowflake {
     machine_id: u64,
-    state: Mutex<(u64, u64)>, // (last_ms, sequence)
+    state: Mutex<(u64, u64)>,
 }
 
 impl Snowflake {
@@ -25,13 +21,13 @@ impl Snowflake {
         let mut state = self.state.lock().expect("snowflake mutex poisoned");
         let mut now = now_ms();
         if now < state.0 {
-            now = state.0; // clock went backwards: stay monotonic
+            now = state.0;
         }
         if now == state.0 {
             state.1 = (state.1 + 1) & 0xFFF;
             if state.1 == 0 {
                 while now <= state.0 {
-                    now = now_ms(); // sequence exhausted: wait for next ms
+                    now = now_ms();
                 }
             }
         } else {
@@ -42,7 +38,6 @@ impl Snowflake {
     }
 }
 
-/// Milliseconds since the Unix epoch encoded in a Snowflake ID.
 pub fn timestamp_ms(id: u64) -> u64 {
     (id >> 22) + EPOCH_MS
 }

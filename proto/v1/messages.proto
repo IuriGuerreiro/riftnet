@@ -3,10 +3,10 @@ syntax = "proto3";
 package app.v1;
 
 message Message {
-  uint64 id = 1; // Snowflake (also encodes the send time)
+  uint64 id = 1;
   uint64 conversation_id = 2;
   uint64 author_id = 3;
-  uint64 seq = 4; // 1, 2, 3... per conversation, for sync
+  uint64 seq = 4;
   bytes content = 5; // opaque: UTF-8 text now, encrypted later
   Encryption encryption = 6;
 }
@@ -27,18 +27,16 @@ message MessageAck {
   Message message = 2;
 }
 
-// Scrolling up: messages older than `before_id` (0 = newest).
 message GetHistory {
   uint64 conversation_id = 1;
   uint64 before_id = 2;
-  uint32 limit = 3; // max 100
+  uint32 limit = 3;
 }
 
 message History {
   repeated Message messages = 1; // newest first
 }
 
-// Reconnect: "I have up to seq N, send me what I missed".
 message Sync {
   uint64 conversation_id = 1;
   uint64 after_seq = 2;
@@ -49,7 +47,6 @@ message SyncResult {
   bool complete = 2; // false = too many missed: these are the newest; load older with GetHistory
 }
 
-// Push: a new message in a conversation you're in.
 message MessageCreated {
   Message message = 1;
 }

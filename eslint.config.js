@@ -9,6 +9,8 @@ import unicorn from "eslint-plugin-unicorn";
 import globals from "globals";
 import tseslint from "typescript-eslint";
 
+import comments from "./tools/lint/eslint-comments.js";
+
 export default tseslint.config(
   {
     ignores: [
@@ -21,7 +23,6 @@ export default tseslint.config(
     ],
   },
 
-  // Base: type-aware TypeScript for every TS file in the repo.
   {
     files: ["**/*.{ts,tsx}"],
     extends: [
@@ -42,13 +43,11 @@ export default tseslint.config(
     },
     plugins: { "simple-import-sort": simpleImportSort, unicorn },
     rules: {
-      // General
       eqeqeq: ["error", "always"],
       curly: ["error", "multi-line"],
       "prefer-const": "error",
       "no-console": ["warn", { allow: ["warn", "error"] }],
 
-      // TypeScript
       "@typescript-eslint/consistent-type-imports": "error",
       "@typescript-eslint/no-empty-function": ["error", { allow: ["arrowFunctions"] }],
       "@typescript-eslint/switch-exhaustiveness-check": [
@@ -58,11 +57,9 @@ export default tseslint.config(
       "@typescript-eslint/no-confusing-void-expression": ["error", { ignoreArrowShorthand: true }],
       "@typescript-eslint/restrict-template-expressions": ["error", { allowNumber: true }],
 
-      // Imports
       "simple-import-sort/imports": "error",
       "simple-import-sort/exports": "error",
 
-      // Unicorn: hand-picked, not the full preset.
       "unicorn/prefer-node-protocol": "error",
       "unicorn/no-for-each": "error",
       "unicorn/prefer-at": "error",
@@ -81,7 +78,6 @@ export default tseslint.config(
     },
   },
 
-  // Client (React, browser).
   {
     files: ["client/**/*.{ts,tsx}"],
     extends: [reactX.configs["recommended-type-checked"], reactDom.configs.recommended],
@@ -97,8 +93,6 @@ export default tseslint.config(
     },
   },
 
-  // Generated protobuf code is the wire format. UI code may use its types,
-  // but only api/ and stores/ may build or parse messages.
   {
     files: ["client/src/**/*.{ts,tsx}"],
     ignores: ["client/src/api/**", "client/src/stores/**"],
@@ -118,18 +112,22 @@ export default tseslint.config(
     },
   },
 
-  // Mock server (Node).
   {
     files: ["tools/mock/**/*.ts"],
     languageOptions: { globals: globals.node },
     rules: { "no-console": "off" },
   },
 
-  // Plain JS config files: no type info.
   {
     files: ["**/*.{js,mjs,cjs}"],
     extends: [js.configs.recommended, tseslint.configs.disableTypeChecked],
     languageOptions: { globals: globals.node },
+  },
+
+  {
+    files: ["**/*.{ts,tsx,js,mjs,cjs}"],
+    plugins: { comments },
+    rules: { "comments/only-tagged": "error" },
   },
 
   prettier,

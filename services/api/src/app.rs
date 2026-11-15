@@ -1,6 +1,3 @@
-//! Wiring: build every repository, client and service once, then mount
-//! each feature's routes.
-
 use std::sync::Arc;
 
 use axum::Router;
@@ -56,7 +53,6 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
         !config.is_production(),
     )?);
 
-    // Repositories (swap in cached versions here later)
     let user_repo: Arc<dyn UserRepo> = Arc::new(PgUserRepo::new(pool.clone()));
     let auth_repo = Arc::new(PgAuthRepo::new(pool.clone()));
     let identity = Arc::new(ZitadelClient::new(&config.zitadel_url, &config.zitadel_pat));

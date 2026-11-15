@@ -10,25 +10,21 @@ import { useConnection } from "../stores/connection";
 
 const dot = { online: "bg-green-500", connecting: "bg-yellow-500", offline: "bg-red-500" };
 
-// Test chat screen: DM list on the left, the open chat on the right.
-// Plain on purpose; José's designs replace it.
 export function HomePage() {
   const logout = useLogout();
   const navigate = useNavigate();
   const { status, error: connError, ws, user: me, connect, disconnect } = useConnection();
   const chat = useChat();
 
-  // Keep the socket open while this page is shown.
   useEffect(() => {
     void connect();
     return disconnect;
   }, [connect, disconnect]);
 
-  // Every (re)connect: listen for pushes, reload the list, sync what we missed.
   useEffect(() => {
     if (!ws) return;
     void useChat.getState().attach(ws);
-    useCalls.getState().attach(ws, me?.id); // after chat: it chains onto chat's push handler
+    useCalls.getState().attach(ws, me?.id);
   }, [ws, me?.id]);
 
   const selected = chat.conversations.find((c) => c.id === chat.selected);
@@ -44,7 +40,7 @@ export function HomePage() {
           "someone"
         }
       />
-      {/* --- sidebar --- */}
+      {}
       <aside className="flex w-64 shrink-0 flex-col border-r border-zinc-800">
         <header className="space-y-1 border-b border-zinc-800 p-4">
           <p className="font-bold">
@@ -85,7 +81,7 @@ export function HomePage() {
         </button>
       </aside>
 
-      {/* --- chat --- */}
+      {}
       <section className="flex min-w-0 flex-1 flex-col">
         {selected ? (
           <>

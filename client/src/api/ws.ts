@@ -6,7 +6,6 @@ import { platform } from "../platform";
 
 type Payload = Envelope["payload"];
 
-// Thrown when the server answers a request with an `Error` frame.
 export class WsError extends Error {
   constructor(
     public code: string,
@@ -16,10 +15,6 @@ export class WsError extends Error {
   }
 }
 
-// One WebSocket to the api. Request/response by `id`; id 0 = server push.
-//
-//   const ws = await WsClient.connect(token);   // opens + authenticates
-//   const reply = await ws.request({ case: "ping", value: create(PingSchema) });
 export class WsClient {
   private nextId = 1n;
   private pending = new Map<
@@ -39,7 +34,6 @@ export class WsClient {
     };
   }
 
-  // Open the socket, then send `authenticate` as the first frame.
   static async connect(
     accessToken: string,
     url = platform.wsUrl,
@@ -79,7 +73,7 @@ export class WsClient {
     if (!waiting) {
       this.onPush(env.payload);
       return;
-    } // id 0 (or unknown) = push
+    }
     this.pending.delete(env.id);
     if (env.payload.case === "error")
       waiting.reject(new WsError(env.payload.value.code, env.payload.value.message));
