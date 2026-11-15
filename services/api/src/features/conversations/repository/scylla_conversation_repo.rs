@@ -24,10 +24,13 @@ pub struct ScyllaConversationRepo {
     pub(super) get_conversation: PreparedStatement,
     pub(super) list_by_user: PreparedStatement,
     pub(super) bump_seq: PreparedStatement,
+    pub(super) delete_by_user: PreparedStatement,
+    pub(super) set_members: PreparedStatement,
+    pub(super) rename: PreparedStatement,
 }
 
 /// Columns of `GET_CONVERSATION`, in order.
-type Row = (i64, i8, Option<i64>, Option<Vec<i64>>);
+type Row = (i64, i8, Option<i64>, Option<Vec<i64>>, Option<String>);
 
 impl ScyllaConversationRepo {
     pub async fn new(session: Arc<Session>) -> anyhow::Result<Self> {
@@ -43,6 +46,9 @@ impl ScyllaConversationRepo {
             get_conversation: prepare(q::GET_CONVERSATION).await?,
             list_by_user: prepare(q::LIST_BY_USER).await?,
             bump_seq: prepare(q::BUMP_SEQ).await?,
+            delete_by_user: prepare(q::DELETE_BY_USER).await?,
+            set_members: prepare(q::SET_MEMBERS).await?,
+            rename: prepare(q::RENAME).await?,
             session,
         })
     }
@@ -70,6 +76,7 @@ impl ScyllaConversationRepo {
         &self,
         id: i64,
         kind: Kind,
+        name: &str,
         members: &[i64],
     ) -> Result<(), RepoError> {
         let mut batch = Batch::new(BatchType::Logged);
@@ -77,6 +84,7 @@ impl ScyllaConversationRepo {
         let mut values: Vec<Vec<CqlValue>> = vec![vec![
             CqlValue::BigInt(id),
             CqlValue::TinyInt(kind as i8),
+            CqlValue::Text(name.to_string()),
             CqlValue::List(members.iter().map(|m| CqlValue::BigInt(*m)).collect()),
             CqlValue::Timestamp(CqlTimestamp(chrono::Utc::now().timestamp_millis())),
         ]];
@@ -92,11 +100,12 @@ impl ScyllaConversationRepo {
     }
 }
 
-fn to_record((id, kind, last_seq, members): Row) -> ConversationRecord {
+fn to_record((id, kind, last_seq, members, name): Row) -> ConversationRecord {
     ConversationRecord {
         id,
         kind: Kind::from_db(kind),
         last_seq: last_seq.unwrap_or(0),
+        name: name.unwrap_or_default(),
         member_ids: members.unwrap_or_default(),
     }
 }

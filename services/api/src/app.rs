@@ -82,6 +82,7 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
         conversations: Arc::new(ConversationService::new(
             conversation_repo.clone(),
             user_repo.clone(),
+            events.clone(),
             ids.clone(),
         )),
         calls: Arc::new(CallService::new(
@@ -89,7 +90,7 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
             conversation_repo.clone(),
             Arc::new(NatsMediaClient::connect(&config.nats_url).await?),
             events.clone(),
-            ids.clone(),
+            ids,
         )),
         users: Arc::new(UserService::new(user_repo)),
         tokens,
