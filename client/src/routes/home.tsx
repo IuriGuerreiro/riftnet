@@ -5,6 +5,7 @@ import { ConversationKind, type Conversation } from "../gen/v1/conversations_pb"
 import type { Friend } from "../api/types";
 import { CallBar, IncomingCall } from "../call/CallBar";
 import { useCalls } from "../stores/calls";
+import { UserSearchInput } from "../components/user-search";
 import { useChat } from "../stores/chat";
 import { useFriends } from "../stores/friends";
 import { useConnection } from "../stores/connection";
@@ -156,7 +157,6 @@ function GroupHeader({
   onRename: (name: string) => void;
   onLeave: () => void;
 }) {
-  const [username, setUsername] = useState("");
   return (
     <header className="space-y-2 border-b border-zinc-800 p-4">
       <div className="flex items-center gap-3">
@@ -177,18 +177,7 @@ function GroupHeader({
       </div>
       <p className="text-xs text-zinc-400">{group.members.map((m) => `@${m.username}`).join(", ")}</p>
       {group.members.length < 5 && (
-        <form
-          className="flex gap-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (!username.trim()) return;
-            onAdd(username.trim());
-            setUsername("");
-          }}
-        >
-          <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="add username" className={field} />
-          <button className="rounded-md bg-zinc-700 px-2 text-sm hover:bg-zinc-600">Add</button>
-        </form>
+        <UserSearchInput placeholder="add username" buttonLabel="Add" onSubmit={onAdd} />
       )}
     </header>
   );
@@ -198,7 +187,6 @@ function GroupHeader({
 function FriendsPanel({ onDm }: { onDm: (username: string) => void }) {
   const { list, error, sendRequest, accept, deleteRequest, removeFriend } = useFriends();
   const [open, setOpen] = useState(true);
-  const [username, setUsername] = useState("");
   const name = (f: Friend) => `@${f.user.username ?? f.user.id}`;
   const pendingCount = list.incoming.length;
 
@@ -217,17 +205,7 @@ function FriendsPanel({ onDm }: { onDm: (username: string) => void }) {
 
       {open && (
         <div className="max-h-72 space-y-2 overflow-y-auto px-3 pb-3">
-          <form
-            className="flex gap-2"
-            onSubmit={async (e) => {
-              e.preventDefault();
-              if (!username.trim()) return;
-              if (await sendRequest(username.trim())) setUsername("");
-            }}
-          >
-            <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="add friend" className={field} />
-            <button className="rounded-md bg-zinc-700 px-2 text-sm hover:bg-zinc-600">Add</button>
-          </form>
+          <UserSearchInput placeholder="add friend" buttonLabel="Add" onSubmit={sendRequest} />
           {error && <p className="text-xs text-red-400">{error}</p>}
 
           {list.incoming.map((f) => (
@@ -284,27 +262,10 @@ function RowButton({ onClick, className, children }: { onClick: () => void; clas
 const field = "min-w-0 flex-1 rounded-md bg-zinc-800 px-2 py-1 text-sm outline-none ring-brand focus:ring-2";
 
 function NewDm({ disabled, onOpen }: { disabled: boolean; onOpen: (username: string) => void }) {
-  const [username, setUsername] = useState("");
   return (
-    <form
-      className="flex gap-2 border-b border-zinc-800 p-3"
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (!username.trim()) return;
-        onOpen(username.trim());
-        setUsername("");
-      }}
-    >
-      <input
-        value={username}
-        onChange={(e) => setUsername(e.target.value)}
-        placeholder="username"
-        className="min-w-0 flex-1 rounded-md bg-zinc-800 px-2 py-1 text-sm outline-none ring-brand focus:ring-2"
-      />
-      <button disabled={disabled} className="rounded-md bg-brand px-2 text-sm font-semibold text-zinc-950 disabled:opacity-50">
-        DM
-      </button>
-    </form>
+    <div className="border-b border-zinc-800 p-3">
+      <UserSearchInput placeholder="username" buttonLabel="DM" disabled={disabled} onSubmit={onOpen} />
+    </div>
   );
 }
 
