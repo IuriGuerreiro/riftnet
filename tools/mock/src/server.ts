@@ -6,6 +6,7 @@ import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { EnvelopeSchema, PongSchema, ErrorSchema, AuthOkSchema, type Envelope } from "../../../client/src/gen/v1/envelope_pb.ts";
 import { UserSchema } from "../../../client/src/gen/v1/users_pb.ts";
 import { HistorySchema, MessageSchema, MessageAckSchema } from "../../../client/src/gen/v1/messages_pb.ts";
+import { PresenceStatus, PresenceUpdatedSchema, PresencesSchema } from "../../../client/src/gen/v1/presence_pb.ts";
 
 const PORT = Number(process.env.MOCK_PORT ?? 7101);
 const text = new TextEncoder();
@@ -18,11 +19,24 @@ const history = [
   create(MessageSchema, { id: 3n, conversationId: 1n, authorId: 2n, seq: 3n, content: text.encode("source quality bro") }),
 ];
 
+// Fake presence: user 2 flips between online and idle every 20s (pushed to
+// every socket), user 3 is always idle, everyone else is offline.
+const presence = new Map<bigint, PresenceStatus>([
+  [2n, PresenceStatus.ONLINE],
+  [3n, PresenceStatus.IDLE],
+]);
+const presenceOf = (userId: bigint) => create(PresenceUpdatedSchema, { userId, status: presence.get(userId) ?? PresenceStatus.OFFLINE });
+
 function handle(req: Envelope): Envelope["payload"] {
   switch (req.payload.case) {
     case "authenticate": // mock accepts any token
       return { case: "authOk", value: create(AuthOkSchema, { user: create(UserSchema, { id: 1n, username: "mock_user" }) }) };
     case "ping":
+      return { case: "pong", value: create(PongSchema) };
+    case "getPresence":
+      return { case: "presences", value: create(PresencesSchema, { presences: req.payload.value.userIds.map(presenceOf) }) };
+    case "setIdle":
+      console.log(`client is ${req.payload.value.idle ? "idle" : "active"}`);
       return { case: "pong", value: create(PongSchema) };
     case "getHistory":
       return { case: "history", value: create(HistorySchema, { messages: history }) };
@@ -47,3 +61,9 @@ wss.on("connection", (ws) => {
   });
 });
 console.log(`mock api on ws://127.0.0.1:${PORT}/ws`);
+
+setInterval(() => {
+  presence.set(2n, presence.get(2n) === PresenceStatus.ONLINE ? PresenceStatus.IDLE : PresenceStatus.ONLINE);
+  const push = toBinary(EnvelopeSchema, create(EnvelopeSchema, { id: 0n, payload: { case: "presenceUpdated", value: presenceOf(2n) } }));
+  for (const client of wss.clients) client.send(push);
+}, 20_000);

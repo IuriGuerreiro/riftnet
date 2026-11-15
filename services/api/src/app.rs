@@ -27,6 +27,8 @@ use crate::features::friends::repository::PgFriendRepo;
 use crate::features::friends::service::FriendService;
 use crate::features::messages::repository::ScyllaMessageRepo;
 use crate::features::messages::service::MessageService;
+use crate::features::presence::service::PresenceService;
+use crate::features::presence::store::RedisPresenceStore;
 use crate::features::users::repository::{PgUserRepo, UserRepo};
 use crate::features::users::service::UserService;
 use crate::features::{auth, friends, gateway, health, users};
@@ -39,6 +41,7 @@ pub struct AppState {
     pub friends: Arc<FriendService>,
     pub messages: Arc<MessageService>,
     pub calls: Arc<CallService>,
+    pub presence: Arc<PresenceService>,
     pub tokens: Arc<TokenService>,
     pub limiter: Arc<RateLimiter>,
     pub events: Arc<dyn EventBus>,
@@ -68,6 +71,10 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
         Arc::new(ScyllaConversationRepo::new(scylla.clone()).await?);
     let message_repo = Arc::new(ScyllaMessageRepo::new(scylla).await?);
     let friend_repo = Arc::new(PgFriendRepo::new(pool.clone()));
+    let presence_store = Arc::new(
+        RedisPresenceStore::connect(&config.redis_url, crate::features::gateway::PRESENCE_TTL)
+            .await?,
+    );
 
     let state = AppState {
         auth: Arc::new(AuthService::new(
@@ -95,6 +102,12 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
             Arc::new(NatsMediaClient::connect(&config.nats_url).await?),
             events.clone(),
             ids,
+        )),
+        presence: Arc::new(PresenceService::new(
+            presence_store,
+            friend_repo.clone(),
+            conversation_repo.clone(),
+            events.clone(),
         )),
         friends: Arc::new(FriendService::new(
             friend_repo,

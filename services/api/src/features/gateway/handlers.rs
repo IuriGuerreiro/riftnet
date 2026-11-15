@@ -7,6 +7,7 @@ use super::connection::Session;
 use crate::app::AppState;
 use crate::common::error::ApiError;
 use crate::features::conversations::models::Conversation;
+use crate::features::presence::service::update as presence_update;
 
 /// Routes one request to its handler. This `match` is the WebSocket's router.
 pub async fn dispatch(
@@ -25,6 +26,14 @@ pub async fn dispatch(
         Payload::AddMember(req) => add_member(state, session, req).await,
         Payload::LeaveGroup(req) => leave_group(state, session, req).await,
         Payload::RenameGroup(req) => rename_group(state, session, req).await,
+        Payload::SetIdle(req) => {
+            state
+                .presence
+                .set_idle(session.user_id, session.connection_id, req.idle)
+                .await;
+            Ok(Payload::Pong(v1::Pong {}))
+        }
+        Payload::GetPresence(req) => get_presence(state, session, req).await,
         Payload::CallStart(req) => call_start(state, session, req).await,
         Payload::CallAccept(req) => call_result(
             state
@@ -54,6 +63,21 @@ pub async fn dispatch(
             "request type not implemented yet",
         )),
     }
+}
+
+async fn get_presence(
+    state: &AppState,
+    session: &Session,
+    req: v1::GetPresence,
+) -> Result<Payload, ApiError> {
+    let ids: Vec<i64> = req.user_ids.iter().map(|id| *id as i64).collect();
+    let found = state.presence.get(session.user_id, &ids).await?;
+    Ok(Payload::Presences(v1::Presences {
+        presences: found
+            .into_iter()
+            .map(|(id, status)| presence_update(id, status))
+            .collect(),
+    }))
 }
 
 async fn open_dm(

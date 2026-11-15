@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package app.v1;
+
+// Who is online. See docs/architecture/presence.md.
+//
+// Online = at least one open socket. Idle = every open socket says idle.
+// Offline = no socket. Only friends and people you share a DM/group with
+// can see your status.
+
+enum PresenceStatus {
+  PRESENCE_STATUS_OFFLINE = 0;
+  PRESENCE_STATUS_ONLINE = 1;
+  PRESENCE_STATUS_IDLE = 2;
+}
+
+// Push (id 0): someone you can see changed status.
+// Also the item type of `Presences`.
+message PresenceUpdated {
+  uint64 user_id = 1;
+  PresenceStatus status = 2;
+}
+
+// This socket went idle (no input for a while, window hidden) or came back.
+// Reply: `Pong`.
+message SetIdle {
+  bool idle = 1;
+}
+
+// Current status of these users. Users you can't see (not a friend, no
+// shared DM) are left out. Max 200 ids.
+message GetPresence {
+  repeated uint64 user_ids = 1;
+}
+
+message Presences {
+  repeated PresenceUpdated presences = 1;
+}

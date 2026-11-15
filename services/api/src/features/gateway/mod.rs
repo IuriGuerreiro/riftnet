@@ -8,6 +8,8 @@ mod connection;
 mod controller;
 mod handlers;
 
+pub use connection::PRESENCE_TTL;
+
 use axum::Router;
 use axum::routing::get;
 

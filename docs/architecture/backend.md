@@ -18,6 +18,7 @@ services/api/src/
     ├── auth/            register, login, refresh, logout
     ├── users/           /me, /me/username, /users/search
     ├── friends/         /friends: requests, accept, remove (see friends.md)
+    ├── presence/        online / idle / offline, Redis (see presence.md)
     ├── health/          /health, /metrics
     └── gateway/         WebSocket (parked)
 ```

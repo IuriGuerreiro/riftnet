@@ -7,8 +7,12 @@
 //!
 //! Anything wrong in step 1–2 → an `Error` frame, then close with code 4001.
 //! Requests are handled in `handlers.rs`.
+//!
+//! Heartbeat: every 30s the server sends a WebSocket ping (browsers answer
+//! with a pong on their own) and refreshes this socket's presence. No frame
+//! from the client for 75s → the socket is dead, close it.
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use axum::extract::ws::{CloseFrame, Message as WsMessage, WebSocket};
 use protocol::Message;
@@ -23,6 +27,12 @@ use crate::app::AppState;
 const AUTH_TIMEOUT: Duration = Duration::from_secs(10);
 /// WebSocket close code for "not authenticated" (4000–4999 are free for apps).
 const CLOSE_UNAUTHORIZED: u16 = 4001;
+const HEARTBEAT: Duration = Duration::from_secs(30);
+/// Nothing heard for this long (2 missed pongs) → drop the socket.
+const DEAD_AFTER: Duration = Duration::from_secs(75);
+/// A socket's presence entry lives this long without a heartbeat. Covers
+/// two missed heartbeats, then a crashed server's users go offline.
+pub const PRESENCE_TTL: Duration = Duration::from_secs(90);
 
 /// Who is on the other end. Lives as long as the socket.
 #[derive(Debug, Clone, Copy)]
@@ -66,11 +76,21 @@ pub async fn run(mut socket: WebSocket, state: AppState) {
         }
     };
 
-    // Wait for whichever comes first: a frame from the client, or a push.
+    // Subscribed first, so the "came online" pushes of others aren't missed.
+    state
+        .presence
+        .connected(session.user_id, session.connection_id)
+        .await;
+    let mut heartbeat = tokio::time::interval(HEARTBEAT);
+    heartbeat.tick().await; // the first tick is immediate
+    let mut last_heard = Instant::now();
+
+    // Wait for whichever comes first: a frame from the client, a push, or a heartbeat.
     loop {
         tokio::select! {
             frame = socket.recv() => {
                 let Some(Ok(frame)) = frame else { break }; // closed or broken
+                last_heard = Instant::now();
                 let WsMessage::Binary(bytes) = frame else {
                     continue; // ping/pong/text frames: ignore
                 };
@@ -89,11 +109,25 @@ pub async fn run(mut socket: WebSocket, state: AppState) {
                     break;
                 }
             }
+            _ = heartbeat.tick() => {
+                if last_heard.elapsed() > DEAD_AFTER {
+                    tracing::info!(user.id = session.user_id, "ws heartbeat timeout");
+                    break;
+                }
+                if socket.send(WsMessage::Ping(Default::default())).await.is_err() {
+                    break;
+                }
+                state.presence.heartbeat(session.user_id, session.connection_id).await;
+            }
         }
     }
 
     // Socket gone: whatever call it was in, it's out.
     state.calls.connection_closed(session.connection_id).await;
+    state
+        .presence
+        .disconnected(session.user_id, session.connection_id)
+        .await;
     metrics::gauge!("ws_connections").decrement(1.0);
     tracing::info!(user.id = session.user_id, "ws disconnected");
 }

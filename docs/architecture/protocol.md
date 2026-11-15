@@ -92,6 +92,9 @@ sequenceDiagram
 | `call_start` / `call_accept` / `call_decline` / `call_join` / `call_leave` | `call_result` / `call_joined` | voice, see [calls.md](calls.md) |
 | — (push, id 0) | `call_incoming` / `call_updated` / `call_ended` | voice calls |
 | — (push, id 0)                                    | `friend_updated {user, state}` | see [friends.md](friends.md) |
+| `set_idle {idle}`                                 | `pong`                         | see [presence.md](presence.md) |
+| `get_presence {user_ids}`                         | `presences`                    | friends + DM members only, max 200 |
+| — (push, id 0)                                    | `presence_updated {user_id, status}` | see [presence.md](presence.md) |
 
 Example session (written as JSON; on the wire it's binary protobuf):
 
