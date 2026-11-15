@@ -30,6 +30,7 @@ message Envelope {
     AddMember add_member = 18;
     LeaveGroup leave_group = 19;
     RenameGroup rename_group = 20;
+    StartTyping start_typing = 21;  // fire-and-forget: send with id 0, no reply
 
     // server -> client (replies)
     Pong pong = 50;
@@ -46,6 +47,7 @@ message Envelope {
     UserUpdated user_updated = 55;
     ConversationUpdated conversation_updated = 60;
     FriendUpdated friend_updated = 61;
+    TypingStarted typing_started = 62;
 
     // calls (100-139 reserved, see docs/architecture/calls.md)
     // client -> server
