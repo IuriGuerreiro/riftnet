@@ -144,6 +144,14 @@ The SFU doesn't care which client it talks to. A `Platform`/`MediaTransport` tra
 
 ## 8. Later: 1080p60 screen share
 
+**Web version: done (1:1).**
+
+- Each device offers a second sendrecv slot for video at join. Sharing fills it with `replaceTrack`, so no renegotiation. Group calls will need real renegotiation.
+- SFU forwards packets to the slot of the same kind (audio → audio, video → video). It passes keyframe requests (PLI/FIR) from viewers to the sharer.
+- `call_screen_share` (envelope 104) tells the api who shares. `Call.sharing_user_ids` tells viewers when to show or hide the video. We can't infer this from the video itself: a static screen sends no frames.
+- Tested with headless Chrome (fake animated 1080p canvas): 1920x1080 at 50–60 fps, 0 lost, panel closes ~150 ms after stop.
+
+
 - Bitrate: ~6–8 Mbps H.264, ~4–5 Mbps AV1. Uplink must hold it, so add **simulcast** (e.g. 1080p60 + 720p30) and let the SFU pick per viewer.
 - SFU needs: forward video, pick simulcast layer per viewer, react to **PLI/FIR** (viewer asks "send me a full frame"), pass **TWCC** feedback (bandwidth estimate). str0m supports these; we write the layer-picking logic.
 - Desktop: native capture (DXGI / ScreenCaptureKit / PipeWire) → HW encoder → libwebrtc as a custom video source. This is the gate prototype.

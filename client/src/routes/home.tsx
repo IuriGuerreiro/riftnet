@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useLogout } from "../api/auth";
 import type { Conversation } from "../gen/v1/conversations_pb";
-import { CallBar, IncomingCall } from "../call/CallBar";
+import { CallBar, IncomingCall, RemoteScreen } from "../call/CallBar";
 import { useCalls } from "../stores/calls";
 import { useChat } from "../stores/chat";
 import { useConnection } from "../stores/connection";
@@ -35,6 +35,7 @@ export function HomePage() {
 
   return (
     <div className="flex h-full w-full max-w-5xl overflow-hidden rounded-xl bg-zinc-900 shadow-lg">
+      <RemoteScreen />
       <IncomingCall
         ws={ws}
         callerName={(id) =>
