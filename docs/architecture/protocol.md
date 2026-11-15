@@ -74,6 +74,7 @@ sequenceDiagram
 | `get_history {conversation_id, before_id, limit}` | `history` (newest first)       | limit default 50, max 100    |
 | `sync {conversation_id, after_seq}`               | `sync_result`                  | done                         |
 | — (push, id 0)                                    | `message_created`              | live, via NATS (see dms.md)  |
+| — (push, id 0)                                    | `friend_updated {user, state}` | see [friends.md](friends.md) |
 
 Example session (written as JSON; on the wire it's binary protobuf):
 
