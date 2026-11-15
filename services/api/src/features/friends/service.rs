@@ -259,7 +259,6 @@ mod tests {
     use async_trait::async_trait;
     use bytes::Bytes;
     use futures::stream::BoxStream;
-    use protocol::Message as _;
 
     use super::*;
     use crate::features::friends::models::ordered_pair;
