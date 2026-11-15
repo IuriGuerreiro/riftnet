@@ -5,6 +5,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let files = [
         "v1/envelope.proto",
         "v1/conversations.proto",
+        "v1/friends.proto",
         "v1/messages.proto",
         "v1/users.proto",
     ];

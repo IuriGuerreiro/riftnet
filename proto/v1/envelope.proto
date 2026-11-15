@@ -3,6 +3,7 @@ syntax = "proto3";
 package app.v1;
 
 import "v1/conversations.proto";
+import "v1/friends.proto";
 import "v1/messages.proto";
 import "v1/users.proto";
 
@@ -43,6 +44,7 @@ message Envelope {
     MessageCreated message_created = 54;
     UserUpdated user_updated = 55;
     ConversationUpdated conversation_updated = 60;
+    FriendUpdated friend_updated = 61;
   }
 }
 
