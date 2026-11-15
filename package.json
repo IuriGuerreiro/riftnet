@@ -8,7 +8,10 @@
     "desktop": "pnpm --filter client tauri dev",
     "mock": "pnpm --filter mock start",
     "lint": "pnpm -r lint",
-    "build": "pnpm -r build"
+    "build": "pnpm -r build",
+    "mobile": "pnpm --filter mobile start",
+    "mobile:android": "pnpm --filter mobile android",
+    "mobile:ios": "pnpm --filter mobile ios"
   },
   "packageManager": "pnpm@11.18.0"
 }

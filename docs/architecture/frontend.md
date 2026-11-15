@@ -1,6 +1,7 @@
 # Frontend
 
-One React codebase for desktop (Tauri), web and, later, mobile.
+One React codebase for desktop (Tauri) and web. Mobile is a separate React Native app
+that shares types and schemas with it: see [mobile.md](mobile.md).
 
 ## Stack
 

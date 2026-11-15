@@ -1,6 +1,7 @@
 packages:
   - client
   - tools/mock
+  - mobile
 
 allowBuilds:
   esbuild: true
