@@ -10,6 +10,7 @@ message Conversation {
   ConversationKind kind = 2;
   repeated User members = 3;
   uint64 last_seq = 4;      // seq of the newest message (0 = empty)
+  string name = 5;          // group name ("" for DMs)
 }
 
 enum ConversationKind {
@@ -31,4 +32,29 @@ message ListConversations {}
 
 message Conversations {
   repeated Conversation conversations = 1;
+}
+
+// --- group DMs (3-5 people) ---
+
+message CreateGroup {
+  string name = 1;
+  repeated string usernames = 2;
+}
+
+message AddMember {
+  uint64 conversation_id = 1;
+  string username = 2;
+}
+
+message LeaveGroup {
+  uint64 conversation_id = 1;
+}
+
+message RenameGroup {
+  uint64 conversation_id = 1;
+  string name = 2;
+}
+
+message ConversationUpdated {
+  Conversation conversation = 1;
 }

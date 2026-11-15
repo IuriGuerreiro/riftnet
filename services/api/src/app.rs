@@ -78,6 +78,7 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
         conversations: Arc::new(ConversationService::new(
             conversation_repo.clone(),
             user_repo.clone(),
+            events.clone(),
             ids,
         )),
         users: Arc::new(UserService::new(user_repo)),
