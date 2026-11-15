@@ -1,15 +1,3 @@
-//! Media server (SFU). Forwards each person's audio to the others in the same
-//! call, without decoding it. See docs/architecture/calls.md.
-//!
-//! - Control: NATS (`control.rs`). The api asks us to add/remove devices.
-//! - Media: one UDP socket for everyone, driven by one thread (`sfu.rs`).
-//!
-//! Env:
-//! - `NATS_URL` (default `nats://127.0.0.1:4222`)
-//! - `MEDIA_IP`: the IP clients send UDP to (default: this machine's LAN IP).
-//!   Behind Tailscale, use the Tailscale IP.
-//! - `MEDIA_PORT`: UDP port (default 7110).
-
 mod control;
 mod sfu;
 
@@ -40,7 +28,6 @@ fn env_or(key: &str, default: &str) -> String {
     std::env::var(key).unwrap_or_else(|_| default.to_string())
 }
 
-/// The IP the OS would use to reach the internet. Sends nothing.
 fn lan_ip() -> anyhow::Result<IpAddr> {
     let s = UdpSocket::bind("0.0.0.0:0")?;
     s.connect("8.8.8.8:80")?;

@@ -6,13 +6,10 @@ import { RootLayout } from "./routes/root";
 import { UsernamePage } from "./routes/username";
 import { useAuth } from "./stores/auth";
 
-// Sends you to the right page for your auth state:
-// logged out → /login, no username → /username, otherwise → /
 function guard(page: "login" | "username" | "home") {
   const { refreshToken, user } = useAuth.getState();
   const want = !refreshToken ? "/login" : !user?.username ? "/username" : "/";
   const here = page === "login" ? "/login" : page === "username" ? "/username" : "/";
-  // TanStack Router's redirect() is meant to be thrown.
   // eslint-disable-next-line @typescript-eslint/only-throw-error
   if (want !== here) throw redirect({ to: want });
 }
@@ -48,7 +45,6 @@ declare module "@tanstack/react-router" {
   }
 }
 
-// If tokens get wiped (refresh failed, logout), go back to login.
 useAuth.subscribe((s, prev) => {
   if (prev.refreshToken && !s.refreshToken) void router.navigate({ to: "/login" });
 });

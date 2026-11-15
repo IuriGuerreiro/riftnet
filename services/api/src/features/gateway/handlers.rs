@@ -1,13 +1,9 @@
-//! The WebSocket "controller": one function per request type.
-//! Unpack the payload → call a service → wrap the result in a reply payload.
-
 use protocol::v1::{self, envelope::Payload};
 
 use super::connection::Session;
 use crate::app::AppState;
 use crate::common::error::ApiError;
 
-/// Routes one request to its handler. This `match` is the WebSocket's router.
 pub async fn dispatch(
     state: &AppState,
     session: &Session,

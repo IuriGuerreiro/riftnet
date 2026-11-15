@@ -1,5 +1,3 @@
-// End-to-end WebSocket auth checks against the real api.
-// Run: node tools/mock/src/smoke-ws.ts   (api on :7100, stack up)
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 
 import {
@@ -26,7 +24,6 @@ const check = (name: string, ok: boolean, extra = "") => {
   if (!ok) failed++;
 };
 
-// Opens a socket, authenticates, and collects pushes (id 0) until stop().
 async function listen(token: string, wsUrl = WS) {
   const ws = new WebSocket(wsUrl);
   ws.binaryType = "arraybuffer";
@@ -44,7 +41,6 @@ async function listen(token: string, wsUrl = WS) {
 }
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-// Opens a socket, sends the frames, collects replies until `want` frames or close.
 function talk(
   payloads: Envelope["payload"][],
   want: number,
@@ -59,7 +55,7 @@ function talk(
     };
     ws.onmessage = (ev) => {
       const env = fromBinary(EnvelopeSchema, new Uint8Array(ev.data as ArrayBuffer));
-      if (env.id === 0n && env.payload.case !== "error") return; // live pushes aren't replies
+      if (env.id === 0n && env.payload.case !== "error") return;
       replies.push(env);
       if (replies.length >= want) {
         ws.close();
@@ -70,7 +66,6 @@ function talk(
   });
 }
 
-// Registers a fresh user with a username. Returns its access token + username.
 async function newUser(prefix: string) {
   const tag = `${prefix}${Date.now().toString(36)}${Math.floor(Math.random() * 1e4)}`;
   const res = await fetch(`${HTTP}/auth/register`, {
@@ -128,7 +123,6 @@ check(
   e2?.case === "error" && e2.value.code === "already_authenticated",
 );
 
-// --- conversations ---
 const openDm = (username: string) => ({
   case: "openDm" as const,
   value: create(OpenDmSchema, { username }),
@@ -160,7 +154,6 @@ check(
   l?.case === "conversations" && l.value.conversations.some((c) => c.id === dmId),
 );
 
-// Both open it at the exact same time: still one DM (dm_key is UNIQUE).
 const carol = await newUser("carol"),
   dave = await newUser("dave");
 const [x, y] = await Promise.all([
@@ -184,7 +177,6 @@ check("unknown user → user_not_found", errCode(r.replies[1]) === "user_not_fou
 check("yourself → cannot_dm_self", errCode(r.replies[2]) === "cannot_dm_self");
 check("invalid username → user_not_found", errCode(r.replies[3]) === "user_not_found");
 
-// --- messages ---
 const enc = new TextEncoder(),
   dec = new TextDecoder();
 const send = (conversationId: bigint, text: string, nonce: string) => ({
@@ -224,7 +216,6 @@ check(
 r = await talk([auth(bob.token), send(dm, "hi alice", "n1")], 2);
 check("bob can reuse nonce n1 (nonces are per sender)", ack(r.replies[1])?.message?.seq === 3n);
 
-// 10 sends at the same time from two sockets: every seq is unique, no gaps.
 const burst = await Promise.all([
   talk(
     [auth(alice.token), ...Array.from({ length: 5 }, (_, i) => send(dm, `a${i}`, `burst-a${i}`))],
@@ -277,13 +268,12 @@ check("empty → empty_message", errCode(r.replies[1]) === "empty_message");
 check("9000 bytes → message_too_long", errCode(r.replies[2]) === "message_too_long");
 check("no nonce → bad_nonce", errCode(r.replies[3]) === "bad_nonce");
 
-// --- live delivery (NATS) ---
 const created = (e: Envelope) =>
   e.payload.case === "messageCreated" ? e.payload.value.message : undefined;
 const WS2 = process.env.API_HTTP_2 ? process.env.API_HTTP_2.replace(/^http/, "ws") + "/ws" : WS;
-const bobLive = await listen(bob.token, WS2); // on the 2nd api server, if given
-const alicePhone = await listen(alice.token); // alice's other device
-const carolLive = await listen(carol.token); // not in the DM
+const bobLive = await listen(bob.token, WS2);
+const alicePhone = await listen(alice.token);
+const carolLive = await listen(carol.token);
 r = await talk([auth(alice.token), send(dm, "live?", "live-1")], 2);
 await sleep(300);
 const sent = ack(r.replies[1])?.message;
@@ -299,7 +289,6 @@ check(
 check("non-member gets nothing", carolLive.pushes.length === 0);
 for (const l of [bobLive, alicePhone, carolLive]) l.stop();
 
-// --- sync (reconnect: "I have up to seq N") ---  the DM now has seq 1..14
 const sync = (conversationId: bigint, afterSeq: bigint) => ({
   case: "sync" as const,
   value: create(SyncSchema, { conversationId, afterSeq }),

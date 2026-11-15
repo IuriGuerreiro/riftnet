@@ -1,6 +1,5 @@
 use chrono::{DateTime, Utc};
 
-// Some fields are only read by later features.
 #[allow(dead_code)]
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct User {

@@ -4,17 +4,14 @@ use sqlx::PgPool;
 use super::models::User;
 use crate::common::error::RepoError;
 
-/// Data access for users. Services depend on this trait, so a cache
-/// (`CachedUserRepo`) or an in-memory fake can wrap or replace `PgUserRepo`.
 #[async_trait]
 pub trait UserRepo: Send + Sync {
     async fn find_by_id(&self, id: i64) -> Result<Option<User>, RepoError>;
     async fn find_by_zitadel_id(&self, zitadel_id: &str) -> Result<Option<User>, RepoError>;
     async fn find_by_ids(&self, ids: &[i64]) -> Result<Vec<User>, RepoError>;
-    /// `username` must already be normalized (lowercase).
+    // INVARIANT: `username` must already be lowercase.
     async fn find_by_username(&self, username: &str) -> Result<Option<User>, RepoError>;
     async fn create(&self, id: i64, zitadel_id: &str) -> Result<User, RepoError>;
-    /// `Err(Conflict)` if the username is taken.
     async fn set_username(&self, id: i64, username: &str) -> Result<Option<User>, RepoError>;
 }
 

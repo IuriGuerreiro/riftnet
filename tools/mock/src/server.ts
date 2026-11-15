@@ -1,6 +1,3 @@
-// Fake API on ws://127.0.0.1:7101/ws. Same Envelope contract as services/api,
-// with canned data so the UI can be built before the real backend exists.
-// Uses the TS types generated in client/src/gen (run `pnpm gen` first).
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { WebSocketServer } from "ws";
 
@@ -49,7 +46,7 @@ const history = [
 
 function handle(req: Envelope): Envelope["payload"] {
   switch (req.payload.case) {
-    case "authenticate": // mock accepts any token
+    case "authenticate":
       return {
         case: "authOk",
         value: create(AuthOkSchema, {

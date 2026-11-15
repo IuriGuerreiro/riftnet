@@ -1,5 +1,3 @@
-//! Talking to the media server (SFU) over NATS. Messages: proto/v1/media.proto.
-
 use std::time::Duration;
 
 use anyhow::{Context, bail};
@@ -13,9 +11,7 @@ const TIMEOUT: Duration = Duration::from_secs(5);
 
 #[async_trait]
 pub trait MediaClient: Send + Sync {
-    /// Adds a device to room `room_id`. Returns (peer id, SDP answer).
     async fn join(&self, room_id: i64, sdp_offer: String) -> anyhow::Result<(u64, String)>;
-    /// Removes a device. Fire and forget.
     async fn leave(&self, peer_id: u64) -> anyhow::Result<()>;
 }
 

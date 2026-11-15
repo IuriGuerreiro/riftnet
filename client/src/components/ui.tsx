@@ -1,4 +1,3 @@
-// Tiny shared UI pieces. José will replace these with the real design system.
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, Ref } from "react";
 
 export function Card({ children }: { children: ReactNode }) {

@@ -3,8 +3,6 @@ import { useEffect, useRef, useState } from "react";
 import type { WsClient } from "../api/ws";
 import { CallState, peerConnection, useCalls } from "../stores/calls";
 
-// TEST UI: call controls in the DM header. Logic is in stores/calls.ts.
-
 const btn = "rounded-md px-2 py-1 text-xs font-semibold disabled:opacity-50";
 
 export function CallBar({ ws, conversationId }: { ws: WsClient | null; conversationId: bigint }) {
@@ -60,7 +58,6 @@ export function CallBar({ ws, conversationId }: { ws: WsClient | null; conversat
   );
 }
 
-// Banner shown anywhere on the page when someone calls.
 export function IncomingCall({
   ws,
   callerName,
@@ -83,8 +80,6 @@ export function IncomingCall({
   );
 }
 
-// The other person's screen share, in a panel at the bottom right.
-// Double-click for fullscreen.
 export function RemoteScreen() {
   const stream = useCalls((s) => s.remoteScreen);
   const ref = useRef<HTMLVideoElement>(null);
@@ -104,14 +99,11 @@ export function RemoteScreen() {
   );
 }
 
-// Once a second: delay to the SFU, audio packets in/lost, and screen share
-// video (resolution, fps, bitrate) going out or coming in.
 function useStats(active: boolean) {
   const [info, setInfo] = useState("");
   useEffect(() => {
     if (!active) return;
     const last = new Map<string, { bytes: number; at: number }>();
-    // Bytes at the previous tick, per stats id, to get a bitrate.
     function mbps(r: {
       id: string;
       timestamp: number;
@@ -130,7 +122,6 @@ function useStats(active: boolean) {
       let got = 0;
       let lost = 0;
       let video = "";
-      // RTCStatsReport entries are untyped; these are the fields we read.
       interface Stat {
         id: string;
         timestamp: number;

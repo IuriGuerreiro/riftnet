@@ -1,5 +1,3 @@
-// Driven by scripts/smoke-calls.sh. Two headless Chromium tabs, fake mics, real app code
-// (imported through vite): A calls B → B accepts → audio flows → A hangs up → B sees it end.
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 const [TA, NA, TB, NB] = readFileSync(process.argv[3], "utf8").trim().split("\n");

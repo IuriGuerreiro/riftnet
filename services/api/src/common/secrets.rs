@@ -1,11 +1,7 @@
-//! Reading and writing secret files (signing key, Zitadel token).
-//! Secrets must only be readable by the owner: dir 0700, files 0600.
-
+// INVARIANT: secrets are owner-only: dir 0700, files 0600.
 use std::io::Write;
 use std::path::Path;
 
-/// Reads a secret file. If its permissions (or its folder's) are too open,
-/// tightens them and warns, since the api owns these files.
 pub fn read(path: &Path) -> anyhow::Result<String> {
     tighten(path)?;
     let raw = std::fs::read_to_string(path)
@@ -13,7 +9,6 @@ pub fn read(path: &Path) -> anyhow::Result<String> {
     Ok(raw.trim().to_string())
 }
 
-/// Creates a new secret file with 0600 permissions. Fails if it already exists.
 pub fn create(path: &Path, contents: &str) -> anyhow::Result<()> {
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;

@@ -1,11 +1,3 @@
-//! Logs, traces and metrics setup shared by every service.
-//!
-//! - Always: logs to stdout. Level via `RUST_LOG` (default `info`),
-//!   `LOG_FORMAT=json` for structured logs.
-//! - When `OTEL_EXPORTER_OTLP_ENDPOINT` is set (e.g. `http://127.0.0.1:4317`):
-//!   logs, spans and metrics are also sent over OTLP/gRPC (SigNoz locally).
-//!   See docs/architecture/observability.md.
-
 use std::collections::HashMap;
 use std::sync::Mutex;
 
@@ -23,8 +15,6 @@ use tracing_subscriber::{EnvFilter, Layer, Registry, filter::filter_fn, fmt};
 
 const OTLP_ENDPOINT: &str = "OTEL_EXPORTER_OTLP_ENDPOINT";
 
-/// Keep this alive for the whole program. Dropping it flushes and shuts down
-/// the exporters, so the last spans/logs/metrics are not lost.
 #[must_use = "dropping Telemetry shuts the exporters down"]
 pub struct Telemetry {
     otel: Option<Providers>,
@@ -36,8 +26,6 @@ struct Providers {
     meter: SdkMeterProvider,
 }
 
-/// Sets up logging (and OTLP export when configured). Call once, first thing
-/// in `main`, from inside the tokio runtime.
 pub fn init(service: &'static str, version: &'static str) -> Telemetry {
     let otel = match std::env::var(OTLP_ENDPOINT) {
         Ok(endpoint) if !endpoint.trim().is_empty() => match Providers::new(service, version) {
@@ -64,7 +52,6 @@ pub fn init(service: &'static str, version: &'static str) -> Telemetry {
                 .with_tracer(p.tracer.tracer(service))
                 .boxed(),
         );
-        // Don't feed the exporter's own logs back into itself (loops).
         layers.push(
             OpenTelemetryTracingBridge::new(&p.logger)
                 .with_filter(filter_fn(|m| !is_exporter_internal(m.target())))
@@ -88,7 +75,6 @@ fn is_exporter_internal(target: &str) -> bool {
 impl Providers {
     fn new(service: &'static str, version: &'static str) -> anyhow::Result<Self> {
         let env = std::env::var("APP_ENV").unwrap_or_else(|_| "development".into());
-        // OTEL_SERVICE_NAME overrides the default (e.g. to tell test runs apart).
         let name = std::env::var("OTEL_SERVICE_NAME")
             .ok()
             .filter(|n| !n.trim().is_empty())
@@ -102,7 +88,6 @@ impl Providers {
             ])
             .build();
 
-        // The exporters read the endpoint (and OTEL_EXPORTER_OTLP_* options) from env.
         let tracer = SdkTracerProvider::builder()
             .with_batch_exporter(
                 opentelemetry_otlp::SpanExporter::builder()
@@ -136,8 +121,6 @@ impl Providers {
 }
 
 impl Telemetry {
-    /// Installs the global `metrics` recorder: `local` (e.g. the Prometheus
-    /// recorder behind `/metrics`) and, when OTLP is on, an OTLP copy too.
     pub fn install_metrics<R>(&self, local: R) -> anyhow::Result<()>
     where
         R: Recorder + Send + Sync + 'static,
@@ -160,10 +143,8 @@ impl Telemetry {
         Ok(())
     }
 
-    /// Flushes and stops the exporters. Also runs on drop.
     pub fn shutdown(&mut self) {
         if let Some(p) = self.otel.take() {
-            // Errors here only mean SigNoz is unreachable; nothing left to do.
             let _ = p.tracer.shutdown();
             let _ = p.logger.shutdown();
             let _ = p.meter.shutdown();
@@ -177,9 +158,6 @@ impl Drop for Telemetry {
     }
 }
 
-/// `metrics` macros register a handle on every call. The OTel bridge keeps
-/// gauge values inside each handle, so it must get the same handle back each
-/// time, or `increment`/`decrement` would start from 0 again.
 struct Cached<R> {
     inner: R,
     counters: Mutex<HashMap<Key, Counter>>,
@@ -250,7 +228,6 @@ mod tests {
         let key = Key::from_name("g");
         let meta = Metadata::new("t", metrics::Level::INFO, None);
         rec.register_gauge(&key, &meta).increment(1.0);
-        // Same handle → the second call sees the first increment.
         assert_eq!(rec.gauges.lock().unwrap().len(), 1);
         rec.register_gauge(&key, &meta).increment(1.0);
         assert_eq!(rec.gauges.lock().unwrap().len(), 1);

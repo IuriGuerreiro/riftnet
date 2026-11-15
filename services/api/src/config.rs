@@ -1,18 +1,13 @@
-//! Configuration from env vars (and `.env`). Defaults work for local dev
-//! when the api runs from the repo root.
-
 use std::net::SocketAddr;
 use std::path::PathBuf;
 
 pub struct Config {
-    /// `development` (default) or `production`.
     pub env: String,
     pub addr: SocketAddr,
     pub database_url: String,
     pub nats_url: String,
     pub scylla_nodes: Vec<String>,
     pub scylla_keyspace: String,
-    /// Copies of each row: 1 in dev, 3 in production.
     pub scylla_replication: u8,
     pub zitadel_url: String,
     pub zitadel_pat: String,

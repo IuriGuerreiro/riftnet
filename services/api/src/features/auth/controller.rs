@@ -15,7 +15,6 @@ use crate::common::middleware::auth::AuthUser;
 const MINUTE: Duration = Duration::from_secs(60);
 const FIFTEEN_MINUTES: Duration = Duration::from_secs(15 * 60);
 
-/// Normalized, length-capped email for rate-limit keys (input isn't validated yet).
 fn rate_key_email(email: &str) -> String {
     email.trim().to_lowercase().chars().take(254).collect()
 }
@@ -43,14 +42,11 @@ pub async fn login(
     let ip = addr.ip();
     let email = rate_key_email(&req.email);
 
-    // Per IP, and per IP + email: an attacker only slows themselves down.
     state.limiter.check(&format!("login:ip:{ip}"), 10, MINUTE)?;
     state
         .limiter
         .check(&format!("login:ip-email:{ip}:{email}"), 5, MINUTE)?;
-    // Per email from anywhere, counting FAILED attempts only: stops distributed
-    // password guessing without letting anyone lock out the real user by
-    // spamming requests (a correct password never adds to this count).
+    // WARN: count failed attempts only, so spamming can't lock out the real user.
     let failures_key = format!("login:failures:{email}");
     state
         .limiter

@@ -1,7 +1,4 @@
-//! Per-request span + metrics. Labels use the route *template*
-//! (`/me/username`), never the raw path, so cardinality stays low and no
-//! ids or tokens end up in labels. Headers are never recorded.
-
+// WARN: label by route template, never the raw path or headers (cardinality, and no ids or tokens in metrics).
 use std::time::Instant;
 
 use axum::extract::{MatchedPath, Request};
@@ -12,7 +9,6 @@ use tracing::{Instrument, field};
 pub const REQUESTS_TOTAL: &str = "http_server_requests_total";
 pub const REQUEST_DURATION: &str = "http_server_request_duration_seconds";
 
-/// Bucket bounds (seconds) for [`REQUEST_DURATION`].
 pub const DURATION_BUCKETS: &[f64] = &[
     0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
 ];

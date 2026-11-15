@@ -17,7 +17,6 @@ message Envelope {
   uint64 id = 1;
 
   oneof payload {
-    // client -> server
     Ping ping = 10;
     SendMessage send_message = 11;
     GetHistory get_history = 12;
@@ -26,7 +25,6 @@ message Envelope {
     ListConversations list_conversations = 15;
     Sync sync = 16;
 
-    // server -> client (replies)
     Pong pong = 50;
     Error error = 51;
     MessageAck message_ack = 52;
@@ -36,22 +34,18 @@ message Envelope {
     Conversations conversations = 58;
     SyncResult sync_result = 59;
 
-    // server -> client (pushes, id = 0)
     MessageCreated message_created = 54;
     UserUpdated user_updated = 55;
 
-    // calls (100-139 reserved, see docs/architecture/calls.md)
-    // client -> server
+    // calls: field numbers 100-139 are reserved for them
     CallStart call_start = 100;
     CallAccept call_accept = 101;
     CallDecline call_decline = 102;
     CallJoin call_join = 103;
     CallScreenShare call_screen_share = 104;
     CallLeave call_leave = 105;
-    // server -> client (replies)
     CallResult call_result = 120;
     CallJoined call_joined = 121;
-    // server -> client (pushes, id = 0)
     CallIncoming call_incoming = 130;
     CallUpdated call_updated = 131;
     CallEnded call_ended = 133;
@@ -66,7 +60,6 @@ message Error {
   string message = 2;
 }
 
-// First frame: the access token from /auth/login (same one used for HTTP).
 message Authenticate {
   string access_token = 1;
 }
