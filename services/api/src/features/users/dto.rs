@@ -35,3 +35,10 @@ impl From<&User> for protocol::v1::User {
 pub struct SetUsernameRequest {
     pub username: String,
 }
+
+/// `GET /users/search?q=mon&limit=20`
+#[derive(Debug, Deserialize)]
+pub struct SearchUsersQuery {
+    pub q: String,
+    pub limit: Option<u32>,
+}

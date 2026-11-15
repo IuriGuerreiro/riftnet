@@ -3,7 +3,11 @@
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 const [TA, NA, TB, NB] = readFileSync(process.argv[3], "utf8").trim().split("\n");
-const chrome = spawn("chromium", ["--headless=new", "--remote-debugging-port=9334",
+// UI_URL: the client to test (default local vite). CHROME_FLAGS: extra flags,
+// e.g. --host-resolver-rules="MAP host.ts.net 100.x.y.z" when DNS can't resolve it.
+const UI = process.env.UI_URL ?? "http://localhost:7104";
+const extra = process.env.CHROME_FLAGS ? [process.env.CHROME_FLAGS] : [];
+const chrome = spawn("chromium", [...extra, "--headless=new", "--remote-debugging-port=9334",
   "--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream",
   "--autoplay-policy=no-user-gesture-required", "--user-data-dir=" + process.argv[2], "about:blank"]);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -12,7 +16,7 @@ const check = (c, msg) => { console.log(`${c ? "✅" : "❌"} ${msg}`); ok &&= c
 try {
   for (let i = 0; i < 20; i++) { try { await fetch("http://127.0.0.1:9334/json/version"); break; } catch { await sleep(500); } }
   async function tab() {
-    const t = await (await fetch("http://127.0.0.1:9334/json/new?http://localhost:7104/login", { method: "PUT" })).json();
+    const t = await (await fetch(`http://127.0.0.1:9334/json/new?${UI}/login`, { method: "PUT" })).json();
     const ws = new WebSocket(t.webSocketDebuggerUrl); let n = 0; const wait = {};
     ws.onmessage = (e) => { const m = JSON.parse(e.data); wait[m.id]?.(m); };
     await new Promise((r) => (ws.onopen = r));

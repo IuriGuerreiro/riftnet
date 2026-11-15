@@ -39,7 +39,7 @@ pub async fn dispatch(
                 .calls
                 .screen_share(
                     session.user_id,
-                    session.device_id,
+                    session.connection_id,
                     req.call_id as i64,
                     req.sharing,
                 )
@@ -48,7 +48,7 @@ pub async fn dispatch(
         Payload::CallLeave(req) => call_result(
             state
                 .calls
-                .leave(session.user_id, session.device_id, req.call_id as i64)
+                .leave(session.user_id, session.connection_id, req.call_id as i64)
                 .await,
         ),
         Payload::Authenticate(_) => Err(ApiError::bad_request(
@@ -162,6 +162,7 @@ async fn call_join(
         .join(
             session.user_id,
             session.device_id,
+            session.connection_id,
             req.call_id as i64,
             req.sdp_offer,
         )

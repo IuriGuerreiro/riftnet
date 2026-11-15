@@ -17,7 +17,7 @@ use protocol::v1::{self, Envelope, envelope::Payload};
 
 use super::media::MediaClient;
 use super::models::{Call, CallState, EndReason, Participant, RING_TIMEOUT};
-use super::store::CallStore;
+use super::store::{AddError, CallStore};
 use crate::common::error::ApiError;
 use crate::common::events::EventBus;
 use crate::features::conversations::repository::ConversationRepo;
@@ -91,14 +91,10 @@ impl CallService {
         let call_id = call.id;
         tokio::spawn(async move {
             tokio::time::sleep(RING_TIMEOUT).await;
-            if this
-                .store
-                .get(call_id)
-                .await
-                .is_some_and(|c| c.state == CallState::Ringing)
-            {
-                this.end(call_id, EndReason::Missed).await;
-            }
+            // Only if still ringing, checked in the same step as the removal:
+            // an accept right now must win.
+            this.end_if(call_id, EndReason::Missed, Box::new(still_ringing))
+                .await;
         });
 
         Ok(call)
@@ -120,8 +116,9 @@ impl CallService {
     #[tracing::instrument(name = "calls.decline", skip_all, fields(user.id = me, call.id = call_id))]
     pub async fn decline(&self, me: i64, call_id: i64) -> Result<Call, ApiError> {
         let call = self.member_call(me, call_id).await?;
-        if call.state == CallState::Ringing && call.caller_id != me {
-            self.end(call_id, EndReason::Declined).await;
+        if call.caller_id != me {
+            self.end_if(call_id, EndReason::Declined, Box::new(still_ringing))
+                .await;
         }
         Ok(call)
     }
@@ -132,15 +129,14 @@ impl CallService {
         &self,
         me: i64,
         device_id: i64,
+        connection_id: u64,
         call_id: i64,
         sdp_offer: String,
     ) -> Result<(Call, String), ApiError> {
         let call = self.member_call(me, call_id).await?;
-        if call.participants.iter().any(|p| p.device_id == device_id) {
-            return Err(ApiError::conflict(
-                "already_joined",
-                "this device is already in the call",
-            ));
+        // Quick check (the store checks again atomically below).
+        if call.participants.iter().any(|p| p.user_id == me) {
+            return Err(already_in());
         }
 
         let (peer_id, answer) = self.media.join(call_id, sdp_offer).await.map_err(|e| {
@@ -151,54 +147,59 @@ impl CallService {
         let participant = Participant {
             user_id: me,
             device_id,
+            connection_id,
             peer_id,
             sharing_screen: false,
         };
-        let updated = self
+        // The callee joining counts as accepting.
+        let activate = call.caller_id != me;
+        let call = match self
             .store
-            .update(
-                call_id,
-                Box::new(move |c| {
-                    c.participants.push(participant);
-                    // The callee joining counts as accepting.
-                    if c.caller_id != me {
-                        c.state = CallState::Active;
-                    }
-                }),
-            )
-            .await;
-        let Some(call) = updated else {
-            // The call ended while we were talking to the media server.
-            let _ = self.media.leave(peer_id).await;
-            return Err(not_found());
+            .add_participant(call_id, participant, activate)
+            .await
+        {
+            Ok(call) => call,
+            Err(e) => {
+                // Lost a race (other device got in first, or the call ended
+                // meanwhile): free the media slot we just took.
+                let _ = self.media.leave(peer_id).await;
+                return Err(match e {
+                    AddError::AlreadyIn => already_in(),
+                    AddError::NotFound => not_found(),
+                });
+            }
         };
         self.push_updated(&call).await;
         Ok((call, answer))
     }
 
-    /// Disconnects this device. The last one out ends the call.
+    /// Takes this connection out of the call. Ends it if nobody is left to talk to.
     #[tracing::instrument(name = "calls.leave", skip_all, fields(user.id = me, call.id = call_id))]
-    pub async fn leave(&self, me: i64, device_id: i64, call_id: i64) -> Result<Call, ApiError> {
+    pub async fn leave(&self, me: i64, connection_id: u64, call_id: i64) -> Result<Call, ApiError> {
         self.member_call(me, call_id).await?;
-        self.remove_device(call_id, device_id)
+        self.remove_connection(call_id, connection_id)
             .await
             .ok_or_else(not_found)
     }
 
-    /// This device started or stopped sharing its screen. Tells everyone.
+    /// This connection started or stopped sharing its screen. Tells everyone.
     #[tracing::instrument(name = "calls.screen_share", skip_all, fields(user.id = me, call.id = call_id, sharing))]
     pub async fn screen_share(
         &self,
         me: i64,
-        device_id: i64,
+        connection_id: u64,
         call_id: i64,
         sharing: bool,
     ) -> Result<Call, ApiError> {
         let call = self.member_call(me, call_id).await?;
-        if !call.participants.iter().any(|p| p.device_id == device_id) {
+        if !call
+            .participants
+            .iter()
+            .any(|p| p.connection_id == connection_id)
+        {
             return Err(ApiError::bad_request(
                 "not_joined",
-                "this device is not in the call",
+                "this connection is not in the call",
             ));
         }
         let call = self
@@ -209,7 +210,7 @@ impl CallService {
                     for p in c
                         .participants
                         .iter_mut()
-                        .filter(|p| p.device_id == device_id)
+                        .filter(|p| p.connection_id == connection_id)
                     {
                         p.sharing_screen = sharing;
                     }
@@ -221,14 +222,15 @@ impl CallService {
         Ok(call)
     }
 
-    /// The socket of this device closed: take it out of every call.
-    pub async fn device_disconnected(&self, device_id: i64) {
-        for call in self.store.with_device(device_id).await {
-            self.remove_device(call.id, device_id).await;
+    /// A WebSocket closed: take it out of every call. Other tabs of the same
+    /// device are not touched.
+    pub async fn connection_closed(&self, connection_id: u64) {
+        for call in self.store.with_connection(connection_id).await {
+            self.remove_connection(call.id, connection_id).await;
         }
     }
 
-    async fn remove_device(&self, call_id: i64, device_id: i64) -> Option<Call> {
+    async fn remove_connection(&self, call_id: i64, connection_id: u64) -> Option<Call> {
         let (tx, rx) = std::sync::mpsc::channel();
         let call = self
             .store
@@ -236,10 +238,14 @@ impl CallService {
                 call_id,
                 Box::new(move |c| {
                     // Hand back the device's peers so we can tell the media server.
-                    for p in c.participants.iter().filter(|p| p.device_id == device_id) {
+                    for p in c
+                        .participants
+                        .iter()
+                        .filter(|p| p.connection_id == connection_id)
+                    {
                         let _ = tx.send(p.peer_id);
                     }
-                    c.participants.retain(|p| p.device_id != device_id);
+                    c.participants.retain(|p| p.connection_id != connection_id);
                 }),
             )
             .await?;
@@ -259,7 +265,12 @@ impl CallService {
     }
 
     async fn end(&self, call_id: i64, reason: EndReason) {
-        let Some(call) = self.store.remove(call_id).await else {
+        self.end_if(call_id, reason, Box::new(|_| true)).await;
+    }
+
+    /// Ends the call if `condition` still holds at removal time.
+    async fn end_if(&self, call_id: i64, reason: EndReason, condition: super::store::Condition) {
+        let Some(call) = self.store.remove_if(call_id, condition).await else {
             return;
         };
         for p in &call.participants {
@@ -302,6 +313,17 @@ impl CallService {
     }
 }
 
+fn still_ringing(c: &Call) -> bool {
+    c.state == CallState::Ringing
+}
+
+fn already_in() -> ApiError {
+    ApiError::conflict(
+        "already_in_call",
+        "you're already in this call on another device",
+    )
+}
+
 fn not_found() -> ApiError {
     ApiError::bad_request("call_not_found", "call not found")
 }
@@ -316,7 +338,7 @@ mod tests {
 
     use super::*;
     use crate::common::error::RepoError;
-    use crate::features::calls::store::MemoryCallStore;
+    use crate::features::calls::store::{AddError, MemoryCallStore};
     use crate::features::conversations::models::{ConversationRecord, Kind};
 
     const ALICE: i64 = 1;
@@ -403,6 +425,17 @@ mod tests {
         (svc, events, media)
     }
 
+    fn test_call() -> Call {
+        Call {
+            id: 1,
+            conversation_id: DM,
+            caller_id: ALICE,
+            state: CallState::Ringing,
+            member_ids: vec![ALICE, BOB],
+            participants: Vec::new(),
+        }
+    }
+
     fn pushes(events: &FakeEvents, user: i64) -> Vec<String> {
         let sent = events.sent.lock().unwrap();
         sent.iter()
@@ -433,26 +466,93 @@ mod tests {
         let (svc, _, _) = setup();
         assert!(svc.start(EVE, DM).await.is_err());
         let call = svc.start(ALICE, DM).await.unwrap();
-        assert!(svc.join(EVE, 30, call.id, "offer".into()).await.is_err());
+        assert!(
+            svc.join(EVE, 30, 30, call.id, "offer".into())
+                .await
+                .is_err()
+        );
     }
 
     #[tokio::test]
     async fn callee_joining_makes_it_active() {
         let (svc, _, _) = setup();
         let call = svc.start(ALICE, DM).await.unwrap();
-        svc.join(ALICE, 10, call.id, "offer".into()).await.unwrap();
-        let (call, answer) = svc.join(BOB, 20, call.id, "offer".into()).await.unwrap();
+        svc.join(ALICE, 10, 10, call.id, "offer".into())
+            .await
+            .unwrap();
+        let (call, answer) = svc
+            .join(BOB, 20, 20, call.id, "offer".into())
+            .await
+            .unwrap();
         assert_eq!(answer, "answer");
         assert_eq!(call.state, CallState::Active);
         assert_eq!(call.participant_user_ids(), [ALICE, BOB]);
     }
 
     #[tokio::test]
-    async fn same_device_cannot_join_twice() {
-        let (svc, _, _) = setup();
+    async fn one_audio_device_per_user() {
+        let (svc, _, media) = setup();
         let call = svc.start(ALICE, DM).await.unwrap();
-        svc.join(ALICE, 10, call.id, "offer".into()).await.unwrap();
-        assert!(svc.join(ALICE, 10, call.id, "offer".into()).await.is_err());
+        svc.join(BOB, 20, 20, call.id, "offer".into())
+            .await
+            .unwrap();
+        // Bob's tablet (other device, other socket) tries to join too.
+        let err = svc
+            .join(BOB, 21, 21, call.id, "offer".into())
+            .await
+            .unwrap_err();
+        assert_eq!(err.describe().1, "already_in_call");
+        assert!(media.left.lock().unwrap().is_empty()); // quick check: never reached media
+    }
+
+    #[tokio::test]
+    async fn store_rejects_second_device_even_if_quick_check_passed() {
+        // Two devices racing: both pass the quick check, the store lets one in.
+        let store = MemoryCallStore::default();
+        let mut call = test_call();
+        call.participants.clear();
+        let call = store.insert_if_none(call).await.unwrap();
+        let p = |device: i64| Participant {
+            user_id: BOB,
+            device_id: device,
+            connection_id: device as u64,
+            peer_id: 1,
+            sharing_screen: false,
+        };
+        assert!(store.add_participant(call.id, p(20), true).await.is_ok());
+        assert_eq!(
+            store
+                .add_participant(call.id, p(21), true)
+                .await
+                .unwrap_err(),
+            AddError::AlreadyIn
+        );
+    }
+
+    #[tokio::test]
+    async fn decline_after_accept_does_not_end_the_call() {
+        let (svc, events, _) = setup();
+        let call = svc.start(ALICE, DM).await.unwrap();
+        svc.accept(BOB, call.id).await.unwrap(); // Bob's phone accepts
+        svc.decline(BOB, call.id).await.unwrap(); // Bob's laptop (stale banner) declines
+        assert!(!pushes(&events, ALICE).contains(&"ended".to_string()));
+        assert!(svc.accept(BOB, call.id).await.is_ok()); // still there
+    }
+
+    #[tokio::test]
+    async fn closing_another_tab_of_the_same_device_keeps_the_call() {
+        let (svc, events, _) = setup();
+        let call = svc.start(ALICE, DM).await.unwrap();
+        svc.join(ALICE, 10, 100, call.id, "offer".into())
+            .await
+            .unwrap(); // tab A
+        svc.join(BOB, 20, 20, call.id, "offer".into())
+            .await
+            .unwrap();
+        svc.connection_closed(101).await; // tab B, same device 10, closes
+        assert!(!pushes(&events, BOB).contains(&"ended".to_string()));
+        svc.connection_closed(100).await; // tab A closes
+        assert_eq!(pushes(&events, BOB).last().unwrap(), "ended");
     }
 
     #[tokio::test]
@@ -468,8 +568,12 @@ mod tests {
     async fn hanging_up_ends_it_for_both_and_frees_media() {
         let (svc, events, media) = setup();
         let call = svc.start(ALICE, DM).await.unwrap();
-        svc.join(ALICE, 10, call.id, "offer".into()).await.unwrap();
-        svc.join(BOB, 20, call.id, "offer".into()).await.unwrap();
+        svc.join(ALICE, 10, 10, call.id, "offer".into())
+            .await
+            .unwrap();
+        svc.join(BOB, 20, 20, call.id, "offer".into())
+            .await
+            .unwrap();
 
         svc.leave(BOB, 20, call.id).await.unwrap();
         assert_eq!(pushes(&events, ALICE).last().unwrap(), "ended");
@@ -480,9 +584,13 @@ mod tests {
     async fn screen_share_is_pushed_and_cleared_on_leave() {
         let (svc, events, _) = setup();
         let call = svc.start(ALICE, DM).await.unwrap();
-        svc.join(ALICE, 10, call.id, "offer".into()).await.unwrap();
-        svc.join(BOB, 20, call.id, "offer".into()).await.unwrap();
-        // Bob's phone (not joined) can't claim to share.
+        svc.join(ALICE, 10, 10, call.id, "offer".into())
+            .await
+            .unwrap();
+        svc.join(BOB, 20, 20, call.id, "offer".into())
+            .await
+            .unwrap();
+        // Bob's other socket (not joined) can't claim to share.
         assert!(svc.screen_share(BOB, 21, call.id, true).await.is_err());
 
         let before = pushes(&events, BOB).len();
@@ -498,10 +606,12 @@ mod tests {
     async fn caller_alone_while_ringing_stays_until_they_leave() {
         let (svc, events, _) = setup();
         let call = svc.start(ALICE, DM).await.unwrap();
-        svc.join(ALICE, 10, call.id, "offer".into()).await.unwrap();
+        svc.join(ALICE, 10, 10, call.id, "offer".into())
+            .await
+            .unwrap();
         assert!(!pushes(&events, BOB).contains(&"ended".to_string()));
 
-        svc.device_disconnected(10).await; // Alice's socket drops
+        svc.connection_closed(10).await; // Alice's socket drops
         assert_eq!(pushes(&events, BOB).last().unwrap(), "ended");
     }
 }

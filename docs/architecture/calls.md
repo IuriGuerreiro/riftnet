@@ -113,7 +113,9 @@ Rules (in `features/calls/service.rs`):
 - One live call per conversation. `call_start` on a busy one returns it.
 - The callee joining counts as accepting. Nobody answers in 30 s → `missed`.
 - The call ends when nobody is left to talk to (after it was answered, one person left = end).
-- A socket closing removes that device from its call.
+- **One audio device per user** (checked atomically). A 2nd device gets `already_in_call`. Extra devices with roles (e.g. a screen-only tablet) come with issue #12.
+- A socket closing removes **that socket's** participation (two tabs can share a device id).
+- "Missed" / "declined" only end a call that is **still ringing**, checked in the same step as the removal (an accept at the same moment wins).
 - Calls live **in memory in the api**: correct with one api server only. Several → move `CallStore` to Redis.
 
 ## How to run
