@@ -1,8 +1,3 @@
-//! Our tokens.
-//! - Access token: a JWT signed with Ed25519 (`alg: EdDSA`), 15 min, verified
-//!   with no DB lookup.
-//! - Refresh token: 32 random bytes, only its SHA-256 hash is stored.
-
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD as B64;
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
@@ -42,7 +37,7 @@ struct Claims {
 pub struct AccessClaims {
     pub user_id: i64,
     pub device_id: i64,
-    #[allow(dead_code)] // used by the WebSocket gateway later
+    #[allow(dead_code)]
     pub expires_at: i64,
 }
 
@@ -61,9 +56,7 @@ impl TokenService {
         }
     }
 
-    /// Loads the key from `path`. If it doesn't exist and `allow_create` is set
-    /// (dev only), creates one. In production a missing key is an error, so
-    /// we never silently invalidate everyone's tokens.
+    // WARN: a missing key is an error in production, so we never silently invalidate every token.
     pub fn from_key_file(path: &Path, allow_create: bool) -> anyhow::Result<Self> {
         let seed: [u8; 32] = if path.exists() {
             B64.decode(crate::common::secrets::read(path)?)?
@@ -133,7 +126,6 @@ impl TokenService {
         })
     }
 
-    /// Returns `(token for the client, hash to store)`.
     pub fn new_refresh_token(&self) -> (String, Vec<u8>) {
         let mut bytes = [0u8; 32];
         OsRng.fill_bytes(&mut bytes);

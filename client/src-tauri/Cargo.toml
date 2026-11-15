@@ -1,4 +1,5 @@
 [package]
+publish = false
 name = "desktop"
 description = "Tauri desktop shell. Thin glue: windows, tray, commands. Logic lives in client-core."
 version.workspace = true

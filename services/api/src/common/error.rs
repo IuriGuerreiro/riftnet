@@ -1,5 +1,3 @@
-//! One error type for every HTTP response: `{ "code": "...", "message": "..." }`.
-
 use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
@@ -47,8 +45,6 @@ impl From<RepoError> for ApiError {
 }
 
 impl ApiError {
-    /// Status, error code and safe message. Used by HTTP responses and
-    /// WebSocket `Error` frames. Logs internal errors (their details stay server-side).
     pub fn describe(&self) -> (StatusCode, &'static str, String) {
         match self {
             Self::BadRequest { code, message } => (StatusCode::BAD_REQUEST, *code, message.clone()),
@@ -75,16 +71,13 @@ impl ApiError {
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let (status, code, message) = self.describe();
-        // Shows on the request span (declared in http_metrics). Codes are fixed strings.
         tracing::Span::current().record("error.code", code);
         (status, Json(json!({ "code": code, "message": message }))).into_response()
     }
 }
 
-/// Errors repositories return. Keeps SQL details out of services.
 #[derive(Debug, thiserror::Error)]
 pub enum RepoError {
-    /// A unique constraint was violated.
     #[error("conflict")]
     Conflict,
     #[error(transparent)]

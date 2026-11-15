@@ -1,6 +1,5 @@
 use chrono::{DateTime, Utc};
 
-/// A refresh token row joined with its device.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct RefreshTokenRecord {
     pub id: i64,

@@ -33,7 +33,6 @@ impl UserService {
     }
 }
 
-/// 3–32 chars, lowercase letters, digits, `_` and `.`. Stored lowercase.
 pub fn normalize_username(raw: &str) -> Result<String, ApiError> {
     let username = raw.trim().to_lowercase();
     let len_ok = (3..=32).contains(&username.chars().count());

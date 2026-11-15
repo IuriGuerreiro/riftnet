@@ -1,7 +1,3 @@
-//! The `ConversationRepo` trait (what the service needs from storage) and
-//! its implementation for Scylla. The Scylla struct and helpers are in
-//! `scylla_conversation_repo.rs`.
-
 use std::collections::HashMap;
 
 use anyhow::Context;
@@ -14,20 +10,14 @@ use crate::features::conversations::models::{ConversationRecord, Kind, dm_key};
 
 #[async_trait]
 pub trait ConversationRepo: Send + Sync {
-    /// Creates the DM between `a` and `b`, or returns the existing one.
-    /// Safe if both users open it at the same moment.
     async fn get_or_create_dm(
         &self,
         new_id: i64,
         a: i64,
         b: i64,
     ) -> Result<ConversationRecord, RepoError>;
-    /// Conversations `user_id` is in, newest first (max 200).
     async fn list_for_user(&self, user_id: i64) -> Result<Vec<ConversationRecord>, RepoError>;
-    /// One conversation, or `None`.
     async fn get(&self, id: i64) -> Result<Option<ConversationRecord>, RepoError>;
-    /// Reserves the next message number (1, 2, 3...) of a conversation.
-    /// Two senders at the same moment never get the same number.
     async fn next_seq(&self, id: i64) -> Result<i64, RepoError>;
 }
 
@@ -42,8 +32,6 @@ impl ConversationRepo for ScyllaConversationRepo {
     ) -> Result<ConversationRecord, RepoError> {
         let key = dm_key(a, b);
 
-        // 1. Try to save the key with our new id. It only goes in if no DM
-        //    exists yet for these two users (IF NOT EXISTS).
         let insert_reply = self
             .session
             .execute_unpaged(&self.claim_dm_key, (&key, new_id))
@@ -56,8 +44,6 @@ impl ConversationRepo for ScyllaConversationRepo {
         let id = if dm_is_new {
             new_id
         } else {
-            // 2. Someone created it before us: read which id they used.
-            //    SERIAL consistency = see the result of the LWT for sure.
             let mut read_dm_key = self.get_dm_key.clone();
             read_dm_key.set_consistency(scylla::statement::Consistency::Serial);
             let (id,) = self
@@ -72,8 +58,6 @@ impl ConversationRepo for ScyllaConversationRepo {
             id
         };
 
-        // 3. Make sure the conversation rows exist. Normally only the winner
-        //    writes them; this also repairs a crash between step 1 and 3.
         if let Some(existing) = self.get_by_id(id).await? {
             return Ok(existing);
         }
@@ -102,7 +86,6 @@ impl ConversationRepo for ScyllaConversationRepo {
             .collect::<Result<_, _>>()
             .context("list conversations")?;
 
-        // Fetch them all at once (one request per conversation, in parallel).
         let found = futures::future::try_join_all(ids.iter().map(|id| self.get_by_id(*id))).await?;
         let mut by_id: HashMap<i64, ConversationRecord> =
             found.into_iter().flatten().map(|c| (c.id, c)).collect();
@@ -115,9 +98,7 @@ impl ConversationRepo for ScyllaConversationRepo {
 
     #[tracing::instrument(name = "db UPDATE conversations", skip_all, err(Display), fields(otel.kind = "client", db.system = "scylladb", db.operation = "UPDATE", db.collection.name = "conversations"))]
     async fn next_seq(&self, id: i64) -> Result<i64, RepoError> {
-        // Compare-and-set loop: "set last_seq to N+1, but only if it's still N".
-        // If someone else got N+1 first, Scylla says no and tells us the new
-        // value; we try again with that. LWT makes the check + write atomic.
+        // INVARIANT: compare-and-set via LWT, so two senders never get the same seq.
         let mut current = self.get_by_id(id).await?.map(|c| c.last_seq).unwrap_or(0);
         for _ in 0..20 {
             let next = current + 1;
@@ -131,8 +112,6 @@ impl ConversationRepo for ScyllaConversationRepo {
             if lwt_applied(&reply).context("bump seq")? {
                 return Ok(next);
             }
-            // Someone else took `next` first. The reply's 2nd column is the
-            // last_seq they set: try again from there.
             current = reply
                 .rows::<scylla::value::Row>()
                 .context("bump seq")?

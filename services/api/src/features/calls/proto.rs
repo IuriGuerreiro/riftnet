@@ -1,5 +1,3 @@
-//! Our call model → the protobuf `Call` sent over the WebSocket.
-
 use protocol::v1;
 
 use super::models::Call;

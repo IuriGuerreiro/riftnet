@@ -24,7 +24,6 @@ impl ConversationService {
         Self { repo, users, ids }
     }
 
-    /// Opens the DM between `me` and `username` (creates it the first time).
     #[tracing::instrument(name = "conversations.open_dm", skip_all, fields(user.id = me))]
     pub async fn open_dm(&self, me: i64, username: &str) -> Result<Conversation, ApiError> {
         let not_found = || ApiError::bad_request("user_not_found", "no user with that username");
@@ -57,7 +56,6 @@ impl ConversationService {
         self.with_members(records).await
     }
 
-    /// Records only hold member ids; look up their profiles in one query.
     async fn with_members(
         &self,
         records: Vec<ConversationRecord>,

@@ -12,7 +12,6 @@ use crate::common::error::ApiError;
 use crate::features::users::models::User;
 use crate::features::users::repository::UserRepo;
 
-/// What a successful login / register / refresh returns.
 pub struct Session {
     pub access_token: String,
     pub access_expires_at: i64,
@@ -153,12 +152,9 @@ impl AuthService {
             return Err(ApiError::Unauthorized("session_revoked"));
         }
         if let Some(used_at) = record.used_at {
-            // Used a moment ago: another tab / a retry of the same app got there
-            // first. Not theft; the client should pick up the newer token.
             if Utc::now() - used_at <= Duration::seconds(REUSE_GRACE_SECS) {
                 return Err(superseded());
             }
-            // An old token came back much later: someone has a stolen copy. Kill the device.
             self.repo.revoke_device(record.device_id).await?;
             tracing::warn!(
                 device_id = record.device_id,
@@ -182,7 +178,6 @@ impl AuthService {
             )
             .await?;
         if !rotated {
-            // Two refreshes raced with the same token at the same instant.
             return Err(superseded());
         }
 
@@ -244,13 +239,10 @@ impl AuthService {
     }
 
     fn next_id(&self) -> i64 {
-        // Snowflakes use 63 bits, so they always fit in a signed BIGINT.
         self.ids.next_id() as i64
     }
 }
 
-/// How long after a refresh token is rotated we still treat its reuse as a
-/// harmless race (two tabs, a retry) instead of theft.
 const REUSE_GRACE_SECS: i64 = 30;
 
 fn superseded() -> ApiError {

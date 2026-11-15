@@ -1,11 +1,3 @@
-//! NATS control plane: the api tells us who joins and leaves.
-//!
-//! - `media.join` (request/reply): `MediaJoin` → `MediaJoinReply`
-//! - `media.leave` (publish): `MediaLeave`
-//!
-//! One media server for now. With several, the api will pick one and use
-//! `media.<server_id>.join` instead.
-
 use futures::StreamExt;
 use protocol::Message;
 use protocol::v1::{MediaJoin, MediaJoinReply, MediaLeave};

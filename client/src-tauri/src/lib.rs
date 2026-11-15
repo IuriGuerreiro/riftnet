@@ -1,6 +1,3 @@
-//! Tauri glue only. Forward commands to `client-core`; keep logic out of here.
-
-/// Example command: the UI calls `invoke("core_ping")` and gets bytes built by client-core.
 #[tauri::command]
 fn core_ping() -> Vec<u8> {
     client_core::encode_ping(1)
