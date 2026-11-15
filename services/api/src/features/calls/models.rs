@@ -18,11 +18,15 @@ pub enum EndReason {
     Missed = 3,
 }
 
-/// One device connected to the SFU.
+/// One device connected to the SFU. For now: one per user (see issue #12
+/// for extra devices, e.g. a screen-share-only tablet).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Participant {
     pub user_id: i64,
     pub device_id: i64,
+    /// The WebSocket it joined from. Two tabs can share one device id, so
+    /// cleanup on socket close goes by this, not by device.
+    pub connection_id: u64,
     /// The media server's id for this device (to remove it later).
     pub peer_id: u64,
 }

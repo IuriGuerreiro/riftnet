@@ -2,7 +2,7 @@
 # End-to-end voice call check: 2 new accounts, 2 headless Chromium tabs with
 # fake mics. A calls B → B accepts → audio both ways → A hangs up.
 # Needs: docker stack + api (:7100) + media + client vite (:7104) running.
-# Usage: scripts/smoke-calls.sh [api_url]
+# Usage: [UI_URL=...] [CHROME_FLAGS=...] scripts/smoke-calls.sh [api_url]
 set -euo pipefail
 API=${1:-http://127.0.0.1:7100}
 DEV='{"name":"call smoke","platform":"web"}'
