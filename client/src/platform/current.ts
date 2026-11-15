@@ -8,4 +8,4 @@ export function setPlatform(p: Platform) {
   Object.assign(platform, p);
 }
 
-export type { CallMedia, Platform } from "./types";
+export { tuneOpus, type CallMedia, type Platform } from "./types";
