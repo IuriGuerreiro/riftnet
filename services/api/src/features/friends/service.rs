@@ -360,6 +360,15 @@ mod tests {
                 .find(|u| u.username.as_deref() == Some(username))
                 .cloned())
         }
+        async fn search_by_username_prefix(
+            &self,
+            _: &str,
+            _: &str,
+            _: i64,
+            _: i64,
+        ) -> Result<Vec<User>, RepoError> {
+            unimplemented!()
+        }
         async fn create(&self, _: i64, _: &str) -> Result<User, RepoError> {
             unimplemented!()
         }

@@ -18,6 +18,9 @@ use crate::features::auth::identity::ZitadelClient;
 use crate::features::auth::repository::PgAuthRepo;
 use crate::features::auth::service::AuthService;
 use crate::features::auth::tokens::TokenService;
+use crate::features::calls::media::NatsMediaClient;
+use crate::features::calls::service::CallService;
+use crate::features::calls::store::MemoryCallStore;
 use crate::features::conversations::repository::{ConversationRepo, ScyllaConversationRepo};
 use crate::features::conversations::service::ConversationService;
 use crate::features::friends::repository::PgFriendRepo;
@@ -35,6 +38,7 @@ pub struct AppState {
     pub conversations: Arc<ConversationService>,
     pub friends: Arc<FriendService>,
     pub messages: Arc<MessageService>,
+    pub calls: Arc<CallService>,
     pub tokens: Arc<TokenService>,
     pub limiter: Arc<RateLimiter>,
     pub events: Arc<dyn EventBus>,
@@ -82,6 +86,13 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
         conversations: Arc::new(ConversationService::new(
             conversation_repo.clone(),
             user_repo.clone(),
+            events.clone(),
+            ids.clone(),
+        )),
+        calls: Arc::new(CallService::new(
+            Arc::new(MemoryCallStore::default()),
+            conversation_repo.clone(),
+            Arc::new(NatsMediaClient::connect(&config.nats_url).await?),
             events.clone(),
             ids,
         )),

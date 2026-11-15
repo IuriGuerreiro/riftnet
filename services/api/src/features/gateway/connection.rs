@@ -29,6 +29,8 @@ const CLOSE_UNAUTHORIZED: u16 = 4001;
 pub struct Session {
     pub user_id: i64,
     pub device_id: i64,
+    /// Random id for this socket (two tabs can share a device id).
+    pub connection_id: u64,
 }
 
 pub async fn run(mut socket: WebSocket, state: AppState) {
@@ -90,6 +92,8 @@ pub async fn run(mut socket: WebSocket, state: AppState) {
         }
     }
 
+    // Socket gone: whatever call it was in, it's out.
+    state.calls.connection_closed(session.connection_id).await;
     metrics::gauge!("ws_connections").decrement(1.0);
     tracing::info!(user.id = session.user_id, "ws disconnected");
 }
@@ -125,6 +129,7 @@ async fn authenticate(socket: &mut WebSocket, state: &AppState) -> Result<Sessio
     let session = Session {
         user_id: claims.user_id,
         device_id: claims.device_id,
+        connection_id: rand::random(),
     };
     let ok = Envelope {
         id: env.id,

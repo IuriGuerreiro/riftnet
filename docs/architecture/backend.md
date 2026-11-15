@@ -16,7 +16,7 @@ services/api/src/
 │       └── rate_limit.rs
 └── features/
     ├── auth/            register, login, refresh, logout
-    ├── users/           /me, /me/username
+    ├── users/           /me, /me/username, /users/search
     ├── friends/         /friends: requests, accept, remove (see friends.md)
     ├── health/          /health, /metrics
     └── gateway/         WebSocket (parked)

@@ -32,6 +32,19 @@ NAME="smoke_$(date +%s%N | tail -c 9)"
 [ "$(post /me/username "{\"username\":\"$NAME\"}" PUT)" = 200 ] && ok "username set" || fail "set username: $(cat /tmp/smoke.body)"
 [ "$(field "['username']")" = "$NAME" ] || fail "username not saved"
 
+# Search: a second user whose name starts with ours.
+ME_AUTH=$AUTH; unset AUTH
+[ "$(post /auth/register "{\"email\":\"b$EMAIL\",\"password\":\"$PASS\",\"device\":$DEV}")" = 200 ] || fail "register 2: $(cat /tmp/smoke.body)"
+AUTH=$(field "['access_token']")
+[ "$(post /me/username "{\"username\":\"${NAME}b\"}" PUT)" = 200 ] || fail "set username 2"
+AUTH=$ME_AUTH
+[ "$(post "/users/search?q=$(echo "$NAME" | tr a-z A-Z)" '' GET)" = 200 ] || fail "search: $(cat /tmp/smoke.body)"
+[ "$(field "")" = "[{'id': '$(field "[0]['id']")', 'username': '${NAME}b', 'display_name': None}]" ] \
+  && ok "search (uppercase prefix) → only the other user, not me, no email" || fail "search results: $(cat /tmp/smoke.body)"
+[ "$(post "/users/search?q=no%20spaces" '' GET)" = 400 ] && ok "bad search query → 400" || fail "bad query"
+unset AUTH; [ "$(post "/users/search?q=a" '' GET)" = 401 ] && ok "search without token → 401" || fail "search no token"
+AUTH=$ME_AUTH
+
 unset AUTH
 [ "$(post /auth/refresh "{\"refresh_token\":\"$REFRESH\"}")" = 200 ] && ok "refresh rotates tokens" || fail "refresh: $(cat /tmp/smoke.body)"
 NEW_REFRESH=$(field "['refresh_token']")

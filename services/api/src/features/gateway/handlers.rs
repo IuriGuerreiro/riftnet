@@ -25,6 +25,26 @@ pub async fn dispatch(
         Payload::AddMember(req) => add_member(state, session, req).await,
         Payload::LeaveGroup(req) => leave_group(state, session, req).await,
         Payload::RenameGroup(req) => rename_group(state, session, req).await,
+        Payload::CallStart(req) => call_start(state, session, req).await,
+        Payload::CallAccept(req) => call_result(
+            state
+                .calls
+                .accept(session.user_id, req.call_id as i64)
+                .await,
+        ),
+        Payload::CallDecline(req) => call_result(
+            state
+                .calls
+                .decline(session.user_id, req.call_id as i64)
+                .await,
+        ),
+        Payload::CallJoin(req) => call_join(state, session, req).await,
+        Payload::CallLeave(req) => call_result(
+            state
+                .calls
+                .leave(session.user_id, session.connection_id, req.call_id as i64)
+                .await,
+        ),
         Payload::Authenticate(_) => Err(ApiError::bad_request(
             "already_authenticated",
             "already authenticated",
@@ -171,4 +191,46 @@ fn conversation_result(conversation: &Conversation) -> Payload {
     Payload::Conversation(v1::ConversationResult {
         conversation: Some(conversation.into()),
     })
+}
+
+async fn call_start(
+    state: &AppState,
+    session: &Session,
+    req: v1::CallStart,
+) -> Result<Payload, ApiError> {
+    call_result(
+        state
+            .calls
+            .start(session.user_id, req.conversation_id as i64)
+            .await,
+    )
+}
+
+async fn call_join(
+    state: &AppState,
+    session: &Session,
+    req: v1::CallJoin,
+) -> Result<Payload, ApiError> {
+    let (call, sdp_answer) = state
+        .calls
+        .join(
+            session.user_id,
+            session.device_id,
+            session.connection_id,
+            req.call_id as i64,
+            req.sdp_offer,
+        )
+        .await?;
+    Ok(Payload::CallJoined(v1::CallJoined {
+        call: Some((&call).into()),
+        sdp_answer,
+    }))
+}
+
+fn call_result(
+    call: Result<crate::features::calls::models::Call, ApiError>,
+) -> Result<Payload, ApiError> {
+    Ok(Payload::CallResult(v1::CallResult {
+        call: Some((&call?).into()),
+    }))
 }

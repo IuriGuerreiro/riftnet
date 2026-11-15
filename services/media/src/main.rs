@@ -1,5 +1,48 @@
+//! Media server (SFU). Forwards each person's audio to the others in the same
+//! call, without decoding it. See docs/architecture/calls.md.
+//!
+//! - Control: NATS (`control.rs`). The api asks us to add/remove devices.
+//! - Media: one UDP socket for everyone, driven by one thread (`sfu.rs`).
+//!
+//! Env:
+//! - `NATS_URL` (default `nats://127.0.0.1:4222`)
+//! - `MEDIA_IP`: the IP clients send UDP to (default: this machine's LAN IP).
+//!   Behind Tailscale, use the Tailscale IP.
+//! - `MEDIA_PORT`: UDP port (default 7110).
+
+mod control;
+mod sfu;
+
+use std::net::{IpAddr, UdpSocket};
+
 #[tokio::main]
-async fn main() {
+async fn main() -> anyhow::Result<()> {
     let _telemetry = common::telemetry::init("media", env!("CARGO_PKG_VERSION"));
-    tracing::warn!("media server not implemented yet (SFU via str0m)");
+    str0m::crypto::from_feature_flags().install_process_default();
+
+    let nats_url = env_or("NATS_URL", "nats://127.0.0.1:4222");
+    let ip: IpAddr = match std::env::var("MEDIA_IP") {
+        Ok(ip) => ip.parse()?,
+        Err(_) => lan_ip()?,
+    };
+    let port: u16 = env_or("MEDIA_PORT", "7110").parse()?;
+
+    let socket = UdpSocket::bind((ip, port))?;
+    tracing::info!(addr = %socket.local_addr()?, "media UDP listening");
+
+    let sfu = sfu::start(socket)?;
+    let nats = async_nats::connect(&nats_url).await?;
+    tracing::info!(nats_url, "media ready");
+    control::serve(nats, sfu).await
+}
+
+fn env_or(key: &str, default: &str) -> String {
+    std::env::var(key).unwrap_or_else(|_| default.to_string())
+}
+
+/// The IP the OS would use to reach the internet. Sends nothing.
+fn lan_ip() -> anyhow::Result<IpAddr> {
+    let s = UdpSocket::bind("0.0.0.0:0")?;
+    s.connect("8.8.8.8:80")?;
+    Ok(s.local_addr()?.ip())
 }

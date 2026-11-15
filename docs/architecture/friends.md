@@ -4,7 +4,7 @@ Friend requests and friend lists. Postgres, HTTP actions, live pushes over the s
 
 ## Storage
 
-One table, `friendships` (migration `0002_friends.sql`). One row per pair of users:
+One table, `friendships` (migration `0003_friends.sql`). One row per pair of users:
 
 | Column         | Meaning                                       |
 | -------------- | --------------------------------------------- |

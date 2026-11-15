@@ -1,11 +1,17 @@
 [package]
 name = "media"
-description = "Media server (SFU): forwards voice/video. Will use str0m."
+description = "Media server (SFU): forwards voice/video between call members. str0m + NATS."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [dependencies]
 common.workspace = true
+protocol.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+anyhow.workspace = true
+str0m = { version = "0.21", default-features = false, features = ["aws-lc-rs"] }
+async-nats = "0.52.0"
+futures = "0.3.34"
+metrics = "0.24"

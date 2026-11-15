@@ -3,6 +3,8 @@ import { useNavigate } from "@tanstack/react-router";
 import { useLogout } from "../api/auth";
 import { ConversationKind, type Conversation } from "../gen/v1/conversations_pb";
 import type { Friend } from "../api/types";
+import { CallBar, IncomingCall } from "../call/CallBar";
+import { useCalls } from "../stores/calls";
 import { useChat } from "../stores/chat";
 import { useFriends } from "../stores/friends";
 import { useConnection } from "../stores/connection";
@@ -25,8 +27,10 @@ export function HomePage() {
 
   // Every (re)connect: listen for pushes, reload the list, sync what we missed.
   useEffect(() => {
-    if (ws && me) void useChat.getState().attach(ws, me.id);
-    if (ws) void useFriends.getState().attach(ws);
+    if (!ws) return;
+    if (me) void useChat.getState().attach(ws, me.id);
+    useCalls.getState().attach(ws, me?.id); // after chat: it chains onto chat's push handler
+    void useFriends.getState().attach(ws);
   }, [ws, me]);
 
   const selected = chat.conversations.find((c) => c.id === chat.selected);
@@ -37,6 +41,12 @@ export function HomePage() {
 
   return (
     <div className="flex h-full w-full max-w-5xl overflow-hidden rounded-xl bg-zinc-900 shadow-lg">
+      <IncomingCall
+        ws={ws}
+        callerName={(id) =>
+          chat.conversations.flatMap((c) => c.members).find((m) => m.id === id)?.username ?? "someone"
+        }
+      />
       {/* --- sidebar --- */}
       <aside className="flex w-64 shrink-0 flex-col border-r border-zinc-800">
         <header className="space-y-1 border-b border-zinc-800 p-4">
@@ -90,7 +100,10 @@ export function HomePage() {
                 onLeave={() => ws && chat.leaveGroup(ws)}
               />
             ) : (
-              <header className="border-b border-zinc-800 p-4 font-semibold">{title(selected)}</header>
+              <header className="flex items-center justify-between border-b border-zinc-800 p-4 font-semibold">
+                {title(selected)}
+                <CallBar ws={ws} conversationId={selected.id} />
+              </header>
             )}
             <Messages conversationId={selected.id} myId={me?.id} />
             <Composer disabled={!ws} onSend={(text) => ws && me && chat.send(ws, me.id, text)} />
