@@ -312,7 +312,6 @@ mod tests {
 
     use async_trait::async_trait;
     use futures::stream::BoxStream;
-    use protocol::Message as _;
 
     use super::*;
     use crate::common::error::RepoError;
