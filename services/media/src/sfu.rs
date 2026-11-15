@@ -123,6 +123,18 @@ fn run(socket: UdpSocket, cmds: Receiver<Cmd>) {
                         let _ = socket.send_to(&t.contents, t.destination);
                     }
                     Ok(Output::Timeout(t)) => {
+                        // Already due? Tick now and keep draining. str0m's
+                        // pacer lets queued packets out only on a tick, and
+                        // asks for the next tick "now" while it has more. If
+                        // we waited for the next UDP packet instead (>= 1 ms),
+                        // 1080p60 video (~800 packets/s) would back up.
+                        let now = Instant::now();
+                        if t <= now {
+                            if p.rtc.handle_input(Input::Timeout(now)).is_err() {
+                                p.rtc.disconnect();
+                            }
+                            continue;
+                        }
                         next_timeout = next_timeout.min(t);
                         break;
                     }
