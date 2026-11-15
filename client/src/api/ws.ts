@@ -20,6 +20,8 @@ export class WsClient {
   private nextId = 1n;
   private pending = new Map<bigint, { resolve: (p: Payload) => void; reject: (e: Error) => void }>();
   onPush: (payload: Payload) => void = () => {};
+  // Extra push listeners (e.g. the friends store), next to `onPush` (chat).
+  private pushListeners = new Set<(payload: Payload) => void>();
   onClose: (code: number) => void = () => {};
 
   private constructor(private ws: WebSocket) {
@@ -51,6 +53,12 @@ export class WsClient {
     return new Promise((resolve, reject) => this.pending.set(id, { resolve, reject }));
   }
 
+  /** Also get every push. Returns a function that stops listening. */
+  addPushListener(listener: (payload: Payload) => void): () => void {
+    this.pushListeners.add(listener);
+    return () => this.pushListeners.delete(listener);
+  }
+
   close() {
     this.ws.close();
   }
@@ -58,7 +66,12 @@ export class WsClient {
   private receive(bytes: Uint8Array) {
     const env = fromBinary(EnvelopeSchema, bytes);
     const waiting = this.pending.get(env.id);
-    if (!waiting) return this.onPush(env.payload); // id 0 (or unknown) = push
+    if (!waiting) {
+      // id 0 (or unknown) = push
+      this.onPush(env.payload);
+      for (const listener of this.pushListeners) listener(env.payload);
+      return;
+    }
     this.pending.delete(env.id);
     if (env.payload.case === "error") waiting.reject(new WsError(env.payload.value.code, env.payload.value.message));
     else waiting.resolve(env.payload);
