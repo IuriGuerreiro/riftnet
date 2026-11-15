@@ -46,6 +46,7 @@ message Envelope {
     CallAccept call_accept = 101;
     CallDecline call_decline = 102;
     CallJoin call_join = 103;
+    CallScreenShare call_screen_share = 104;
     CallLeave call_leave = 105;
     // server -> client (replies)
     CallResult call_result = 120;

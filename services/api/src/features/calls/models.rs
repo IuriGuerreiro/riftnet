@@ -25,6 +25,8 @@ pub struct Participant {
     pub device_id: i64,
     /// The media server's id for this device (to remove it later).
     pub peer_id: u64,
+    /// This device is sharing its screen.
+    pub sharing_screen: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -42,6 +44,19 @@ impl Call {
     /// Users connected right now (a user with 2 devices counts once).
     pub fn participant_user_ids(&self) -> Vec<i64> {
         let mut ids: Vec<i64> = self.participants.iter().map(|p| p.user_id).collect();
+        ids.sort_unstable();
+        ids.dedup();
+        ids
+    }
+
+    /// Users sharing their screen right now.
+    pub fn sharing_user_ids(&self) -> Vec<i64> {
+        let mut ids: Vec<i64> = self
+            .participants
+            .iter()
+            .filter(|p| p.sharing_screen)
+            .map(|p| p.user_id)
+            .collect();
         ids.sort_unstable();
         ids.dedup();
         ids

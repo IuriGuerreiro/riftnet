@@ -152,6 +152,7 @@ impl CallService {
             user_id: me,
             device_id,
             peer_id,
+            sharing_screen: false,
         };
         let updated = self
             .store
@@ -182,6 +183,42 @@ impl CallService {
         self.remove_device(call_id, device_id)
             .await
             .ok_or_else(not_found)
+    }
+
+    /// This device started or stopped sharing its screen. Tells everyone.
+    #[tracing::instrument(name = "calls.screen_share", skip_all, fields(user.id = me, call.id = call_id, sharing))]
+    pub async fn screen_share(
+        &self,
+        me: i64,
+        device_id: i64,
+        call_id: i64,
+        sharing: bool,
+    ) -> Result<Call, ApiError> {
+        let call = self.member_call(me, call_id).await?;
+        if !call.participants.iter().any(|p| p.device_id == device_id) {
+            return Err(ApiError::bad_request(
+                "not_joined",
+                "this device is not in the call",
+            ));
+        }
+        let call = self
+            .store
+            .update(
+                call_id,
+                Box::new(move |c| {
+                    for p in c
+                        .participants
+                        .iter_mut()
+                        .filter(|p| p.device_id == device_id)
+                    {
+                        p.sharing_screen = sharing;
+                    }
+                }),
+            )
+            .await
+            .ok_or_else(not_found)?;
+        self.push_updated(&call).await;
+        Ok(call)
     }
 
     /// The socket of this device closed: take it out of every call.
@@ -437,6 +474,24 @@ mod tests {
         svc.leave(BOB, 20, call.id).await.unwrap();
         assert_eq!(pushes(&events, ALICE).last().unwrap(), "ended");
         assert_eq!(media.left.lock().unwrap().len(), 2); // both peers freed
+    }
+
+    #[tokio::test]
+    async fn screen_share_is_pushed_and_cleared_on_leave() {
+        let (svc, events, _) = setup();
+        let call = svc.start(ALICE, DM).await.unwrap();
+        svc.join(ALICE, 10, call.id, "offer".into()).await.unwrap();
+        svc.join(BOB, 20, call.id, "offer".into()).await.unwrap();
+        // Bob's phone (not joined) can't claim to share.
+        assert!(svc.screen_share(BOB, 21, call.id, true).await.is_err());
+
+        let before = pushes(&events, BOB).len();
+        let call = svc.screen_share(ALICE, 10, call.id, true).await.unwrap();
+        assert_eq!(call.sharing_user_ids(), [ALICE]);
+        assert_eq!(pushes(&events, BOB).len(), before + 1); // Bob hears about it
+
+        let call = svc.screen_share(ALICE, 10, call.id, false).await.unwrap();
+        assert!(call.sharing_user_ids().is_empty());
     }
 
     #[tokio::test]

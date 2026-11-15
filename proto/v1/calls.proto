@@ -19,6 +19,7 @@ message Call {
   uint64 caller_id = 3;
   CallState state = 4;
   repeated uint64 participant_ids = 5; // users connected to the SFU right now
+  repeated uint64 sharing_user_ids = 6; // users sharing their screen right now
 }
 
 // --- client -> server ---
@@ -33,10 +34,16 @@ message CallJoin {
   string sdp_offer = 2;
 }
 message CallLeave { uint64 call_id = 1; }
+// This device started or stopped sharing its screen. The video itself goes
+// through the SFU; this only tells the others to show or hide it.
+message CallScreenShare {
+  uint64 call_id = 1;
+  bool sharing = 2;
+}
 
 // --- server -> client (replies) ---
 
-message CallResult { Call call = 1; }  // reply to start / accept / decline / leave
+message CallResult { Call call = 1; }  // reply to start / accept / decline / leave / screen_share
 message CallJoined {
   Call call = 1;
   string sdp_answer = 2;

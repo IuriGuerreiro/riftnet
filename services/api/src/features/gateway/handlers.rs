@@ -34,6 +34,17 @@ pub async fn dispatch(
                 .await,
         ),
         Payload::CallJoin(req) => call_join(state, session, req).await,
+        Payload::CallScreenShare(req) => call_result(
+            state
+                .calls
+                .screen_share(
+                    session.user_id,
+                    session.device_id,
+                    req.call_id as i64,
+                    req.sharing,
+                )
+                .await,
+        ),
         Payload::CallLeave(req) => call_result(
             state
                 .calls

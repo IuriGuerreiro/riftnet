@@ -16,6 +16,11 @@ impl From<&Call> for v1::Call {
                 .into_iter()
                 .map(|id| id as u64)
                 .collect(),
+            sharing_user_ids: c
+                .sharing_user_ids()
+                .into_iter()
+                .map(|id| id as u64)
+                .collect(),
         }
     }
 }
