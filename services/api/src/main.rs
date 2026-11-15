@@ -11,12 +11,11 @@ use crate::common::middleware::http_metrics;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // Load .env before telemetry so OTEL_* and APP_ENV from it apply.
+    // WARN: load .env before telemetry so OTEL_* and APP_ENV apply.
     let _ = dotenvy::dotenv();
     let mut telemetry = ::common::telemetry::init("api", env!("CARGO_PKG_VERSION"));
     let config = config::Config::from_env()?;
 
-    // `/metrics` (Prometheus) always; OTLP too when enabled.
     let prometheus = PrometheusBuilder::new()
         .set_buckets_for_metric(
             Matcher::Full(http_metrics::REQUEST_DURATION.into()),
@@ -42,7 +41,6 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Ctrl+C or SIGTERM: stop accepting requests, then flush telemetry.
 async fn shutdown_signal() {
     let ctrl_c = async {
         let _ = tokio::signal::ctrl_c().await;

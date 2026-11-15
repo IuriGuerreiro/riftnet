@@ -1,8 +1,7 @@
 import { z } from "zod";
 
-// Same rules as the api, checked before sending.
 export const credentialsSchema = z.object({
-  email: z.string().trim().email("That doesn't look like an email"),
+  email: z.email("That doesn't look like an email").trim(),
   password: z.string().min(8, "At least 8 characters").max(128),
 });
 export type Credentials = z.infer<typeof credentialsSchema>;

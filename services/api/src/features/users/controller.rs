@@ -29,7 +29,6 @@ pub async fn set_username(
     ))
 }
 
-/// Search runs on every keystroke, so allow a burst but not a scrape.
 const SEARCH_LIMIT_PER_USER: u32 = 30;
 const SEARCH_WINDOW: Duration = Duration::from_secs(10);
 

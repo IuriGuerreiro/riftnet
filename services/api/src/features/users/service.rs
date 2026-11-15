@@ -32,8 +32,6 @@ impl UserService {
         }
     }
 
-    /// Finds users whose username starts with `raw_query` (case-insensitive),
-    /// never including `me`.
     #[tracing::instrument(name = "users.search", skip_all, fields(user.id = me))]
     pub async fn search(
         &self,
@@ -57,7 +55,6 @@ impl UserService {
 pub const SEARCH_DEFAULT_LIMIT: u32 = 20;
 pub const SEARCH_MAX_LIMIT: u32 = 50;
 
-/// Missing → 20. Clamped to 1..=50.
 fn search_limit(requested: Option<u32>) -> i64 {
     requested
         .unwrap_or(SEARCH_DEFAULT_LIMIT)
@@ -65,7 +62,6 @@ fn search_limit(requested: Option<u32>) -> i64 {
         .into()
 }
 
-/// Same characters as a username, but 1–32 long (it's a prefix).
 fn normalize_search_query(raw: &str) -> Result<String, ApiError> {
     let query = raw.trim().to_lowercase();
     let len_ok = (1..=32).contains(&query.chars().count());
@@ -81,8 +77,6 @@ fn normalize_search_query(raw: &str) -> Result<String, ApiError> {
     Ok(query)
 }
 
-/// The first string after every string that starts with `prefix`:
-/// "mon" → "moo". Safe because the query is plain ASCII (checked above).
 fn prefix_upper_bound(prefix: &str) -> String {
     let mut bytes = prefix.as_bytes().to_vec();
     if let Some(last) = bytes.last_mut() {
@@ -91,7 +85,6 @@ fn prefix_upper_bound(prefix: &str) -> String {
     String::from_utf8(bytes).expect("ascii stays ascii")
 }
 
-/// 3–32 chars, lowercase letters, digits, `_` and `.`. Stored lowercase.
 pub fn normalize_username(raw: &str) -> Result<String, ApiError> {
     let username = raw.trim().to_lowercase();
     let len_ok = (3..=32).contains(&username.chars().count());

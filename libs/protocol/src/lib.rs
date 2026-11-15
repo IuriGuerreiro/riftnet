@@ -1,5 +1,3 @@
-//! Generated protobuf types. Edit the `.proto` files in `proto/`, not this.
-
 pub mod v1 {
     include!(concat!(env!("OUT_DIR"), "/app.v1.rs"));
 }

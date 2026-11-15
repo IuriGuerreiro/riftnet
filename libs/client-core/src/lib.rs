@@ -1,10 +1,6 @@
-//! The client "brain". Used by the Tauri shell, tests, a CLI and (later) SDKs.
-//! Must not depend on Tauri or any UI code.
-
 use protocol::Message;
 use protocol::v1::{Envelope, Ping, envelope::Payload};
 
-/// Encodes a ping request. Placeholder until the WebSocket client lands.
 pub fn encode_ping(id: u64) -> Vec<u8> {
     Envelope {
         id,

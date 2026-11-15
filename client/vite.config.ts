@@ -1,8 +1,7 @@
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import react from "@vitejs/plugin-react";
+import { defineConfig } from "vite";
 
-// Same config serves the web build and the Tauri desktop shell.
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   clearScreen: false,
@@ -10,7 +9,6 @@ export default defineConfig({
     host: "127.0.0.1",
     port: 7104,
     strictPort: true,
-    // Allow access through Tailscale MagicDNS (tailscale serve proxies HTTPS to this port).
     allowedHosts: [".ts.net"],
   },
 });

@@ -1,9 +1,3 @@
-//! Where live calls are kept.
-//!
-//! In memory for now: correct only with ONE api server. With several, swap in
-//! a Redis implementation of `CallStore` (the service won't change).
-//! Calls are short-lived, so losing them on restart is OK: clients just call again.
-
 use std::collections::HashMap;
 use std::sync::Mutex;
 
@@ -17,29 +11,21 @@ pub type Condition = Box<dyn FnOnce(&Call) -> bool + Send>;
 #[derive(Debug, PartialEq, Eq)]
 pub enum AddError {
     NotFound,
-    /// This user is already in the call (from another device or tab).
     AlreadyIn,
 }
 
 #[async_trait]
 pub trait CallStore: Send + Sync {
     async fn get(&self, call_id: i64) -> Option<Call>;
-    /// Saves `call`, unless the conversation already has one: then returns that one.
     async fn insert_if_none(&self, call: Call) -> Result<Call, Call>;
-    /// Changes a call in place (atomically). Returns the new version.
     async fn update(&self, call_id: i64, change: Update) -> Option<Call>;
-    /// Adds a participant, unless that user is already in. Check + add are one step,
-    /// so two devices joining at the same moment can't both get in.
-    /// `activate`: also mark the call as answered.
     async fn add_participant(
         &self,
         call_id: i64,
         p: Participant,
         activate: bool,
     ) -> Result<Call, AddError>;
-    /// Removes the call only if `condition` holds (checked in the same step).
     async fn remove_if(&self, call_id: i64, condition: Condition) -> Option<Call>;
-    /// Calls a WebSocket connection is in.
     async fn with_connection(&self, connection_id: u64) -> Vec<Call>;
 }
 

@@ -1,6 +1,3 @@
-//! Simple in-memory fixed-window rate limiter. Good enough for one api
-//! instance; move to Redis when we run several.
-
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -13,12 +10,10 @@ pub struct RateLimiter {
 }
 
 impl RateLimiter {
-    /// Allows `limit` hits per `window` for `key`, else `TooManyRequests`.
     pub fn check(&self, key: &str, limit: u32, window: Duration) -> Result<(), ApiError> {
         let mut windows = self.windows.lock().expect("rate limiter mutex poisoned");
         let now = Instant::now();
 
-        // Drop old entries now and then so the map doesn't grow forever.
         if windows.len() > 10_000 {
             windows.retain(|_, (start, _)| now.duration_since(*start) < window);
         }
@@ -35,8 +30,6 @@ impl RateLimiter {
         Ok(())
     }
 
-    /// Like `check`, but doesn't count this hit. Pair with `record` to only
-    /// count some outcomes (e.g. failed logins).
     pub fn ensure_below(&self, key: &str, limit: u32, window: Duration) -> Result<(), ApiError> {
         let windows = self.windows.lock().expect("rate limiter mutex poisoned");
         match windows.get(key) {
@@ -48,7 +41,6 @@ impl RateLimiter {
         }
     }
 
-    /// Counts one hit for `key` without checking a limit.
     pub fn record(&self, key: &str, window: Duration) {
         let mut windows = self.windows.lock().expect("rate limiter mutex poisoned");
         let now = Instant::now();
@@ -60,8 +52,6 @@ impl RateLimiter {
     }
 }
 
-/// Counts a blocked request. The label is the rule (`login:ip`), never the
-/// IP or email part of the key.
 fn limited(key: &str) {
     metrics::counter!("rate_limited_requests_total", "rule" => rule(key)).increment(1);
 }

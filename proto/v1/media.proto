@@ -8,17 +8,17 @@ package app.v1;
 //   media.join   request/reply  MediaJoin -> MediaJoinReply
 //   media.leave  publish        MediaLeave
 
-// Add one device to a room (room = call id).
 message MediaJoin {
   uint64 room_id = 1;
   string sdp_offer = 2;
 }
 
 message MediaJoinReply {
-  uint64 peer_id = 1;     // use it to remove this device later
+  uint64 peer_id = 1;
   string sdp_answer = 2;
-  string error = 3;        // set instead of the above when the offer is bad
+  string error = 3;
 }
 
-// Remove a device from its room (it left, or its socket closed).
-message MediaLeave { uint64 peer_id = 1; }
+message MediaLeave {
+  uint64 peer_id = 1;
+}

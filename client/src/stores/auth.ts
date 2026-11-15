@@ -1,12 +1,11 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+
 import type { Session, User } from "../api/types";
 
-// Auth state for the whole app.
-// TODO(desktop): move tokens to the OS keychain via client-core instead of localStorage.
 interface AuthState {
   accessToken: string | null;
-  accessExpiresAt: number | null; // unix seconds
+  accessExpiresAt: number | null;
   refreshToken: string | null;
   user: User | null;
   setSession: (s: Session) => void;
@@ -29,14 +28,13 @@ export const useAuth = create<AuthState>()(
           user: s.user,
         }),
       setUser: (user) => set({ user }),
-      clear: () => set({ accessToken: null, accessExpiresAt: null, refreshToken: null, user: null }),
+      clear: () =>
+        set({ accessToken: null, accessExpiresAt: null, refreshToken: null, user: null }),
     }),
     { name: "auth" },
   ),
 );
 
-// Keep tabs in sync: when another tab logs in, refreshes or logs out,
-// reload the tokens from localStorage.
 window.addEventListener("storage", (e) => {
   if (e.key === "auth") void useAuth.persist.rehydrate();
 });

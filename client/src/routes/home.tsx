@@ -1,33 +1,30 @@
-import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { useEffect, useRef, useState } from "react";
+
 import { useLogout } from "../api/auth";
-import type { Conversation } from "../gen/v1/conversations_pb";
 import { CallBar, IncomingCall, RemoteScreen } from "../call/CallBar";
+import type { Conversation } from "../gen/v1/conversations_pb";
 import { useCalls } from "../stores/calls";
 import { useChat } from "../stores/chat";
 import { useConnection } from "../stores/connection";
 
 const dot = { online: "bg-green-500", connecting: "bg-yellow-500", offline: "bg-red-500" };
 
-// Test chat screen: DM list on the left, the open chat on the right.
-// Plain on purpose; José's designs replace it.
 export function HomePage() {
   const logout = useLogout();
   const navigate = useNavigate();
   const { status, error: connError, ws, user: me, connect, disconnect } = useConnection();
   const chat = useChat();
 
-  // Keep the socket open while this page is shown.
   useEffect(() => {
     void connect();
     return disconnect;
   }, [connect, disconnect]);
 
-  // Every (re)connect: listen for pushes, reload the list, sync what we missed.
   useEffect(() => {
     if (!ws) return;
     void useChat.getState().attach(ws);
-    useCalls.getState().attach(ws, me?.id); // after chat: it chains onto chat's push handler
+    useCalls.getState().attach(ws, me?.id);
   }, [ws, me?.id]);
 
   const selected = chat.conversations.find((c) => c.id === chat.selected);
@@ -39,10 +36,11 @@ export function HomePage() {
       <IncomingCall
         ws={ws}
         callerName={(id) =>
-          chat.conversations.flatMap((c) => c.members).find((m) => m.id === id)?.username ?? "someone"
+          chat.conversations.flatMap((c) => c.members).find((m) => m.id === id)?.username ??
+          "someone"
         }
       />
-      {/* --- sidebar --- */}
+      {}
       <aside className="flex w-64 shrink-0 flex-col border-r border-zinc-800">
         <header className="space-y-1 border-b border-zinc-800 p-4">
           <p className="font-bold">
@@ -67,21 +65,23 @@ export function HomePage() {
               @{other(c)?.username}
             </button>
           ))}
-          {chat.conversations.length === 0 && <p className="p-4 text-xs text-zinc-500">No DMs yet.</p>}
+          {chat.conversations.length === 0 && (
+            <p className="p-4 text-xs text-zinc-500">No DMs yet.</p>
+          )}
         </nav>
 
         <button
           className="border-t border-zinc-800 p-3 text-sm text-zinc-400 hover:text-zinc-100"
           onClick={() => {
             disconnect();
-            logout.mutate(undefined, { onSettled: () => navigate({ to: "/login" }) });
+            logout.mutate(undefined, { onSettled: () => void navigate({ to: "/login" }) });
           }}
         >
           Log out
         </button>
       </aside>
 
-      {/* --- chat --- */}
+      {}
       <section className="flex min-w-0 flex-1 flex-col">
         {selected ? (
           <>
@@ -119,7 +119,10 @@ function NewDm({ disabled, onOpen }: { disabled: boolean; onOpen: (username: str
         placeholder="username"
         className="min-w-0 flex-1 rounded-md bg-zinc-800 px-2 py-1 text-sm outline-none ring-brand focus:ring-2"
       />
-      <button disabled={disabled} className="rounded-md bg-brand px-2 text-sm font-semibold text-zinc-950 disabled:opacity-50">
+      <button
+        disabled={disabled}
+        className="rounded-md bg-brand px-2 text-sm font-semibold text-zinc-950 disabled:opacity-50"
+      >
         DM
       </button>
     </form>
@@ -174,7 +177,10 @@ function Composer({ disabled, onSend }: { disabled: boolean; onSend: (text: stri
         maxLength={4000}
         className="min-w-0 flex-1 rounded-lg bg-zinc-800 px-3 py-2 text-sm outline-none ring-brand focus:ring-2"
       />
-      <button disabled={disabled} className="rounded-lg bg-brand px-4 font-semibold text-zinc-950 disabled:opacity-50">
+      <button
+        disabled={disabled}
+        className="rounded-lg bg-brand px-4 font-semibold text-zinc-950 disabled:opacity-50"
+      >
         Send
       </button>
     </form>

@@ -1,6 +1,3 @@
-//! The `MessageRepo` trait (what the service needs from storage) and its
-//! implementation for Scylla. The Scylla struct is in `scylla_message_repo.rs`.
-
 use anyhow::Context;
 use async_trait::async_trait;
 use scylla::statement::Consistency;
@@ -12,8 +9,6 @@ use crate::features::messages::models::{Message, bucket_at, bucket_of};
 
 #[async_trait]
 pub trait MessageRepo: Send + Sync {
-    /// Ties a client nonce to `new_id`. Returns `(id, true)` the first time,
-    /// or `(the id from the first time, false)` for a retry.
     async fn claim_nonce(
         &self,
         conversation_id: i64,
@@ -23,8 +18,6 @@ pub trait MessageRepo: Send + Sync {
     ) -> Result<(i64, bool), RepoError>;
     async fn get(&self, conversation_id: i64, id: i64) -> Result<Option<Message>, RepoError>;
     async fn insert(&self, message: &Message) -> Result<(), RepoError>;
-    /// Up to `limit` messages older than `before_id` (None = newest), newest first.
-    /// Doesn't look before `oldest_id` (the conversation's creation).
     async fn history(
         &self,
         conversation_id: i64,
@@ -32,8 +25,6 @@ pub trait MessageRepo: Send + Sync {
         limit: usize,
         oldest_id: i64,
     ) -> Result<Vec<Message>, RepoError>;
-    /// Messages with `seq > after_seq`, newest first, at most `limit`.
-    /// Walks back from now and stops at the first message the client already has.
     async fn since_seq(
         &self,
         conversation_id: i64,
@@ -53,7 +44,6 @@ impl MessageRepo for ScyllaMessageRepo {
         nonce: &str,
         new_id: i64,
     ) -> Result<(i64, bool), RepoError> {
-        // Same pattern as dm_keys: only goes in if this nonce is new (IF NOT EXISTS).
         let insert_reply = self
             .session
             .execute_unpaged(
@@ -69,9 +59,8 @@ impl MessageRepo for ScyllaMessageRepo {
             return Ok((new_id, true));
         }
 
-        // A retry: read the message id the first send used.
         let mut read_nonce = self.get_nonce.clone();
-        read_nonce.set_consistency(Consistency::Serial); // see the LWT's result for sure
+        read_nonce.set_consistency(Consistency::Serial);
         let (id,) = self
             .session
             .execute_unpaged(&read_nonce, (conversation_id, author_id, nonce))
@@ -126,8 +115,6 @@ impl MessageRepo for ScyllaMessageRepo {
         limit: usize,
         oldest_id: i64,
     ) -> Result<Vec<Message>, RepoError> {
-        // Walk buckets from newest to oldest until we have `limit` messages.
-        // Each bucket is one partition = one fast read.
         let before = before_id.unwrap_or(i64::MAX);
         let newest_bucket = match before_id {
             Some(id) => bucket_of(id),
@@ -163,8 +150,6 @@ impl MessageRepo for ScyllaMessageRepo {
         limit: usize,
         oldest_id: i64,
     ) -> Result<Vec<Message>, RepoError> {
-        // Same walk as history (newest bucket first), but instead of counting
-        // to a limit we stop at the first message the client already has.
         let newest_bucket = bucket_at(chrono::Utc::now().timestamp_millis() as u64);
         let oldest_bucket = bucket_of(oldest_id);
 
@@ -184,7 +169,7 @@ impl MessageRepo for ScyllaMessageRepo {
             for row in rows.rows::<Row>().context("sync")? {
                 let message = to_message(row.context("sync")?);
                 if message.seq <= after_seq {
-                    return Ok(out); // reached what the client has
+                    return Ok(out);
                 }
                 out.push(message);
             }

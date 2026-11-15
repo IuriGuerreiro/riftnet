@@ -1,10 +1,6 @@
-// Driven by scripts/smoke-calls.sh. Two headless Chromium tabs, fake mics, real app code
-// (imported through vite): A calls B → B accepts → audio flows → A hangs up → B sees it end.
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 const [TA, NA, TB, NB] = readFileSync(process.argv[3], "utf8").trim().split("\n");
-// UI_URL: the client to test (default local vite). CHROME_FLAGS: extra flags,
-// e.g. --host-resolver-rules="MAP host.ts.net 100.x.y.z" when DNS can't resolve it.
 const UI = process.env.UI_URL ?? "http://localhost:7104";
 const extra = process.env.CHROME_FLAGS ? [process.env.CHROME_FLAGS] : [];
 const chrome = spawn("chromium", [...extra, "--headless=new", "--remote-debugging-port=9334",

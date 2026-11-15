@@ -1,0 +1,6 @@
+pnpm-lock.yaml
+client/src/gen/
+client/src-tauri/
+target/
+dist/
+*.md

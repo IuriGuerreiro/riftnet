@@ -1,13 +1,3 @@
-//! Call logic: who may call, ringing, joining the SFU, ending.
-//!
-//! 1. `start`: creates the call, rings the other members (push `call_incoming`).
-//! 2. `accept` / `decline`: the callee answers. Nobody in 30s → ended "missed".
-//! 3. `join`: a device sends its WebRTC offer; we ask the media server for an answer.
-//! 4. `leave` (or the socket closes): last device out ends the call.
-//!
-//! Every change is pushed to all members (`call_updated` / `call_ended`),
-//! so all their devices stay in sync (e.g. stop ringing once one accepts).
-
 use std::sync::Arc;
 
 use bytes::Bytes;
@@ -47,7 +37,6 @@ impl CallService {
         }
     }
 
-    /// Starts a call in a conversation, or returns the one already going.
     #[tracing::instrument(name = "calls.start", skip_all, fields(user.id = me, conversation.id = conversation_id))]
     pub async fn start(self: &Arc<Self>, me: i64, conversation_id: i64) -> Result<Call, ApiError> {
         let conversation = self
@@ -69,7 +58,7 @@ impl CallService {
         };
         let call = match self.store.insert_if_none(call).await {
             Ok(new) => new,
-            Err(existing) => return Ok(existing), // already a call here: join that one
+            Err(existing) => return Ok(existing),
         };
 
         let others: Vec<i64> = call
@@ -86,13 +75,10 @@ impl CallService {
         )
         .await;
 
-        // Nobody answers in time → missed.
         let this = Arc::clone(self);
         let call_id = call.id;
         tokio::spawn(async move {
             tokio::time::sleep(RING_TIMEOUT).await;
-            // Only if still ringing, checked in the same step as the removal:
-            // an accept right now must win.
             this.end_if(call_id, EndReason::Missed, Box::new(still_ringing))
                 .await;
         });
@@ -112,7 +98,6 @@ impl CallService {
         Ok(call)
     }
 
-    /// 1:1: declining a ringing call ends it. Declining an active call does nothing.
     #[tracing::instrument(name = "calls.decline", skip_all, fields(user.id = me, call.id = call_id))]
     pub async fn decline(&self, me: i64, call_id: i64) -> Result<Call, ApiError> {
         let call = self.member_call(me, call_id).await?;
@@ -123,7 +108,6 @@ impl CallService {
         Ok(call)
     }
 
-    /// Connects this device to the call's SFU. Returns the SDP answer.
     #[tracing::instrument(name = "calls.join", skip_all, fields(user.id = me, call.id = call_id))]
     pub async fn join(
         &self,
@@ -134,7 +118,6 @@ impl CallService {
         sdp_offer: String,
     ) -> Result<(Call, String), ApiError> {
         let call = self.member_call(me, call_id).await?;
-        // Quick check (the store checks again atomically below).
         if call.participants.iter().any(|p| p.user_id == me) {
             return Err(already_in());
         }
@@ -151,7 +134,6 @@ impl CallService {
             peer_id,
             sharing_screen: false,
         };
-        // The callee joining counts as accepting.
         let activate = call.caller_id != me;
         let call = match self
             .store
@@ -160,8 +142,6 @@ impl CallService {
         {
             Ok(call) => call,
             Err(e) => {
-                // Lost a race (other device got in first, or the call ended
-                // meanwhile): free the media slot we just took.
                 let _ = self.media.leave(peer_id).await;
                 return Err(match e {
                     AddError::AlreadyIn => already_in(),
@@ -173,7 +153,6 @@ impl CallService {
         Ok((call, answer))
     }
 
-    /// Takes this connection out of the call. Ends it if nobody is left to talk to.
     #[tracing::instrument(name = "calls.leave", skip_all, fields(user.id = me, call.id = call_id))]
     pub async fn leave(&self, me: i64, connection_id: u64, call_id: i64) -> Result<Call, ApiError> {
         self.member_call(me, call_id).await?;
@@ -182,7 +161,6 @@ impl CallService {
             .ok_or_else(not_found)
     }
 
-    /// This connection started or stopped sharing its screen. Tells everyone.
     #[tracing::instrument(name = "calls.screen_share", skip_all, fields(user.id = me, call.id = call_id, sharing))]
     pub async fn screen_share(
         &self,
@@ -222,8 +200,6 @@ impl CallService {
         Ok(call)
     }
 
-    /// A WebSocket closed: take it out of every call. Other tabs of the same
-    /// device are not touched.
     pub async fn connection_closed(&self, connection_id: u64) {
         for call in self.store.with_connection(connection_id).await {
             self.remove_connection(call.id, connection_id).await;
@@ -237,7 +213,6 @@ impl CallService {
             .update(
                 call_id,
                 Box::new(move |c| {
-                    // Hand back the device's peers so we can tell the media server.
                     for p in c
                         .participants
                         .iter()
@@ -253,8 +228,6 @@ impl CallService {
         for peer_id in peers {
             let _ = self.media.leave(peer_id).await;
         }
-        // Ends when nobody is left to talk to: the last person left, or the
-        // call was answered and now only one person remains.
         let alone = call.state == CallState::Active && call.participant_user_ids().len() < 2;
         if call.participants.is_empty() || alone {
             self.end(call_id, EndReason::Hangup).await;
@@ -268,7 +241,6 @@ impl CallService {
         self.end_if(call_id, reason, Box::new(|_| true)).await;
     }
 
-    /// Ends the call if `condition` still holds at removal time.
     async fn end_if(&self, call_id: i64, reason: EndReason, condition: super::store::Condition) {
         let Some(call) = self.store.remove_if(call_id, condition).await else {
             return;
@@ -285,7 +257,6 @@ impl CallService {
         self.push(&call.member_ids, Payload::CallEnded(ended)).await;
     }
 
-    /// The call, if it exists and `me` is in its conversation.
     async fn member_call(&self, me: i64, call_id: i64) -> Result<Call, ApiError> {
         self.store
             .get(call_id)
@@ -343,7 +314,7 @@ mod tests {
 
     const ALICE: i64 = 1;
     const BOB: i64 = 2;
-    const EVE: i64 = 3; // not in the DM
+    const EVE: i64 = 3;
     const DM: i64 = 100;
 
     struct FakeConversations;
@@ -388,7 +359,6 @@ mod tests {
         }
     }
 
-    /// Records every push as (user, payload kind).
     #[derive(Default)]
     struct FakeEvents {
         sent: Mutex<Vec<(i64, String)>>,
@@ -496,18 +466,16 @@ mod tests {
         svc.join(BOB, 20, 20, call.id, "offer".into())
             .await
             .unwrap();
-        // Bob's tablet (other device, other socket) tries to join too.
         let err = svc
             .join(BOB, 21, 21, call.id, "offer".into())
             .await
             .unwrap_err();
         assert_eq!(err.describe().1, "already_in_call");
-        assert!(media.left.lock().unwrap().is_empty()); // quick check: never reached media
+        assert!(media.left.lock().unwrap().is_empty());
     }
 
     #[tokio::test]
     async fn store_rejects_second_device_even_if_quick_check_passed() {
-        // Two devices racing: both pass the quick check, the store lets one in.
         let store = MemoryCallStore::default();
         let mut call = test_call();
         call.participants.clear();
@@ -533,10 +501,10 @@ mod tests {
     async fn decline_after_accept_does_not_end_the_call() {
         let (svc, events, _) = setup();
         let call = svc.start(ALICE, DM).await.unwrap();
-        svc.accept(BOB, call.id).await.unwrap(); // Bob's phone accepts
-        svc.decline(BOB, call.id).await.unwrap(); // Bob's laptop (stale banner) declines
+        svc.accept(BOB, call.id).await.unwrap();
+        svc.decline(BOB, call.id).await.unwrap();
         assert!(!pushes(&events, ALICE).contains(&"ended".to_string()));
-        assert!(svc.accept(BOB, call.id).await.is_ok()); // still there
+        assert!(svc.accept(BOB, call.id).await.is_ok());
     }
 
     #[tokio::test]
@@ -545,13 +513,13 @@ mod tests {
         let call = svc.start(ALICE, DM).await.unwrap();
         svc.join(ALICE, 10, 100, call.id, "offer".into())
             .await
-            .unwrap(); // tab A
+            .unwrap();
         svc.join(BOB, 20, 20, call.id, "offer".into())
             .await
             .unwrap();
-        svc.connection_closed(101).await; // tab B, same device 10, closes
+        svc.connection_closed(101).await;
         assert!(!pushes(&events, BOB).contains(&"ended".to_string()));
-        svc.connection_closed(100).await; // tab A closes
+        svc.connection_closed(100).await;
         assert_eq!(pushes(&events, BOB).last().unwrap(), "ended");
     }
 
@@ -561,7 +529,7 @@ mod tests {
         let call = svc.start(ALICE, DM).await.unwrap();
         svc.decline(BOB, call.id).await.unwrap();
         assert_eq!(pushes(&events, ALICE), ["ended"]);
-        assert!(svc.accept(BOB, call.id).await.is_err()); // gone
+        assert!(svc.accept(BOB, call.id).await.is_err());
     }
 
     #[tokio::test]
@@ -577,7 +545,7 @@ mod tests {
 
         svc.leave(BOB, 20, call.id).await.unwrap();
         assert_eq!(pushes(&events, ALICE).last().unwrap(), "ended");
-        assert_eq!(media.left.lock().unwrap().len(), 2); // both peers freed
+        assert_eq!(media.left.lock().unwrap().len(), 2);
     }
 
     #[tokio::test]
@@ -590,13 +558,12 @@ mod tests {
         svc.join(BOB, 20, 20, call.id, "offer".into())
             .await
             .unwrap();
-        // Bob's other socket (not joined) can't claim to share.
         assert!(svc.screen_share(BOB, 21, call.id, true).await.is_err());
 
         let before = pushes(&events, BOB).len();
         let call = svc.screen_share(ALICE, 10, call.id, true).await.unwrap();
         assert_eq!(call.sharing_user_ids(), [ALICE]);
-        assert_eq!(pushes(&events, BOB).len(), before + 1); // Bob hears about it
+        assert_eq!(pushes(&events, BOB).len(), before + 1);
 
         let call = svc.screen_share(ALICE, 10, call.id, false).await.unwrap();
         assert!(call.sharing_user_ids().is_empty());
@@ -611,7 +578,7 @@ mod tests {
             .unwrap();
         assert!(!pushes(&events, BOB).contains(&"ended".to_string()));
 
-        svc.connection_closed(10).await; // Alice's socket drops
+        svc.connection_closed(10).await;
         assert_eq!(pushes(&events, BOB).last().unwrap(), "ended");
     }
 }

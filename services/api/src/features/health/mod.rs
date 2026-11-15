@@ -1,5 +1,3 @@
-//! `/health` for load balancers, `/metrics` for Prometheus.
-
 use axum::Router;
 use axum::routing::get;
 use metrics_exporter_prometheus::PrometheusHandle;
