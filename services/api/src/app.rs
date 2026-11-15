@@ -23,17 +23,20 @@ use crate::features::calls::service::CallService;
 use crate::features::calls::store::MemoryCallStore;
 use crate::features::conversations::repository::{ConversationRepo, ScyllaConversationRepo};
 use crate::features::conversations::service::ConversationService;
+use crate::features::friends::repository::PgFriendRepo;
+use crate::features::friends::service::FriendService;
 use crate::features::messages::repository::ScyllaMessageRepo;
 use crate::features::messages::service::MessageService;
 use crate::features::users::repository::{PgUserRepo, UserRepo};
 use crate::features::users::service::UserService;
-use crate::features::{auth, gateway, health, users};
+use crate::features::{auth, friends, gateway, health, users};
 
 #[derive(Clone)]
 pub struct AppState {
     pub auth: Arc<AuthService>,
     pub users: Arc<UserService>,
     pub conversations: Arc<ConversationService>,
+    pub friends: Arc<FriendService>,
     pub messages: Arc<MessageService>,
     pub calls: Arc<CallService>,
     pub tokens: Arc<TokenService>,
@@ -64,6 +67,7 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
     let conversation_repo: Arc<dyn ConversationRepo> =
         Arc::new(ScyllaConversationRepo::new(scylla.clone()).await?);
     let message_repo = Arc::new(ScyllaMessageRepo::new(scylla).await?);
+    let friend_repo = Arc::new(PgFriendRepo::new(pool.clone()));
 
     let state = AppState {
         auth: Arc::new(AuthService::new(
@@ -92,6 +96,11 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
             events.clone(),
             ids,
         )),
+        friends: Arc::new(FriendService::new(
+            friend_repo,
+            user_repo.clone(),
+            events.clone(),
+        )),
         users: Arc::new(UserService::new(user_repo)),
         tokens,
         limiter: Arc::new(RateLimiter::default()),
@@ -112,6 +121,7 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
         .merge(health::routes(prometheus))
         .merge(auth::routes())
         .merge(users::routes())
+        .merge(friends::routes())
         .merge(gateway::routes())
         .layer(middleware::from_fn(http_metrics::track))
         .layer(cors)

@@ -2,9 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useLogout } from "../api/auth";
 import { ConversationKind, type Conversation } from "../gen/v1/conversations_pb";
+import type { Friend } from "../api/types";
 import { CallBar, IncomingCall } from "../call/CallBar";
 import { useCalls } from "../stores/calls";
 import { useChat } from "../stores/chat";
+import { useFriends } from "../stores/friends";
 import { useConnection } from "../stores/connection";
 
 const dot = { online: "bg-green-500", connecting: "bg-yellow-500", offline: "bg-red-500" };
@@ -28,6 +30,7 @@ export function HomePage() {
     if (!ws) return;
     if (me) void useChat.getState().attach(ws, me.id);
     useCalls.getState().attach(ws, me?.id); // after chat: it chains onto chat's push handler
+    void useFriends.getState().attach(ws);
   }, [ws, me]);
 
   const selected = chat.conversations.find((c) => c.id === chat.selected);
@@ -59,6 +62,7 @@ export function HomePage() {
 
         <NewDm disabled={!ws} onOpen={(username) => ws && chat.openDm(ws, username)} />
         <NewGroup disabled={!ws} onCreate={(name, usernames) => ws && chat.createGroup(ws, name, usernames)} />
+        <FriendsPanel onDm={(username) => ws && chat.openDm(ws, username)} />
 
         <nav className="flex-1 overflow-y-auto">
           {chat.conversations.map((c) => (
@@ -187,6 +191,93 @@ function GroupHeader({
         </form>
       )}
     </header>
+  );
+}
+
+// Friends: add by username, answer requests, DM or remove friends.
+function FriendsPanel({ onDm }: { onDm: (username: string) => void }) {
+  const { list, error, sendRequest, accept, deleteRequest, removeFriend } = useFriends();
+  const [open, setOpen] = useState(true);
+  const [username, setUsername] = useState("");
+  const name = (f: Friend) => `@${f.user.username ?? f.user.id}`;
+  const pendingCount = list.incoming.length;
+
+  return (
+    <section className="border-b border-zinc-800">
+      <button
+        className="flex w-full items-center justify-between px-3 py-2 text-xs font-semibold uppercase tracking-wide text-zinc-400 hover:text-zinc-100"
+        onClick={() => setOpen(!open)}
+      >
+        <span>
+          Friends ({list.friends.length})
+          {pendingCount > 0 && <span className="ml-2 rounded-full bg-brand px-1.5 text-zinc-950">{pendingCount}</span>}
+        </span>
+        <span>{open ? "−" : "+"}</span>
+      </button>
+
+      {open && (
+        <div className="max-h-72 space-y-2 overflow-y-auto px-3 pb-3">
+          <form
+            className="flex gap-2"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              if (!username.trim()) return;
+              if (await sendRequest(username.trim())) setUsername("");
+            }}
+          >
+            <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="add friend" className={field} />
+            <button className="rounded-md bg-zinc-700 px-2 text-sm hover:bg-zinc-600">Add</button>
+          </form>
+          {error && <p className="text-xs text-red-400">{error}</p>}
+
+          {list.incoming.map((f) => (
+            <FriendRow key={f.user.id} label={name(f)} hint="wants to be friends">
+              <RowButton onClick={() => accept(f.user.id)} className="text-green-400">Accept</RowButton>
+              <RowButton onClick={() => deleteRequest(f.user.id)} className="text-red-400">Decline</RowButton>
+            </FriendRow>
+          ))}
+          {list.outgoing.map((f) => (
+            <FriendRow key={f.user.id} label={name(f)} hint="request sent">
+              <RowButton onClick={() => deleteRequest(f.user.id)} className="text-zinc-400">Cancel</RowButton>
+            </FriendRow>
+          ))}
+          {list.friends.map((f) => (
+            <FriendRow key={f.user.id} label={name(f)}>
+              <RowButton onClick={() => f.user.username && onDm(f.user.username)} className="text-brand">DM</RowButton>
+              <RowButton
+                onClick={() => confirm(`Remove ${name(f)} from friends?`) && removeFriend(f.user.id)}
+                className="text-red-400"
+              >
+                Remove
+              </RowButton>
+            </FriendRow>
+          ))}
+          {list.friends.length + list.incoming.length + list.outgoing.length === 0 && (
+            <p className="text-xs text-zinc-500">No friends yet. Add someone by username.</p>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function FriendRow({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-2 text-sm">
+      <div className="min-w-0 flex-1">
+        <p className="truncate">{label}</p>
+        {hint && <p className="text-xs text-zinc-500">{hint}</p>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function RowButton({ onClick, className, children }: { onClick: () => void; className: string; children: React.ReactNode }) {
+  return (
+    <button onClick={onClick} className={`text-xs hover:underline ${className}`}>
+      {children}
+    </button>
   );
 }
 

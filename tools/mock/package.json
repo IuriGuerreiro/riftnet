@@ -6,7 +6,8 @@
   "description": "Fake API for UI work. Speaks the same protobuf contracts as services/api.",
   "scripts": {
     "start": "tsx src/server.ts",
-    "smoke:ws": "tsx src/smoke-ws.ts"
+    "smoke:ws": "tsx src/smoke-ws.ts",
+    "smoke:friends": "tsx src/smoke-friends.ts"
   },
   "dependencies": {
     "@bufbuild/protobuf": "^2.17.0",

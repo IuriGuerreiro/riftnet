@@ -91,6 +91,7 @@ sequenceDiagram
 | — (push, id 0)                                    | `message_created`              | live, via NATS (see dms.md)  |
 | `call_start` / `call_accept` / `call_decline` / `call_join` / `call_leave` | `call_result` / `call_joined` | voice, see [calls.md](calls.md) |
 | — (push, id 0) | `call_incoming` / `call_updated` / `call_ended` | voice calls |
+| — (push, id 0)                                    | `friend_updated {user, state}` | see [friends.md](friends.md) |
 
 Example session (written as JSON; on the wire it's binary protobuf):
 
