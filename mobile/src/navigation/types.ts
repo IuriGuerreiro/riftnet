@@ -7,9 +7,12 @@ export type TabsParamList = {
 
 export type RootStackParamList = {
   Login: undefined;
+  Username: undefined;
   Home: NavigatorScreenParams<TabsParamList>;
   Chat: { conversationId: string; title: string };
-  Call: { conversationId: string };
+  NewGroup: undefined;
+  Group: { conversationId: string };
+  Call: undefined;
 };
 
 declare global {

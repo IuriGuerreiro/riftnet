@@ -1,7 +1,7 @@
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { AuthenticateSchema, EnvelopeSchema, type Envelope } from "../gen/v1/envelope_pb";
 import type { User } from "../gen/v1/users_pb";
-import { platform } from "../platform";
+import { platform } from "../platform/current";
 
 type Payload = Envelope["payload"];
 
@@ -30,7 +30,7 @@ export class WsClient {
     ws.onclose = (ev) => {
       for (const p of this.pending.values()) p.reject(new WsError("closed", "connection closed"));
       this.pending.clear();
-      this.onClose(ev.code);
+      this.onClose(ev.code ?? 1006); // RN may omit it: treat as abnormal close
     };
   }
 
@@ -38,8 +38,9 @@ export class WsClient {
   static async connect(accessToken: string, url = platform.wsUrl): Promise<{ ws: WsClient; user: User | undefined }> {
     const socket = new WebSocket(url);
     await new Promise<void>((res, rej) => {
-      socket.addEventListener("open", () => res(), { once: true });
-      socket.addEventListener("error", () => rej(new WsError("connect_failed", "can't reach the server")), { once: true });
+      // on* handlers, not addEventListener: works the same in browsers and React Native.
+      socket.onopen = () => res();
+      socket.onerror = () => rej(new WsError("connect_failed", "can't reach the server"));
     });
     const ws = new WsClient(socket);
     const reply = await ws.request({ case: "authenticate", value: create(AuthenticateSchema, { accessToken }) });

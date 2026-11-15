@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { WsClient } from "../api/ws";
-import { CallState, peerConnection, useCalls } from "../stores/calls";
+import { CallState, useCalls } from "../stores/calls";
+import { peerConnection } from "../platform/webMedia";
 
 // TEST UI: call controls in the DM header. Logic is in stores/calls.ts.
 

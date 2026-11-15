@@ -11,6 +11,7 @@ import {
   type Call,
 } from "../gen/v1/calls_pb";
 import type { Envelope } from "../gen/v1/envelope_pb";
+import { platform } from "../platform/current";
 
 // Voice calls (test UI). Signaling goes over our WebSocket; audio goes
 // straight to the media server (SFU) over WebRTC. See docs/architecture/calls.md.
@@ -36,50 +37,24 @@ interface CallsState {
   toggleMute: () => void;
 }
 
-// WebRTC objects live outside the store (not plain data).
-let pc: RTCPeerConnection | null = null;
-let mic: MediaStream | null = null;
-const speaker = new Audio();
-speaker.autoplay = true;
-
-export function peerConnection() {
-  return pc;
-}
-
-function hangUpMedia() {
-  pc?.close();
-  mic?.getTracks().forEach((t) => t.stop());
-  pc = mic = null;
-  speaker.srcObject = null;
-}
+// The mic, peer connection and speaker live in `platform.media`
+// (browser WebRTC on web, react-native-webrtc on mobile).
+const hangUpMedia = () => platform.media.stop();
 
 export const useCalls = create<CallsState>((set, get) => {
   // Mic → WebRTC offer → call_join → SFU's answer.
   async function join(ws: WsClient, call: Call) {
-    mic = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    const sdpOffer = await platform.media.start({
+      onConnected: () => set({ joined: true }),
+      onFailed: () => set({ error: "audio connection failed", joined: false }),
     });
-    pc = new RTCPeerConnection();
-    // One two-way audio track: our mic goes up, the other person comes back on it.
-    pc.addTransceiver(mic.getAudioTracks()[0], { direction: "sendrecv", streams: [mic] });
-    pc.ontrack = (e) => {
-      speaker.srcObject = new MediaStream([e.track]);
-    };
-    pc.onconnectionstatechange = () => {
-      if (pc?.connectionState === "connected") set({ joined: true });
-      if (pc?.connectionState === "failed") set({ error: "audio connection failed", joined: false });
-    };
-    const offer = await pc.createOffer();
-    // Opus: DTX on (near-silent when quiet), 64 kbps.
-    offer.sdp = offer.sdp?.replace(/(a=fmtp:111 [^\r\n]*)/, "$1;usedtx=1;maxaveragebitrate=64000");
-    await pc.setLocalDescription(offer);
 
     const reply = await ws.request({
       case: "callJoin",
-      value: createProto(CallJoinSchema, { callId: call.id, sdpOffer: offer.sdp ?? "" }),
+      value: createProto(CallJoinSchema, { callId: call.id, sdpOffer }),
     });
     if (reply.case !== "callJoined") throw new Error(`expected callJoined, got ${reply.case}`);
-    await pc.setRemoteDescription({ type: "answer", sdp: reply.value.sdpAnswer });
+    await platform.media.setAnswer(reply.value.sdpAnswer);
     set({ current: reply.value.call ?? call });
   }
 
@@ -174,7 +149,7 @@ export const useCalls = create<CallsState>((set, get) => {
 
     toggleMute: () => {
       const muted = !get().muted;
-      mic?.getAudioTracks().forEach((t) => (t.enabled = !muted));
+      platform.media.setMuted(muted);
       set({ muted });
     },
   };

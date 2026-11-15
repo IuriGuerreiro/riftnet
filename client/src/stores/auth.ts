@@ -1,9 +1,11 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { createJSONStorage, persist } from "zustand/middleware";
+import { platform } from "../platform/current";
 import type { Session, User } from "../api/types";
 
 // Auth state for the whole app.
-// TODO(desktop): move tokens to the OS keychain via client-core instead of localStorage.
+// Tokens live in `platform.storage`: localStorage on web, the OS keychain on mobile.
+// TODO(desktop): OS keychain via client-core instead of localStorage.
 interface AuthState {
   accessToken: string | null;
   accessExpiresAt: number | null; // unix seconds
@@ -31,12 +33,21 @@ export const useAuth = create<AuthState>()(
       setUser: (user) => set({ user }),
       clear: () => set({ accessToken: null, accessExpiresAt: null, refreshToken: null, user: null }),
     }),
-    { name: "auth" },
+    {
+      name: "auth",
+      // Lazy, so the platform's storage is read when used (it may be async).
+      storage: createJSONStorage(() => ({
+        getItem: (k) => platform.storage.getItem(k),
+        setItem: (k, v) => platform.storage.setItem(k, v),
+        removeItem: (k) => platform.storage.removeItem(k),
+      })),
+      // Only the tokens + user; actions aren't data.
+      partialize: (s) => ({
+        accessToken: s.accessToken,
+        accessExpiresAt: s.accessExpiresAt,
+        refreshToken: s.refreshToken,
+        user: s.user,
+      }),
+    },
   ),
 );
-
-// Keep tabs in sync: when another tab logs in, refreshes or logs out,
-// reload the tokens from localStorage.
-window.addEventListener("storage", (e) => {
-  if (e.key === "auth") void useAuth.persist.rehydrate();
-});

@@ -1,4 +1,4 @@
-import { platform } from "../platform";
+import { platform } from "../platform/current";
 import { useAuth } from "../stores/auth";
 import type { ApiErrorBody, Session } from "./types";
 
@@ -70,13 +70,13 @@ async function refreshIfExpiring() {
 }
 
 // Only one refresh at a time: within this tab (`inFlight`) and across tabs
-// (Web Locks). Tabs share tokens through localStorage, so if two tabs refreshed
+// (platform lock). Tabs share tokens through storage, so if two tabs refreshed
 // with the same token, the server would see it used twice.
 let inFlight: Promise<boolean> | null = null;
 
 function refresh(): Promise<boolean> {
   const startedWith = useAuth.getState().refreshToken;
-  inFlight ??= withRefreshLock(() => doRefresh(startedWith)).finally(() => {
+  inFlight ??= platform.withLock("auth-refresh", () => doRefresh(startedWith)).finally(() => {
     inFlight = null;
   });
   return inFlight;
@@ -104,11 +104,4 @@ async function doRefresh(startedWith: string | null): Promise<boolean> {
     if (err instanceof ApiError && err.status === 401) useAuth.getState().clear();
     return false;
   }
-}
-
-function withRefreshLock<T>(fn: () => Promise<T>): Promise<T> {
-  // Web Locks: supported by all current browsers and Tauri webviews. Fall back
-  // to the in-tab guard only if missing.
-  if (!("locks" in navigator)) return fn();
-  return navigator.locks.request("auth-refresh", fn);
 }

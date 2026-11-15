@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { platform } from "../platform";
+import { platform } from "../platform/current";
 import { useAuth } from "../stores/auth";
 import type { Credentials } from "../schemas/auth";
 import { http } from "./http";
