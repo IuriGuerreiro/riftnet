@@ -73,14 +73,18 @@ impl PresenceService {
                 "at most 200 users per request",
             ));
         }
+
         let visible = self.audience(me).await?;
+
         let mut ids: Vec<i64> = user_ids
             .iter()
             .copied()
             .filter(|id| visible.contains(id))
             .collect();
+
         ids.sort_unstable();
         ids.dedup();
+
         let statuses = self
             .store
             .statuses(&ids)
