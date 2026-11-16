@@ -124,6 +124,7 @@ pub async fn run(mut socket: WebSocket, state: AppState) {
 
     // Socket gone: whatever call it was in, it's out.
     state.calls.connection_closed(session.connection_id).await;
+
     state
         .presence
         .disconnected(session.user_id, session.connection_id)

@@ -126,7 +126,9 @@ impl PresenceStore for RedisPresenceStore {
             Op::Active => "active",
             Op::Drop => "drop",
         };
+
         let mut redis = self.redis.clone();
+
         let (before, after): (i64, i64) = self
             .script
             .key(key(user_id))
