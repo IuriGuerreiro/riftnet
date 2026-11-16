@@ -36,6 +36,7 @@ let pc: RTCPeerConnection | null = null;
 let mic: MediaStream | null = null;
 let screen: MediaStream | null = null;
 let videoSender: RTCRtpSender | null = null;
+let picking = false;
 let screenIn: MediaStream | null = null;
 let me: bigint | undefined;
 const speaker = new Audio();
@@ -249,33 +250,41 @@ export const useCalls = create<CallsState>((set, get) => {
     },
 
     toggleShare: async (ws) => {
-      if (!videoSender) return;
+      const sender = videoSender;
+      if (!sender || picking) return;
       if (get().sharing) {
         await stopShare(ws);
         return;
       }
+      picking = true;
+      let picked: MediaStream;
       try {
-        screen = await navigator.mediaDevices.getDisplayMedia({
+        picked = await navigator.mediaDevices.getDisplayMedia({
           video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 60 } },
           audio: false,
         });
       } catch {
         return;
+      } finally {
+        picking = false;
       }
-      const track = screen.getVideoTracks()[0];
+      if (videoSender !== sender) {
+        for (const t of picked.getTracks()) t.stop();
+        return;
+      }
+      screen = picked;
+      const track = picked.getVideoTracks()[0];
       if (!track) return;
       track.contentHint = "detail";
       track.onended = () => void stopShare(ws);
-      await videoSender.replaceTrack(track);
-      const params = videoSender.getParameters();
+      await sender.replaceTrack(track);
+      const params = sender.getParameters();
       const encoding = params.encodings[0] ?? {};
       encoding.maxBitrate = 8_000_000;
       encoding.maxFramerate = 60;
       params.encodings = [encoding, ...params.encodings.slice(1)];
       params.degradationPreference = "maintain-framerate";
-      await videoSender
-        .setParameters(params)
-        .catch((e: unknown) => console.warn("setParameters", e));
+      await sender.setParameters(params).catch((e: unknown) => console.warn("setParameters", e));
       set({ sharing: true });
       await announceShare(ws, true);
     },
