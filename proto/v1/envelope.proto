@@ -6,6 +6,7 @@ import "v1/calls.proto";
 import "v1/conversations.proto";
 import "v1/friends.proto";
 import "v1/messages.proto";
+import "v1/presence.proto";
 import "v1/users.proto";
 
 // Every WebSocket frame is one Envelope.
@@ -33,6 +34,8 @@ message Envelope {
     EditMessage edit_message = 22;
     DeleteMessage delete_message = 23;
     StartTyping start_typing = 21;  // fire-and-forget: send with id 0, no reply
+    SetIdle set_idle = 24;
+    GetPresence get_presence = 25;
 
     // server -> client (replies)
     Pong pong = 50;
@@ -45,6 +48,7 @@ message Envelope {
     SyncResult sync_result = 59;
     EditMessageAck edit_message_ack = 63;
     DeleteMessageAck delete_message_ack = 64;
+    Presences presences = 67;
 
     // server -> client (pushes, id = 0)
     MessageCreated message_created = 54;
@@ -54,6 +58,7 @@ message Envelope {
     MessageUpdated message_updated = 65;
     MessageDeleted message_deleted = 66;
     TypingStarted typing_started = 62;
+    PresenceUpdated presence_updated = 68;
 
     // calls (100-139 reserved, see docs/architecture/calls.md)
     // client -> server

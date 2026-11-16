@@ -9,6 +9,8 @@ import { useChat, type ChatMessage } from "../stores/chat";
 import { useFriends } from "../stores/friends";
 import { typingText, useTyping } from "../stores/typing";
 import { useConnection } from "../stores/connection";
+import { usePresence } from "../stores/presence";
+import { StatusDot } from "../components/StatusDot";
 
 const dot = { online: "bg-green-500", connecting: "bg-yellow-500", offline: "bg-red-500" };
 
@@ -36,7 +38,22 @@ export function HomePage() {
     useCalls.getState().attach(ws, me?.id); // after chat: it chains onto chat's push handler
     void useFriends.getState().attach(ws);
     if (me) useTyping.getState().attach(ws, me.id);
+    usePresence.getState().attach(ws);
   }, [ws, me]);
+
+  // Status of everyone shown: friends and DM/group members. Reloads when the
+  // set changes (new friend, new DM) or after a reconnect.
+  const friends = useFriends((s) => s.list.friends);
+  const watchedIds = [
+    ...friends.map((f) => f.user.id),
+    ...chat.conversations.flatMap((c) => c.members.map((m) => m.id.toString())),
+  ]
+    .filter((id) => id !== me?.id.toString())
+    .sort()
+    .join(",");
+  useEffect(() => {
+    if (ws && watchedIds) void usePresence.getState().load(ws, [...new Set(watchedIds.split(","))]);
+  }, [ws, watchedIds]);
 
   const selected = chat.conversations.find((c) => c.id === chat.selected);
   const other = (c: Conversation) => c.members.find((m) => m.id !== me?.id) ?? c.members[0];
@@ -74,9 +91,10 @@ export function HomePage() {
             <button
               key={c.id.toString()}
               onClick={() => ws && chat.select(ws, c.id)}
-              className={`block w-full px-4 py-2 text-left text-sm hover:bg-zinc-800 ${c.id === chat.selected ? "bg-zinc-800 text-brand" : ""}`}
+              className={`flex w-full items-center gap-2 px-4 py-2 text-left text-sm hover:bg-zinc-800 ${c.id === chat.selected ? "bg-zinc-800 text-brand" : ""}`}
             >
-              {title(c)}
+              {!isGroup(c) && <StatusDot userId={other(c)?.id} />}
+              <span className="truncate">{title(c)}</span>
             </button>
           ))}
           {chat.conversations.length === 0 && <p className="p-4 text-xs text-zinc-500">No conversations yet.</p>}
@@ -106,7 +124,10 @@ export function HomePage() {
               />
             ) : (
               <header className="flex items-center justify-between border-b border-zinc-800 p-4 font-semibold">
-                {title(selected)}
+                <span className="flex items-center gap-2">
+                  <StatusDot userId={other(selected)?.id} />
+                  {title(selected)}
+                </span>
                 <CallBar ws={ws} conversationId={selected.id} />
               </header>
             )}
@@ -251,7 +272,7 @@ function FriendsPanel({ onDm }: { onDm: (username: string) => void }) {
             </FriendRow>
           ))}
           {list.friends.map((f) => (
-            <FriendRow key={f.user.id} label={name(f)}>
+            <FriendRow key={f.user.id} label={name(f)} userId={f.user.id}>
               <RowButton onClick={() => f.user.username && onDm(f.user.username)} className="text-brand">DM</RowButton>
               <RowButton
                 onClick={() => confirm(`Remove ${name(f)} from friends?`) && removeFriend(f.user.id)}
@@ -270,9 +291,21 @@ function FriendsPanel({ onDm }: { onDm: (username: string) => void }) {
   );
 }
 
-function FriendRow({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+function FriendRow({
+  label,
+  hint,
+  userId,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  /** Friends only: shows their status dot. */
+  userId?: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="flex items-center gap-2 text-sm">
+      {userId && <StatusDot userId={userId} />}
       <div className="min-w-0 flex-1">
         <p className="truncate">{label}</p>
         {hint && <p className="text-xs text-zinc-500">{hint}</p>}

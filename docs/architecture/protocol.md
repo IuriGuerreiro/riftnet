@@ -97,6 +97,9 @@ sequenceDiagram
 | — (push, id 0)                                    | `friend_updated {user, state}` | see [friends.md](friends.md) |
 | `start_typing {conversation_id}` (id 0)           | — none                         | fire-and-forget, see [dms.md](dms.md#typing-indicator) |
 | — (push, id 0)                                    | `typing_started {conversation_id, user_id}` | to the other members |
+| `set_idle {idle}`                                 | `pong`                         | see [presence.md](presence.md) |
+| `get_presence {user_ids}`                         | `presences`                    | friends + DM members only, max 200 per request (client pages) |
+| — (push, id 0)                                    | `presence_updated {user_id, status}` | see [presence.md](presence.md) |
 
 Example session (written as JSON; on the wire it's binary protobuf):
 

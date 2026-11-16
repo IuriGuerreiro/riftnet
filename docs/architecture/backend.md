@@ -11,6 +11,7 @@ services/api/src/
 ├── common/              only what every feature needs
 │   ├── error.rs         ApiError → JSON { code, message }; RepoError
 │   ├── db.rs            Postgres pool + migrations
+│   ├── redis.rs         Redis connection (presence, caches later)
 │   └── middleware/
 │       ├── auth.rs      AuthUser extractor (Bearer access token)
 │       └── rate_limit.rs
@@ -18,6 +19,7 @@ services/api/src/
     ├── auth/            register, login, refresh, logout
     ├── users/           /me, /me/username, /users/search
     ├── friends/         /friends: requests, accept, remove (see friends.md)
+    ├── presence/        online / idle / offline, Redis (see presence.md)
     ├── health/          /health, /metrics
     └── gateway/         WebSocket (parked)
 ```
