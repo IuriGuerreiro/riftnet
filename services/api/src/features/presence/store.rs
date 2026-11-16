@@ -85,14 +85,13 @@ return {before, status()}
 "#;
 
 impl RedisPresenceStore {
-    pub async fn connect(url: &str, ttl: Duration) -> anyhow::Result<Self> {
-        let client = redis::Client::open(url)?;
-        let redis = redis::aio::ConnectionManager::new(client).await?;
-        Ok(Self {
+    /// `redis` comes from `common::redis::connect`.
+    pub fn new(redis: redis::aio::ConnectionManager, ttl: Duration) -> Self {
+        Self {
             redis,
             ttl,
             script: redis::Script::new(APPLY_LUA),
-        })
+        }
     }
 }
 
@@ -250,9 +249,8 @@ mod redis_tests {
     #[ignore]
     async fn redis_store_matches_the_rules() {
         let url = std::env::var("REDIS_URL").unwrap_or("redis://127.0.0.1:6379".into());
-        let store = RedisPresenceStore::connect(&url, Duration::from_millis(500))
-            .await
-            .unwrap();
+        let redis = crate::common::redis::connect(&url).await.unwrap();
+        let store = RedisPresenceStore::new(redis, Duration::from_millis(500));
         let user: i64 = -(rand::random::<u32>() as i64) - 1; // never a real id
         let change = |before, after| Change { before, after };
         use Status::*;

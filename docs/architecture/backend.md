@@ -11,6 +11,7 @@ services/api/src/
 ├── common/              only what every feature needs
 │   ├── error.rs         ApiError → JSON { code, message }; RepoError
 │   ├── db.rs            Postgres pool + migrations
+│   ├── redis.rs         Redis connection (presence, caches later)
 │   └── middleware/
 │       ├── auth.rs      AuthUser extractor (Bearer access token)
 │       └── rate_limit.rs

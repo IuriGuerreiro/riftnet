@@ -55,6 +55,7 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
         config.scylla_replication,
     )
     .await?;
+    let redis = crate::common::redis::connect(&config.redis_url).await?;
     let events: Arc<dyn EventBus> = Arc::new(NatsEventBus::connect(&config.nats_url).await?);
     let ids = Arc::new(Snowflake::new(config.machine_id));
     let tokens = Arc::new(TokenService::from_key_file(
@@ -71,10 +72,10 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
         Arc::new(ScyllaConversationRepo::new(scylla.clone()).await?);
     let message_repo = Arc::new(ScyllaMessageRepo::new(scylla).await?);
     let friend_repo = Arc::new(PgFriendRepo::new(pool.clone()));
-    let presence_store = Arc::new(
-        RedisPresenceStore::connect(&config.redis_url, crate::features::gateway::PRESENCE_TTL)
-            .await?,
-    );
+    let presence_store = Arc::new(RedisPresenceStore::new(
+        redis,
+        crate::features::gateway::PRESENCE_TTL,
+    ));
 
     let state = AppState {
         auth: Arc::new(AuthService::new(
