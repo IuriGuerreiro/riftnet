@@ -6,6 +6,30 @@ pub struct Message {
     pub seq: i64,
     pub content: Vec<u8>,
     pub encryption: i8,
+    pub edited_at: i64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MessageChange {
+    pub seq: i64,
+    pub message_id: i64,
+    pub kind: ChangeKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChangeKind {
+    Edit = 1,
+    Delete = 2,
+}
+
+impl ChangeKind {
+    pub fn from_i8(v: i8) -> Option<Self> {
+        match v {
+            1 => Some(Self::Edit),
+            2 => Some(Self::Delete),
+            _ => None,
+        }
+    }
 }
 
 pub const MAX_CONTENT_BYTES: usize = 8 * 1024;

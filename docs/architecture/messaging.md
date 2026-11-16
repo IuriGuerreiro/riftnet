@@ -58,7 +58,7 @@ sequenceDiagram
 
 ## Open questions
 
-- Message events: edit, delete, reactions, threads, pins.
+- Message events: reactions, threads, pins. (Edit + delete: done for DMs, see [dms.md](dms.md#edit-and-delete).)
 - Full-text search: Tantivy? Meilisearch? (For DMs it must run client-side, see [dms.md](dms.md).)
 - Migration between profiles without downtime.
 - NATS or Redis pub/sub for Big.

@@ -8,7 +8,8 @@
     "start": "tsx src/server.ts",
     "smoke:ws": "tsx src/smoke-ws.ts",
     "typecheck": "tsc -p .",
-    "smoke:friends": "tsx src/smoke-friends.ts"
+    "smoke:friends": "tsx src/smoke-friends.ts",
+    "smoke:presence": "tsx src/smoke-presence.ts"
   },
   "dependencies": {
     "@bufbuild/protobuf": "^2.17.0",

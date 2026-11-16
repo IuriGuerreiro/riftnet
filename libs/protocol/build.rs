@@ -8,6 +8,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "v1/conversations.proto",
         "v1/friends.proto",
         "v1/messages.proto",
+        "v1/presence.proto",
         "v1/users.proto",
     ];
     let fds = protox::compile(files, [root])?;

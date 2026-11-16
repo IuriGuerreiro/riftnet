@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use axum::extract::ws::{CloseFrame, Message as WsMessage, WebSocket};
 use protocol::Message;
@@ -12,6 +12,9 @@ use crate::app::AppState;
 
 const AUTH_TIMEOUT: Duration = Duration::from_secs(10);
 const CLOSE_UNAUTHORIZED: u16 = 4001;
+const HEARTBEAT: Duration = Duration::from_secs(30);
+const DEAD_AFTER: Duration = Duration::from_secs(75);
+pub const PRESENCE_TTL: Duration = Duration::from_secs(90);
 
 #[derive(Debug, Clone, Copy)]
 pub struct Session {
@@ -52,10 +55,19 @@ pub async fn run(mut socket: WebSocket, state: AppState) {
         }
     };
 
+    state
+        .presence
+        .connected(session.user_id, session.connection_id)
+        .await;
+    let mut heartbeat = tokio::time::interval(HEARTBEAT);
+    heartbeat.tick().await;
+    let mut last_heard = Instant::now();
+
     loop {
         tokio::select! {
             frame = socket.recv() => {
                 let Some(Ok(frame)) = frame else { break };
+                last_heard = Instant::now();
                 let WsMessage::Binary(bytes) = frame else {
                     continue;
                 };
@@ -77,10 +89,25 @@ pub async fn run(mut socket: WebSocket, state: AppState) {
                     break;
                 }
             }
+            _ = heartbeat.tick() => {
+                if last_heard.elapsed() > DEAD_AFTER {
+                    tracing::info!(user.id = session.user_id, "ws heartbeat timeout");
+                    break;
+                }
+                if socket.send(WsMessage::Ping(Default::default())).await.is_err() {
+                    break;
+                }
+                state.presence.heartbeat(session.user_id, session.connection_id).await;
+            }
         }
     }
 
     state.calls.connection_closed(session.connection_id).await;
+
+    state
+        .presence
+        .disconnected(session.user_id, session.connection_id)
+        .await;
     metrics::gauge!("ws_connections").decrement(1.0);
     tracing::info!(user.id = session.user_id, "ws disconnected");
 }

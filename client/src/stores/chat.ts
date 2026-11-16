@@ -14,6 +14,8 @@ import {
 } from "../gen/v1/conversations_pb";
 import type { Envelope } from "../gen/v1/envelope_pb";
 import {
+  DeleteMessageSchema,
+  EditMessageSchema,
   GetHistorySchema,
   type Message,
   SendMessageSchema,
@@ -28,6 +30,7 @@ export interface ChatMessage {
   seq: bigint;
   authorId: bigint;
   text: string;
+  editedAt?: bigint;
   pending?: boolean;
   failed?: boolean;
 }
@@ -47,6 +50,8 @@ interface ChatState {
   openDm: (ws: WsClient, username: string) => Promise<void>;
   select: (ws: WsClient, conversationId: bigint) => Promise<void>;
   send: (ws: WsClient, myId: bigint, text: string) => Promise<void>;
+  edit: (ws: WsClient, messageId: bigint, text: string) => Promise<boolean>;
+  remove: (ws: WsClient, messageId: bigint) => Promise<boolean>;
 }
 
 const enc = new TextEncoder();
@@ -57,6 +62,7 @@ const toChat = (m: Message): ChatMessage => ({
   seq: m.seq,
   authorId: m.authorId,
   text: dec.decode(m.content),
+  editedAt: m.editedAt || undefined,
 });
 
 export const isGroup = (c: Conversation) => c.kind === ConversationKind.GROUP;
@@ -81,6 +87,21 @@ export const useChat = create<ChatState>()((set, get) => {
     set((s) => ({ messages: { ...s.messages, [k]: list }, lastSeq: { ...s.lastSeq, [k]: seen } }));
   }
 
+  function removeMessages(conversationId: bigint, ids: bigint[]) {
+    const k = key(conversationId);
+    set((s) => ({
+      messages: { ...s.messages, [k]: (s.messages[k] ?? []).filter((m) => !ids.includes(m.id)) },
+    }));
+  }
+
+  function noteSeq(ws: WsClient, conversationId: bigint, seq: bigint) {
+    const k = key(conversationId);
+    const last = get().lastSeq[k];
+    if (last === undefined) return;
+    if (seq > last + 1n) void sync(ws, conversationId);
+    else if (seq > last) set((s) => ({ lastSeq: { ...s.lastSeq, [k]: seq } }));
+  }
+
   async function sync(ws: WsClient, conversationId: bigint) {
     const after = get().lastSeq[key(conversationId)] ?? 0n;
     const reply = await ws.request({
@@ -91,7 +112,16 @@ export const useChat = create<ChatState>()((set, get) => {
     if (!reply.value.complete) {
       set((s) => ({ messages: { ...s.messages, [key(conversationId)]: [] } }));
     }
-    addMessages(conversationId, reply.value.messages.map(toChat));
+    const r = reply.value;
+    addMessages(conversationId, [...r.messages, ...r.edited].map(toChat));
+    removeMessages(conversationId, r.deletedIds);
+    const k = key(conversationId);
+    set((s) => ({
+      lastSeq: {
+        ...s.lastSeq,
+        [k]: r.lastSeq > (s.lastSeq[k] ?? 0n) ? r.lastSeq : (s.lastSeq[k] ?? 0n),
+      },
+    }));
   }
 
   async function loadConversations(ws: WsClient) {
@@ -129,6 +159,19 @@ export const useChat = create<ChatState>()((set, get) => {
   function onPush(payload: Envelope["payload"], ws: WsClient) {
     if (payload.case === "conversationUpdated" && payload.value.conversation) {
       upsertConversation(payload.value.conversation, myId);
+      return;
+    }
+    if (payload.case === "messageUpdated" && payload.value.message) {
+      const m = payload.value.message;
+      if (get().messages[key(m.conversationId)]?.some((x) => x.id === m.id))
+        addMessages(m.conversationId, [toChat(m)]);
+      noteSeq(ws, m.conversationId, payload.value.seq);
+      return;
+    }
+    if (payload.case === "messageDeleted") {
+      const { conversationId, messageId, seq } = payload.value;
+      removeMessages(conversationId, [messageId]);
+      noteSeq(ws, conversationId, seq);
       return;
     }
     if (payload.case !== "messageCreated" || !payload.value.message) return;
@@ -251,6 +294,49 @@ export const useChat = create<ChatState>()((set, get) => {
           { id: 0n, nonce, seq: 0n, authorId: myId, text, pending: true, failed: true },
         ]);
         set({ error: (e as Error).message });
+      }
+    },
+
+    edit: async (ws, messageId, text) => {
+      const conversationId = get().selected;
+      if (!conversationId || !text.trim()) return false;
+      try {
+        const reply = await ws.request({
+          case: "editMessage",
+          value: createProto(EditMessageSchema, {
+            conversationId,
+            messageId,
+            content: enc.encode(text),
+          }),
+        });
+        if (reply.case === "editMessageAck" && reply.value.message) {
+          addMessages(conversationId, [toChat(reply.value.message)]);
+          noteSeq(ws, conversationId, reply.value.seq);
+        }
+        set({ error: null });
+        return true;
+      } catch (e) {
+        set({ error: (e as Error).message });
+        return false;
+      }
+    },
+
+    remove: async (ws, messageId) => {
+      const conversationId = get().selected;
+      if (!conversationId) return false;
+      try {
+        const reply = await ws.request({
+          case: "deleteMessage",
+          value: createProto(DeleteMessageSchema, { conversationId, messageId }),
+        });
+        removeMessages(conversationId, [messageId]);
+        if (reply.case === "deleteMessageAck" && reply.value.seq)
+          noteSeq(ws, conversationId, reply.value.seq);
+        set({ error: null });
+        return true;
+      } catch (e) {
+        set({ error: (e as Error).message });
+        return false;
       }
     },
   };

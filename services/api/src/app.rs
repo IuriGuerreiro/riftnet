@@ -24,6 +24,8 @@ use crate::features::friends::repository::PgFriendRepo;
 use crate::features::friends::service::FriendService;
 use crate::features::messages::repository::ScyllaMessageRepo;
 use crate::features::messages::service::MessageService;
+use crate::features::presence::service::PresenceService;
+use crate::features::presence::store::RedisPresenceStore;
 use crate::features::typing::service::TypingService;
 use crate::features::users::repository::{PgUserRepo, UserRepo};
 use crate::features::users::service::UserService;
@@ -37,6 +39,7 @@ pub struct AppState {
     pub friends: Arc<FriendService>,
     pub messages: Arc<MessageService>,
     pub calls: Arc<CallService>,
+    pub presence: Arc<PresenceService>,
     pub typing: Arc<TypingService>,
     pub tokens: Arc<TokenService>,
     pub limiter: Arc<RateLimiter>,
@@ -51,6 +54,7 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
         config.scylla_replication,
     )
     .await?;
+    let redis = crate::common::redis::connect(&config.redis_url).await?;
     let events: Arc<dyn EventBus> = Arc::new(NatsEventBus::connect(&config.nats_url).await?);
     let ids = Arc::new(Snowflake::new(config.machine_id));
     let tokens = Arc::new(TokenService::from_key_file(
@@ -66,6 +70,10 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
         Arc::new(ScyllaConversationRepo::new(scylla.clone()).await?);
     let message_repo = Arc::new(ScyllaMessageRepo::new(scylla).await?);
     let friend_repo = Arc::new(PgFriendRepo::new(pool.clone()));
+    let presence_store = Arc::new(RedisPresenceStore::new(
+        redis,
+        crate::features::gateway::PRESENCE_TTL,
+    ));
 
     let state = AppState {
         auth: Arc::new(AuthService::new(
@@ -97,6 +105,12 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
             Arc::new(NatsMediaClient::connect(&config.nats_url).await?),
             events.clone(),
             ids,
+        )),
+        presence: Arc::new(PresenceService::new(
+            presence_store,
+            friend_repo.clone(),
+            conversation_repo.clone(),
+            events.clone(),
         )),
         friends: Arc::new(FriendService::new(
             friend_repo,

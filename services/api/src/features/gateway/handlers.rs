@@ -4,6 +4,7 @@ use super::connection::Session;
 use crate::app::AppState;
 use crate::common::error::ApiError;
 use crate::features::conversations::models::Conversation;
+use crate::features::presence::service::update as presence_update;
 
 pub async fn dispatch(
     state: &AppState,
@@ -17,10 +18,20 @@ pub async fn dispatch(
         Payload::SendMessage(req) => send_message(state, session, req).await,
         Payload::GetHistory(req) => get_history(state, session, req).await,
         Payload::Sync(req) => sync(state, session, req).await,
+        Payload::EditMessage(req) => edit_message(state, session, req).await,
+        Payload::DeleteMessage(req) => delete_message(state, session, req).await,
         Payload::CreateGroup(req) => create_group(state, session, req).await,
         Payload::AddMember(req) => add_member(state, session, req).await,
         Payload::LeaveGroup(req) => leave_group(state, session, req).await,
         Payload::RenameGroup(req) => rename_group(state, session, req).await,
+        Payload::SetIdle(req) => {
+            state
+                .presence
+                .set_idle(session.user_id, session.connection_id, req.idle)
+                .await;
+            Ok(Payload::Pong(v1::Pong {}))
+        }
+        Payload::GetPresence(req) => get_presence(state, session, req).await,
         Payload::CallStart(req) => call_start(state, session, req).await,
         Payload::CallAccept(req) => call_result(
             state
@@ -61,6 +72,21 @@ pub async fn dispatch(
             "request type not implemented yet",
         )),
     }
+}
+
+async fn get_presence(
+    state: &AppState,
+    session: &Session,
+    req: v1::GetPresence,
+) -> Result<Payload, ApiError> {
+    let ids: Vec<i64> = req.user_ids.iter().map(|id| *id as i64).collect();
+    let found = state.presence.get(session.user_id, &ids).await?;
+    Ok(Payload::Presences(v1::Presences {
+        presences: found
+            .into_iter()
+            .map(|(id, status)| presence_update(id, status))
+            .collect(),
+    }))
 }
 
 async fn open_dm(
@@ -125,7 +151,7 @@ async fn get_history(
 }
 
 async fn sync(state: &AppState, session: &Session, req: v1::Sync) -> Result<Payload, ApiError> {
-    let (messages, complete) = state
+    let r = state
         .messages
         .sync(
             session.user_id,
@@ -135,8 +161,51 @@ async fn sync(state: &AppState, session: &Session, req: v1::Sync) -> Result<Payl
         .await?;
 
     Ok(Payload::SyncResult(v1::SyncResult {
-        messages: messages.iter().map(Into::into).collect(),
-        complete,
+        messages: r.messages.iter().map(Into::into).collect(),
+        complete: r.complete,
+        edited: r.edited.iter().map(Into::into).collect(),
+        deleted_ids: r.deleted_ids.iter().map(|id| *id as u64).collect(),
+        last_seq: r.last_seq as u64,
+    }))
+}
+
+async fn edit_message(
+    state: &AppState,
+    session: &Session,
+    req: v1::EditMessage,
+) -> Result<Payload, ApiError> {
+    let (message, seq) = state
+        .messages
+        .edit(
+            session.user_id,
+            req.conversation_id as i64,
+            req.message_id as i64,
+            req.content,
+        )
+        .await?;
+    Ok(Payload::EditMessageAck(v1::EditMessageAck {
+        message: Some((&message).into()),
+        seq: seq as u64,
+    }))
+}
+
+async fn delete_message(
+    state: &AppState,
+    session: &Session,
+    req: v1::DeleteMessage,
+) -> Result<Payload, ApiError> {
+    let seq = state
+        .messages
+        .delete(
+            session.user_id,
+            req.conversation_id as i64,
+            req.message_id as i64,
+        )
+        .await?;
+    Ok(Payload::DeleteMessageAck(v1::DeleteMessageAck {
+        conversation_id: req.conversation_id,
+        message_id: req.message_id,
+        seq: seq.unwrap_or(0) as u64,
     }))
 }
 

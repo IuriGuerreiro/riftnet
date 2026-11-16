@@ -4,11 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import { useLogout } from "../api/auth";
 import type { Friend } from "../api/types";
 import { CallBar, IncomingCall, RemoteScreen } from "../call/CallBar";
+import { StatusDot } from "../components/StatusDot";
 import type { Conversation } from "../gen/v1/conversations_pb";
 import { useCalls } from "../stores/calls";
-import { isGroup, useChat } from "../stores/chat";
+import { type ChatMessage, isGroup, useChat } from "../stores/chat";
 import { useConnection } from "../stores/connection";
 import { useFriends } from "../stores/friends";
+import { usePresence } from "../stores/presence";
 import { typingText, useTyping } from "../stores/typing";
 
 const dot = { online: "bg-green-500", connecting: "bg-yellow-500", offline: "bg-red-500" };
@@ -33,7 +35,20 @@ export function HomePage() {
     useCalls.getState().attach(ws, me?.id);
     void useFriends.getState().attach(ws);
     if (me) useTyping.getState().attach(ws, me.id);
+    usePresence.getState().attach(ws);
   }, [ws, me]);
+
+  const friends = useFriends((s) => s.list.friends);
+  const watchedIds = [
+    ...friends.map((f) => f.user.id),
+    ...chat.conversations.flatMap((c) => c.members.map((m) => m.id.toString())),
+  ]
+    .filter((id) => id !== me?.id.toString())
+    .sort()
+    .join(",");
+  useEffect(() => {
+    if (ws && watchedIds) void usePresence.getState().load(ws, [...new Set(watchedIds.split(","))]);
+  }, [ws, watchedIds]);
 
   const selected = chat.conversations.find((c) => c.id === chat.selected);
   const other = (c: Conversation) => c.members.find((m) => m.id !== me?.id) ?? c.members[0];
@@ -74,9 +89,10 @@ export function HomePage() {
             <button
               key={c.id.toString()}
               onClick={() => ws && chat.select(ws, c.id)}
-              className={`block w-full px-4 py-2 text-left text-sm hover:bg-zinc-800 ${c.id === chat.selected ? "bg-zinc-800 text-brand" : ""}`}
+              className={`flex w-full items-center gap-2 px-4 py-2 text-left text-sm hover:bg-zinc-800 ${c.id === chat.selected ? "bg-zinc-800 text-brand" : ""}`}
             >
-              {title(c)}
+              {!isGroup(c) && <StatusDot userId={other(c)?.id} />}
+              <span className="truncate">{title(c)}</span>
             </button>
           ))}
           {chat.conversations.length === 0 && (
@@ -108,7 +124,10 @@ export function HomePage() {
               />
             ) : (
               <header className="flex items-center justify-between border-b border-zinc-800 p-4 font-semibold">
-                {title(selected)}
+                <span className="flex items-center gap-2">
+                  <StatusDot userId={other(selected)?.id} />
+                  {title(selected)}
+                </span>
                 <CallBar ws={ws} conversationId={selected.id} />
               </header>
             )}
@@ -295,7 +314,13 @@ function FriendsPanel({ onDm }: { onDm: (username: string) => void }) {
             </FriendRow>
           ))}
           {list.friends.map((f) => (
-            <FriendRow key={f.user.id} label={name(f)}>
+            <FriendRow key={f.user.id} label={name(f)} userId={f.user.id}>
+              <RowButton
+                onClick={() => f.user.username && onDm(f.user.username)}
+                className="text-brand"
+              >
+                DM
+              </RowButton>
               <RowButton
                 onClick={() => f.user.username && onDm(f.user.username)}
                 className="text-brand"
@@ -324,14 +349,17 @@ function FriendsPanel({ onDm }: { onDm: (username: string) => void }) {
 function FriendRow({
   label,
   hint,
+  userId,
   children,
 }: {
   label: string;
   hint?: string;
+  userId?: string;
   children: React.ReactNode;
 }) {
   return (
     <div className="flex items-center gap-2 text-sm">
+      {userId && <StatusDot userId={userId} />}
       <div className="min-w-0 flex-1">
         <p className="truncate">{label}</p>
         {hint && <p className="text-xs text-zinc-500">{hint}</p>}
@@ -397,22 +425,95 @@ function Messages({ conversationId, myId }: { conversationId: bigint; myId?: big
 
   return (
     <div className="flex-1 space-y-1 overflow-y-auto p-4">
-      {messages.map((m) => {
-        const mine = m.authorId === myId;
-        return (
-          <div key={m.nonce ?? m.id.toString()} className={`flex ${mine ? "justify-end" : ""}`}>
-            <p
-              className={`max-w-[75%] whitespace-pre-wrap break-words rounded-lg px-3 py-1.5 text-sm ${
-                mine ? "bg-brand text-zinc-950" : "bg-zinc-800"
-              } ${m.pending ? "opacity-50" : ""} ${m.failed ? "ring-2 ring-red-500" : ""}`}
-              title={m.pending ? "sending…" : `seq ${m.seq}`}
-            >
-              {m.text}
-            </p>
-          </div>
-        );
-      })}
+      {messages.map((m) => (
+        <MessageRow key={m.nonce ?? m.id.toString()} m={m} mine={m.authorId === myId} />
+      ))}
       <div ref={bottom} />
+    </div>
+  );
+}
+
+function MessageRow({ m, mine }: { m: ChatMessage; mine: boolean }) {
+  const ws = useConnection((s) => s.ws);
+  const { edit, remove } = useChat();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const canChange = mine && !m.pending && m.id !== 0n && !!ws;
+
+  async function save() {
+    if (!ws) return;
+    const text = draft.trim();
+    if (!text || text === m.text) {
+      setEditing(false);
+      return;
+    }
+    if (await edit(ws, m.id, text)) setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <div className="flex justify-end">
+        <div className="w-[75%] space-y-1">
+          <textarea
+            autoFocus
+            value={draft}
+            maxLength={4000}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                void save();
+              } else if (e.key === "Escape") {
+                setEditing(false);
+              }
+            }}
+            className="w-full resize-none rounded-lg bg-zinc-800 px-3 py-1.5 text-sm outline-none ring-2 ring-brand"
+          />
+          <p className="text-right text-xs text-zinc-500">Enter to save · Esc to cancel</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`group flex items-center gap-2 ${mine ? "justify-end" : ""}`}>
+      {canChange && (
+        <div className="hidden gap-1 text-xs text-zinc-400 group-hover:flex">
+          <button
+            onClick={() => {
+              setDraft(m.text);
+              setEditing(true);
+            }}
+            className="rounded px-1.5 py-0.5 hover:bg-zinc-800 hover:text-zinc-100"
+          >
+            Edit
+          </button>
+          <button
+            onClick={() =>
+              window.confirm("Delete this message? This can't be undone.") && void remove(ws, m.id)
+            }
+            className="rounded px-1.5 py-0.5 hover:bg-zinc-800 hover:text-red-400"
+          >
+            Delete
+          </button>
+        </div>
+      )}
+      <p
+        className={`max-w-[75%] whitespace-pre-wrap break-words rounded-lg px-3 py-1.5 text-sm ${
+          mine ? "bg-brand text-zinc-950" : "bg-zinc-800"
+        } ${m.pending ? "opacity-50" : ""} ${m.failed ? "ring-2 ring-red-500" : ""}`}
+        title={m.pending ? "sending…" : `seq ${m.seq}`}
+      >
+        {m.text}
+        {m.editedAt ? (
+          <span
+            className={`ml-1.5 text-[10px] ${mine ? "text-zinc-800" : "text-zinc-500"}`}
+            title={new Date(Number(m.editedAt)).toLocaleString()}
+          >
+            (edited)
+          </span>
+        ) : null}
+      </p>
     </div>
   );
 }

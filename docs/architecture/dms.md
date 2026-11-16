@@ -24,6 +24,7 @@ Scylla has no joins and no `UNIQUE`, so there is **one table per question**:
 | `dm_keys`               | `"<small id>:<big id>"`               | "is there already a DM for A + B?"   |
 | `messages`              | `(conversation_id, bucket)`, `id` ↓   | history, newest first                |
 | `message_nonces`        | `(conversation_id, author_id, nonce)` | "did this client already send this?" |
+| `message_changes`       | `conversation_id`, `seq` ↑            | "what was edited/deleted since N?"   |
 
 - A **bucket** is ~10 days. One partition = one conversation's 10 days, so "latest 50" is one fast read and
   partitions never grow forever. History walks buckets backwards.
@@ -93,6 +94,30 @@ flowchart LR
 - The sender's own socket also gets the push; the app ignores it (it already has the ack, same `id`).
 - If publishing fails, the message is still saved: the other person gets it from history / sync. Logged as a warning.
 - Code: `common/events.rs` (`EventBus` trait + NATS), the `select!` loop in `gateway/connection.rs`.
+
+### Edit and delete
+
+- Only the **author** can edit or delete (`not_your_message`). Edits have the same limits as sends.
+- Delete is a **hard delete**: the row is gone, history skips it. Deleting twice is fine (ack `seq = 0`, no push).
+- Each edit/delete takes the **next conversation `seq`**, like a new message, and writes a `message_changes` row.
+  - Edit: `UPDATE … IF EXISTS` first (an LWT: a plain update would bring a deleted row back), then the log row.
+    So sync never sees a logged edit that isn't saved yet.
+  - Delete: the delete + its log row + a `deleted_messages` row (kept a day) in one logged batch.
+- A **send retry** whose message was deleted gets `message_not_found` instead of re-inserting it
+  (`deleted_messages` lives as long as nonces).
+- Pushes `message_updated {message, seq}` / `message_deleted {conversation_id, message_id, seq}` to every member.
+  The app treats that `seq` like a message's: it bumps `lastSeq`, and a gap means "sync".
+- Sync also reads `message_changes > after_seq`: latest change per message wins → `edited` (current version)
+  and `deleted_ids`, plus `last_seq` to use next time. More than 200 changes → `complete: false`.
+- `last_seq` is the **highest seq sync actually saw**, not the conversation's counter: a seq that's
+  reserved but not saved yet must not be skipped.
+- Sync scans 10 s (of id time) past the first message you already have: ids are made before seqs, so
+  parallel sends can have seq 11 just below seq 10.
+- Known gaps:
+  - `message_changes` is one partition per conversation that grows forever. Bucket it later.
+  - Seqs aren't committed in order: if change 12 is saved while 11 is still being written, a sync in
+    that moment reports 12 and skips 11. Same for messages. Needs a "committed up to" watermark.
+  - A crash between an edit's save and its log row: offline clients miss that edit.
 
 ### Rules
 

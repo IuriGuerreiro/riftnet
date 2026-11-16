@@ -7,8 +7,26 @@ pub const GET_NONCE: &str = "SELECT message_id FROM message_nonces \
 pub const INSERT_MESSAGE: &str = "INSERT INTO messages \
      (conversation_id, bucket, id, seq, author_id, content, encryption) VALUES (?, ?, ?, ?, ?, ?, ?)";
 
-pub const GET_MESSAGE: &str = "SELECT conversation_id, id, seq, author_id, content, encryption \
+pub const GET_MESSAGE: &str = "SELECT conversation_id, id, seq, author_id, content, encryption, edited_at \
      FROM messages WHERE conversation_id = ? AND bucket = ? AND id = ?";
 
-pub const HISTORY: &str = "SELECT conversation_id, id, seq, author_id, content, encryption \
+pub const HISTORY: &str = "SELECT conversation_id, id, seq, author_id, content, encryption, edited_at \
      FROM messages WHERE conversation_id = ? AND bucket = ? AND id < ? LIMIT ?";
+
+pub const EDIT_MESSAGE: &str = "UPDATE messages SET content = ?, edited_at = ? \
+     WHERE conversation_id = ? AND bucket = ? AND id = ? IF EXISTS";
+
+pub const DELETE_MESSAGE: &str =
+    "DELETE FROM messages WHERE conversation_id = ? AND bucket = ? AND id = ?";
+
+pub const INSERT_CHANGE: &str = "INSERT INTO message_changes (conversation_id, seq, message_id, kind) \
+     VALUES (?, ?, ?, ?)";
+
+pub const CHANGES_SINCE: &str = "SELECT seq, message_id, kind FROM message_changes \
+     WHERE conversation_id = ? AND seq > ? LIMIT ?";
+
+pub const MARK_DELETED: &str = "INSERT INTO deleted_messages (conversation_id, id) \
+     VALUES (?, ?) USING TTL 86400";
+
+pub const WAS_DELETED: &str =
+    "SELECT id FROM deleted_messages WHERE conversation_id = ? AND id = ?";

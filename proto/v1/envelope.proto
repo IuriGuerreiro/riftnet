@@ -6,6 +6,7 @@ import "v1/calls.proto";
 import "v1/conversations.proto";
 import "v1/friends.proto";
 import "v1/messages.proto";
+import "v1/presence.proto";
 import "v1/users.proto";
 
 // Every WebSocket frame is one Envelope.
@@ -29,7 +30,11 @@ message Envelope {
     AddMember add_member = 18;
     LeaveGroup leave_group = 19;
     RenameGroup rename_group = 20;
+    EditMessage edit_message = 22;
+    DeleteMessage delete_message = 23;
     StartTyping start_typing = 21; // fire-and-forget: send with id 0, no reply
+    SetIdle set_idle = 24;
+    GetPresence get_presence = 25;
 
     Pong pong = 50;
     Error error = 51;
@@ -39,12 +44,18 @@ message Envelope {
     ConversationResult conversation = 57;
     Conversations conversations = 58;
     SyncResult sync_result = 59;
+    EditMessageAck edit_message_ack = 63;
+    DeleteMessageAck delete_message_ack = 64;
+    Presences presences = 67;
 
     MessageCreated message_created = 54;
     UserUpdated user_updated = 55;
     ConversationUpdated conversation_updated = 60;
     FriendUpdated friend_updated = 61;
+    MessageUpdated message_updated = 65;
+    MessageDeleted message_deleted = 66;
     TypingStarted typing_started = 62;
+    PresenceUpdated presence_updated = 68;
 
     // calls: field numbers 100-139 are reserved for them
     CallStart call_start = 100;
