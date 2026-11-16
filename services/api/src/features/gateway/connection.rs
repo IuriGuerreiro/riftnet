@@ -95,6 +95,11 @@ pub async fn run(mut socket: WebSocket, state: AppState) {
                     continue; // ping/pong/text frames: ignore
                 };
                 let reply = match Envelope::decode(bytes) {
+                    // Fire-and-forget: no reply, not even an error.
+                    Ok(Envelope { payload: Some(Payload::StartTyping(req)), .. }) => {
+                        start_typing(&state, &session, req).await;
+                        continue;
+                    }
                     Ok(req) => handle(&state, &session, req).await,
                     Err(_) => error(0, "bad_frame", "not a valid Envelope"),
                 };
@@ -174,6 +179,18 @@ async fn authenticate(socket: &mut WebSocket, state: &AppState) -> Result<Sessio
     };
     send(socket, ok).await.map_err(|_| "closed")?;
     Ok(session)
+}
+
+/// `start_typing` has no reply; failures (not a member…) are only logged.
+async fn start_typing(state: &AppState, session: &Session, req: protocol::v1::StartTyping) {
+    metrics::counter!("ws_requests_total").increment(1);
+    if let Err(err) = state
+        .typing
+        .start(session.user_id, req.conversation_id as i64)
+        .await
+    {
+        tracing::debug!(error = ?err, "start_typing rejected");
+    }
 }
 
 /// Step 3: one request in, one reply out (same `id`).

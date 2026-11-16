@@ -6,4 +6,5 @@ pub mod gateway;
 pub mod health;
 pub mod messages;
 pub mod presence;
+pub mod typing;
 pub mod users;

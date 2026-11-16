@@ -53,6 +53,12 @@ export class WsClient {
     return new Promise((resolve, reject) => this.pending.set(id, { resolve, reject }));
   }
 
+  /** Fire-and-forget (id 0, no reply), e.g. `startTyping`. */
+  notify(payload: Payload) {
+    if (this.ws.readyState !== WebSocket.OPEN) return;
+    this.ws.send(toBinary(EnvelopeSchema, create(EnvelopeSchema, { id: 0n, payload })));
+  }
+
   /** Also get every push. Returns a function that stops listening. */
   addPushListener(listener: (payload: Payload) => void): () => void {
     this.pushListeners.add(listener);

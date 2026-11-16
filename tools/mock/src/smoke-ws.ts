@@ -3,7 +3,7 @@
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { AuthenticateSchema, EnvelopeSchema, PingSchema, type Envelope } from "../../../client/src/gen/v1/envelope_pb.ts";
 import { ListConversationsSchema, OpenDmSchema } from "../../../client/src/gen/v1/conversations_pb.ts";
-import { GetHistorySchema, SendMessageSchema, SyncSchema } from "../../../client/src/gen/v1/messages_pb.ts";
+import { DeleteMessageSchema, EditMessageSchema, GetHistorySchema, SendMessageSchema, SyncSchema } from "../../../client/src/gen/v1/messages_pb.ts";
 
 const HTTP = process.env.API_HTTP ?? "http://127.0.0.1:7100";
 const WS = HTTP.replace(/^http/, "ws") + "/ws";
@@ -156,7 +156,8 @@ check("history has all 13, newest first", h.length === 13 && h[0].seq === 13n &&
 check("limit 5 → 5 newest", h5.length === 5 && h5[0].seq === 13n);
 r = await talk([auth(bob.token), history(dm, h5[4].id, 5)], 2);
 const older = r.replies[1]?.payload.case === "history" ? r.replies[1].payload.value.messages : [];
-check("before_id → the next 5 older", older.length === 5 && older[0].seq === h5[4].seq - 1n);
+// History pages by id (time). Parallel sends can make id order != seq order, so compare ids.
+check("before_id → the next 5 older", older.length === 5 && older[0].id === h[5].id);
 
 r = await talk([auth(carol.token), send(dm, "let me in", "x"), history(dm)], 3);
 check("non-member can't send", errCode(r.replies[1]) === "conversation_not_found");
@@ -192,5 +193,36 @@ check("sync when up to date → empty", s14?.complete === true && s14.messages.l
 check("sync from 0 → all 14", s0?.complete === true && s0.messages.length === 14 && s0.messages[0].seq === 1n);
 r = await talk([auth(carol.token), sync(dm, 0n)], 2);
 check("non-member can't sync", errCode(r.replies[1]) === "conversation_not_found");
+
+// --- edit + delete ---  the DM has seq 1..14; message seq 1 is alice's "hello bob", seq 3 is bob's
+const editMsg = (conversationId: bigint, messageId: bigint, text: string) => ({
+  case: "editMessage" as const,
+  value: create(EditMessageSchema, { conversationId, messageId, content: enc.encode(text) }),
+});
+const deleteMsg = (conversationId: bigint, messageId: bigint) => ({
+  case: "deleteMessage" as const,
+  value: create(DeleteMessageSchema, { conversationId, messageId }),
+});
+const first = s0!.messages[0], bobs = s0!.messages[2];
+const bobLive2 = await listen(bob.token);
+r = await talk([auth(alice.token), editMsg(dm, first.id, "hello bob!"), editMsg(dm, bobs.id, "mine now"), deleteMsg(dm, bobs.id)], 4);
+const ea = r.replies[1]?.payload;
+check("author edits → ack with edited_at + new seq", ea?.case === "editMessageAck" && dec.decode(ea.value.message?.content) === "hello bob!" && ea.value.message!.editedAt > 0n && ea.value.seq === 15n);
+check("someone else's message → not_your_message (edit)", errCode(r.replies[2]) === "not_your_message");
+check("someone else's message → not_your_message (delete)", errCode(r.replies[3]) === "not_your_message");
+r = await talk([auth(alice.token), editMsg(dm, first.id, "")], 2);
+check("empty edit → empty_message", errCode(r.replies[1]) === "empty_message");
+r = await talk([auth(bob.token), deleteMsg(dm, bobs.id), deleteMsg(dm, bobs.id), history(dm)], 4);
+const d1 = r.replies[1]?.payload, d2 = r.replies[2]?.payload;
+check("author deletes → ack with seq 16", d1?.case === "deleteMessageAck" && d1.value.seq === 16n);
+check("delete again → ok, seq 0", d2?.case === "deleteMessageAck" && d2.value.seq === 0n);
+const hAfter = r.replies[3]?.payload.case === "history" ? r.replies[3].payload.value.messages : [];
+check("history: deleted one is gone, edit shows", hAfter.length === 13 && !hAfter.some((m) => m.id === bobs.id) && hAfter.some((m) => m.id === first.id && m.editedAt > 0n));
+await sleep(300);
+check("bob got updated + deleted pushes", bobLive2.pushes.some((e) => e.payload.case === "messageUpdated") && bobLive2.pushes.some((e) => e.payload.case === "messageDeleted" && e.payload.value.messageId === bobs.id));
+bobLive2.stop();
+r = await talk([auth(bob.token), sync(dm, 14n)], 2);
+const sc = synced(r.replies[1]);
+check("sync after 14 → the edit + the delete", sc?.messages.length === 0 && sc.edited.some((m) => m.id === first.id) && sc.deletedIds.includes(bobs.id) && sc.lastSeq === 16n);
 
 process.exit(failed ? 1 : 0);

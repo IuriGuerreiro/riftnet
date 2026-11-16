@@ -9,6 +9,7 @@ message Message {
   uint64 seq = 4;              // 1, 2, 3... per conversation, for sync
   bytes content = 5;           // opaque: UTF-8 text now, encrypted later
   Encryption encryption = 6;
+  uint64 edited_at = 7;        // unix ms of the last edit, 0 = never edited
 }
 
 enum Encryption {
@@ -47,9 +48,67 @@ message Sync {
 message SyncResult {
   repeated Message messages = 1; // oldest first
   bool complete = 2;             // false = too many missed: these are the newest; load older with GetHistory
+  repeated Message edited = 3;   // older messages edited since after_seq (current version)
+  repeated uint64 deleted_ids = 4; // messages deleted since after_seq
+  uint64 last_seq = 5;           // you're now up to here: use it as the next after_seq
 }
 
 // Push: a new message in a conversation you're in.
 message MessageCreated {
   Message message = 1;
+}
+
+// Edits and deletes take a seq too (like a new message), so sync can tell
+// you about them. `seq` below is that change's number, not the message's.
+
+// Only the author can edit. Same limits as SendMessage.
+message EditMessage {
+  uint64 conversation_id = 1;
+  uint64 message_id = 2;
+  bytes content = 3;
+}
+
+message EditMessageAck {
+  Message message = 1;
+  uint64 seq = 2;
+}
+
+// Only the author can delete. The message is gone for good (hard delete).
+// Deleting one that's already gone is fine (seq = 0, no push).
+message DeleteMessage {
+  uint64 conversation_id = 1;
+  uint64 message_id = 2;
+}
+
+message DeleteMessageAck {
+  uint64 conversation_id = 1;
+  uint64 message_id = 2;
+  uint64 seq = 3;
+}
+
+// Push: a message was edited.
+message MessageUpdated {
+  Message message = 1;
+  uint64 seq = 2;
+}
+
+// Push: a message was deleted.
+message MessageDeleted {
+  uint64 conversation_id = 1;
+  uint64 message_id = 2;
+  uint64 seq = 3;
+}
+
+// Client -> server: "I'm typing here". Fire-and-forget (id 0, no reply).
+// Ephemeral, never stored. At most one per 3s per user per conversation;
+// extras are dropped silently.
+message StartTyping {
+  uint64 conversation_id = 1;
+}
+
+// Push to the other members: show "X is typing…" for ~8s,
+// or until X's next message arrives.
+message TypingStarted {
+  uint64 conversation_id = 1;
+  uint64 user_id = 2;
 }

@@ -29,6 +29,7 @@ use crate::features::messages::repository::ScyllaMessageRepo;
 use crate::features::messages::service::MessageService;
 use crate::features::presence::service::PresenceService;
 use crate::features::presence::store::RedisPresenceStore;
+use crate::features::typing::service::TypingService;
 use crate::features::users::repository::{PgUserRepo, UserRepo};
 use crate::features::users::service::UserService;
 use crate::features::{auth, friends, gateway, health, users};
@@ -42,6 +43,7 @@ pub struct AppState {
     pub messages: Arc<MessageService>,
     pub calls: Arc<CallService>,
     pub presence: Arc<PresenceService>,
+    pub typing: Arc<TypingService>,
     pub tokens: Arc<TokenService>,
     pub limiter: Arc<RateLimiter>,
     pub events: Arc<dyn EventBus>,
@@ -96,6 +98,10 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
             user_repo.clone(),
             events.clone(),
             ids.clone(),
+        )),
+        typing: Arc::new(TypingService::new(
+            conversation_repo.clone(),
+            events.clone(),
         )),
         calls: Arc::new(CallService::new(
             Arc::new(MemoryCallStore::default()),

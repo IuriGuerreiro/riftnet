@@ -22,6 +22,8 @@ pub async fn dispatch(
         Payload::SendMessage(req) => send_message(state, session, req).await,
         Payload::GetHistory(req) => get_history(state, session, req).await,
         Payload::Sync(req) => sync(state, session, req).await,
+        Payload::EditMessage(req) => edit_message(state, session, req).await,
+        Payload::DeleteMessage(req) => delete_message(state, session, req).await,
         Payload::CreateGroup(req) => create_group(state, session, req).await,
         Payload::AddMember(req) => add_member(state, session, req).await,
         Payload::LeaveGroup(req) => leave_group(state, session, req).await,
@@ -142,7 +144,7 @@ async fn get_history(
 }
 
 async fn sync(state: &AppState, session: &Session, req: v1::Sync) -> Result<Payload, ApiError> {
-    let (messages, complete) = state
+    let r = state
         .messages
         .sync(
             session.user_id,
@@ -152,8 +154,51 @@ async fn sync(state: &AppState, session: &Session, req: v1::Sync) -> Result<Payl
         .await?;
 
     Ok(Payload::SyncResult(v1::SyncResult {
-        messages: messages.iter().map(Into::into).collect(),
-        complete,
+        messages: r.messages.iter().map(Into::into).collect(),
+        complete: r.complete,
+        edited: r.edited.iter().map(Into::into).collect(),
+        deleted_ids: r.deleted_ids.iter().map(|id| *id as u64).collect(),
+        last_seq: r.last_seq as u64,
+    }))
+}
+
+async fn edit_message(
+    state: &AppState,
+    session: &Session,
+    req: v1::EditMessage,
+) -> Result<Payload, ApiError> {
+    let (message, seq) = state
+        .messages
+        .edit(
+            session.user_id,
+            req.conversation_id as i64,
+            req.message_id as i64,
+            req.content,
+        )
+        .await?;
+    Ok(Payload::EditMessageAck(v1::EditMessageAck {
+        message: Some((&message).into()),
+        seq: seq as u64,
+    }))
+}
+
+async fn delete_message(
+    state: &AppState,
+    session: &Session,
+    req: v1::DeleteMessage,
+) -> Result<Payload, ApiError> {
+    let seq = state
+        .messages
+        .delete(
+            session.user_id,
+            req.conversation_id as i64,
+            req.message_id as i64,
+        )
+        .await?;
+    Ok(Payload::DeleteMessageAck(v1::DeleteMessageAck {
+        conversation_id: req.conversation_id,
+        message_id: req.message_id,
+        seq: seq.unwrap_or(0) as u64,
     }))
 }
 

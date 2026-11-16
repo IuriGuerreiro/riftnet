@@ -11,7 +11,14 @@ import {
   type Conversation,
 } from "../gen/v1/conversations_pb";
 import type { Envelope } from "../gen/v1/envelope_pb";
-import { GetHistorySchema, SendMessageSchema, SyncSchema, type Message } from "../gen/v1/messages_pb";
+import {
+  DeleteMessageSchema,
+  EditMessageSchema,
+  GetHistorySchema,
+  SendMessageSchema,
+  SyncSchema,
+  type Message,
+} from "../gen/v1/messages_pb";
 
 // Test chat state: DMs, their messages, and what we've seen (lastSeq).
 //
@@ -21,6 +28,7 @@ import { GetHistorySchema, SendMessageSchema, SyncSchema, type Message } from ".
 //   - push:        someone else's message, live
 //   - sync:        what we missed while the socket was down
 // They all go through `addMessages`, which dedupes by id and bumps lastSeq.
+// Edits and deletes take a seq too (so sync can replay them): `noteSeq`.
 
 type Key = string; // conversation id as a string (bigint can't be an object key)
 
@@ -30,6 +38,7 @@ export interface ChatMessage {
   seq: bigint;
   authorId: bigint;
   text: string;
+  editedAt?: bigint; // unix ms, set once edited
   pending?: boolean;
   failed?: boolean;
 }
@@ -50,12 +59,21 @@ interface ChatState {
   openDm: (ws: WsClient, username: string) => Promise<void>;
   select: (ws: WsClient, conversationId: bigint) => Promise<void>;
   send: (ws: WsClient, myId: bigint, text: string) => Promise<void>;
+  /** Edit / delete my own message in the open chat. True if it worked. */
+  edit: (ws: WsClient, messageId: bigint, text: string) => Promise<boolean>;
+  remove: (ws: WsClient, messageId: bigint) => Promise<boolean>;
 }
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 const key = (id: bigint): Key => id.toString();
-const toChat = (m: Message): ChatMessage => ({ id: m.id, seq: m.seq, authorId: m.authorId, text: dec.decode(m.content) });
+const toChat = (m: Message): ChatMessage => ({
+  id: m.id,
+  seq: m.seq,
+  authorId: m.authorId,
+  text: dec.decode(m.content),
+  editedAt: m.editedAt || undefined,
+});
 
 export const useChat = create<ChatState>()((set, get) => {
   // Merge into a conversation: replace by id (or by nonce for my pending
@@ -76,6 +94,20 @@ export const useChat = create<ChatState>()((set, get) => {
     set((s) => ({ messages: { ...s.messages, [k]: list }, lastSeq: { ...s.lastSeq, [k]: seen } }));
   }
 
+  function removeMessages(conversationId: bigint, ids: bigint[]) {
+    const k = key(conversationId);
+    set((s) => ({ messages: { ...s.messages, [k]: (s.messages[k] ?? []).filter((m) => !ids.includes(m.id)) } }));
+  }
+
+  // An edit/delete took `seq`. Missed one in between? Sync. Then remember it.
+  function noteSeq(ws: WsClient, conversationId: bigint, seq: bigint) {
+    const k = key(conversationId);
+    const last = get().lastSeq[k];
+    if (last === undefined) return; // chat never opened: history will load it fresh
+    if (seq > last + 1n) void sync(ws, conversationId);
+    else if (seq > last) set((s) => ({ lastSeq: { ...s.lastSeq, [k]: seq } }));
+  }
+
   // "I have up to lastSeq, what did I miss?" Repeats while the server says
   // there's more; if too much was missed, start over from the newest.
   async function sync(ws: WsClient, conversationId: bigint) {
@@ -86,7 +118,11 @@ export const useChat = create<ChatState>()((set, get) => {
       // Too far behind: drop the old copy, keep the newest page.
       set((s) => ({ messages: { ...s.messages, [key(conversationId)]: [] } }));
     }
-    addMessages(conversationId, reply.value.messages.map(toChat));
+    const r = reply.value;
+    addMessages(conversationId, [...r.messages, ...r.edited].map(toChat));
+    removeMessages(conversationId, r.deletedIds);
+    const k = key(conversationId);
+    set((s) => ({ lastSeq: { ...s.lastSeq, [k]: r.lastSeq > (s.lastSeq[k] ?? 0n) ? r.lastSeq : s.lastSeq[k] } }));
   }
 
   async function loadConversations(ws: WsClient) {
@@ -122,6 +158,17 @@ export const useChat = create<ChatState>()((set, get) => {
     // A group changed (created, someone joined/left, renamed).
     if (payload.case === "conversationUpdated" && payload.value.conversation) {
       return upsertConversation(payload.value.conversation, myId);
+    }
+    if (payload.case === "messageUpdated" && payload.value.message) {
+      const m = payload.value.message;
+      // Only if we have it (loaded or pending sync); never add an old message mid-list.
+      if (get().messages[key(m.conversationId)]?.some((x) => x.id === m.id)) addMessages(m.conversationId, [toChat(m)]);
+      return noteSeq(ws, m.conversationId, payload.value.seq);
+    }
+    if (payload.case === "messageDeleted") {
+      const { conversationId, messageId, seq } = payload.value;
+      removeMessages(conversationId, [messageId]);
+      return noteSeq(ws, conversationId, seq);
     }
     if (payload.case !== "messageCreated" || !payload.value.message) return;
     const m = payload.value.message;
@@ -216,6 +263,44 @@ export const useChat = create<ChatState>()((set, get) => {
       } catch (e) {
         addMessages(conversationId, [{ id: 0n, nonce, seq: 0n, authorId: myId, text, pending: true, failed: true }]);
         set({ error: (e as Error).message });
+      }
+    },
+
+    edit: async (ws, messageId, text) => {
+      const conversationId = get().selected;
+      if (!conversationId || !text.trim()) return false;
+      try {
+        const reply = await ws.request({
+          case: "editMessage",
+          value: createProto(EditMessageSchema, { conversationId, messageId, content: enc.encode(text) }),
+        });
+        if (reply.case === "editMessageAck" && reply.value.message) {
+          addMessages(conversationId, [toChat(reply.value.message)]);
+          noteSeq(ws, conversationId, reply.value.seq);
+        }
+        set({ error: null });
+        return true;
+      } catch (e) {
+        set({ error: (e as Error).message });
+        return false;
+      }
+    },
+
+    remove: async (ws, messageId) => {
+      const conversationId = get().selected;
+      if (!conversationId) return false;
+      try {
+        const reply = await ws.request({
+          case: "deleteMessage",
+          value: createProto(DeleteMessageSchema, { conversationId, messageId }),
+        });
+        removeMessages(conversationId, [messageId]);
+        if (reply.case === "deleteMessageAck" && reply.value.seq) noteSeq(ws, conversationId, reply.value.seq);
+        set({ error: null });
+        return true;
+      } catch (e) {
+        set({ error: (e as Error).message });
+        return false;
       }
     },
   };
