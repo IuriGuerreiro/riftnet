@@ -5,7 +5,7 @@ import { ConversationKind, type Conversation } from "../gen/v1/conversations_pb"
 import type { Friend } from "../api/types";
 import { CallBar, IncomingCall } from "../call/CallBar";
 import { useCalls } from "../stores/calls";
-import { useChat } from "../stores/chat";
+import { useChat, type ChatMessage } from "../stores/chat";
 import { useFriends } from "../stores/friends";
 import { typingText, useTyping } from "../stores/typing";
 import { useConnection } from "../stores/connection";
@@ -326,22 +326,91 @@ function Messages({ conversationId, myId }: { conversationId: bigint; myId?: big
 
   return (
     <div className="flex-1 space-y-1 overflow-y-auto p-4">
-      {messages.map((m) => {
-        const mine = m.authorId === myId;
-        return (
-          <div key={m.nonce ?? m.id.toString()} className={`flex ${mine ? "justify-end" : ""}`}>
-            <p
-              className={`max-w-[75%] whitespace-pre-wrap break-words rounded-lg px-3 py-1.5 text-sm ${
-                mine ? "bg-brand text-zinc-950" : "bg-zinc-800"
-              } ${m.pending ? "opacity-50" : ""} ${m.failed ? "ring-2 ring-red-500" : ""}`}
-              title={m.pending ? "sending…" : `seq ${m.seq}`}
-            >
-              {m.text}
-            </p>
-          </div>
-        );
-      })}
+      {messages.map((m) => (
+        <MessageRow key={m.nonce ?? m.id.toString()} m={m} mine={m.authorId === myId} />
+      ))}
       <div ref={bottom} />
+    </div>
+  );
+}
+
+// One bubble. My own sent messages get Edit / Delete on hover.
+function MessageRow({ m, mine }: { m: ChatMessage; mine: boolean }) {
+  const ws = useConnection((s) => s.ws);
+  const { edit, remove } = useChat();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const canChange = mine && !m.pending && m.id !== 0n && !!ws;
+
+  async function save() {
+    if (!ws) return;
+    const text = draft.trim();
+    if (!text || text === m.text) return setEditing(false);
+    if (await edit(ws, m.id, text)) setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <div className="flex justify-end">
+        <div className="w-[75%] space-y-1">
+          <textarea
+            autoFocus
+            value={draft}
+            maxLength={4000}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                void save();
+              } else if (e.key === "Escape") {
+                setEditing(false);
+              }
+            }}
+            className="w-full resize-none rounded-lg bg-zinc-800 px-3 py-1.5 text-sm outline-none ring-2 ring-brand"
+          />
+          <p className="text-right text-xs text-zinc-500">Enter to save · Esc to cancel</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`group flex items-center gap-2 ${mine ? "justify-end" : ""}`}>
+      {canChange && (
+        <div className="hidden gap-1 text-xs text-zinc-400 group-hover:flex">
+          <button
+            onClick={() => {
+              setDraft(m.text);
+              setEditing(true);
+            }}
+            className="rounded px-1.5 py-0.5 hover:bg-zinc-800 hover:text-zinc-100"
+          >
+            Edit
+          </button>
+          <button
+            onClick={() => ws && window.confirm("Delete this message? This can't be undone.") && void remove(ws, m.id)}
+            className="rounded px-1.5 py-0.5 hover:bg-zinc-800 hover:text-red-400"
+          >
+            Delete
+          </button>
+        </div>
+      )}
+      <p
+        className={`max-w-[75%] whitespace-pre-wrap break-words rounded-lg px-3 py-1.5 text-sm ${
+          mine ? "bg-brand text-zinc-950" : "bg-zinc-800"
+        } ${m.pending ? "opacity-50" : ""} ${m.failed ? "ring-2 ring-red-500" : ""}`}
+        title={m.pending ? "sending…" : `seq ${m.seq}`}
+      >
+        {m.text}
+        {m.editedAt && (
+          <span
+            className={`ml-1.5 text-[10px] ${mine ? "text-zinc-800" : "text-zinc-500"}`}
+            title={new Date(Number(m.editedAt)).toLocaleString()}
+          >
+            (edited)
+          </span>
+        )}
+      </p>
     </div>
   );
 }

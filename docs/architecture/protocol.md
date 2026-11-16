@@ -87,7 +87,10 @@ sequenceDiagram
 | `list_conversations`                              | `conversations`                |                              |
 | `send_message {conversation_id, content, nonce}`  | `message_ack {nonce, message}` | see [dms.md](dms.md#sending) |
 | `get_history {conversation_id, before_id, limit}` | `history` (newest first)       | limit default 50, max 100    |
-| `sync {conversation_id, after_seq}`               | `sync_result`                  | done                         |
+| `sync {conversation_id, after_seq}`               | `sync_result`                  | also edits + deletes         |
+| `edit_message {conversation_id, message_id, content}` | `edit_message_ack {message, seq}` | author only, see [dms.md](dms.md#edit-and-delete) |
+| `delete_message {conversation_id, message_id}`    | `delete_message_ack {…, seq}`  | author only, hard delete     |
+| — (push, id 0)                                    | `message_updated` / `message_deleted` | carry the change's `seq` |
 | — (push, id 0)                                    | `message_created`              | live, via NATS (see dms.md)  |
 | `call_start` / `call_accept` / `call_decline` / `call_join` / `call_leave` | `call_result` / `call_joined` | voice, see [calls.md](calls.md) |
 | — (push, id 0) | `call_incoming` / `call_updated` / `call_ended` | voice calls |
@@ -117,6 +120,7 @@ Test it end to end: `pnpm --filter mock smoke:ws` (api + stack running).
 - Nothing new? Answered from the conversation row (`last_seq`), no message read.
 - At most 200 per sync. More missed → `complete: false`: you got the newest 200; drop your local copy and load older with `get_history`.
 - Holes in seq (a crashed send) are fine: sync filters `seq > after_seq`, it doesn't count.
+- Edits and deletes take a seq too, so sync also returns `edited` + `deleted_ids`, and `last_seq` to use next time.
 
 ## Versioning
 

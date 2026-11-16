@@ -30,6 +30,8 @@ message Envelope {
     AddMember add_member = 18;
     LeaveGroup leave_group = 19;
     RenameGroup rename_group = 20;
+    EditMessage edit_message = 22;
+    DeleteMessage delete_message = 23;
     StartTyping start_typing = 21;  // fire-and-forget: send with id 0, no reply
 
     // server -> client (replies)
@@ -41,12 +43,16 @@ message Envelope {
     ConversationResult conversation = 57;
     Conversations conversations = 58;
     SyncResult sync_result = 59;
+    EditMessageAck edit_message_ack = 63;
+    DeleteMessageAck delete_message_ack = 64;
 
     // server -> client (pushes, id = 0)
     MessageCreated message_created = 54;
     UserUpdated user_updated = 55;
     ConversationUpdated conversation_updated = 60;
     FriendUpdated friend_updated = 61;
+    MessageUpdated message_updated = 65;
+    MessageDeleted message_deleted = 66;
     TypingStarted typing_started = 62;
 
     // calls (100-139 reserved, see docs/architecture/calls.md)

@@ -9,13 +9,40 @@ pub struct Message {
     pub content: Vec<u8>,
     /// 0 = none, 1 = MLS (matches `Encryption` in messages.proto).
     pub encryption: i8,
+    /// Unix ms of the last edit, 0 = never edited.
+    pub edited_at: i64,
+}
+
+/// One row of the change log: message `message_id` was edited or deleted,
+/// and that change took conversation seq `seq`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MessageChange {
+    pub seq: i64,
+    pub message_id: i64,
+    pub kind: ChangeKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChangeKind {
+    Edit = 1,
+    Delete = 2,
+}
+
+impl ChangeKind {
+    pub fn from_i8(v: i8) -> Option<Self> {
+        match v {
+            1 => Some(Self::Edit),
+            2 => Some(Self::Delete),
+            _ => None,
+        }
+    }
 }
 
 /// Max size of one message's content (bytes, not characters).
 pub const MAX_CONTENT_BYTES: usize = 8 * 1024;
-/// Max client nonce length.
-/// Most messages one `sync` returns.
+/// Most messages (and, separately, most edits/deletes) one `sync` returns.
 pub const MAX_SYNC: usize = 200;
+/// Max client nonce length.
 pub const MAX_NONCE_LEN: usize = 64;
 
 /// A partition holds ~10 days of one conversation, so it never grows forever.

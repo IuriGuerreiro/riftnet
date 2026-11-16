@@ -13,6 +13,7 @@ impl From<&Message> for v1::Message {
             seq: m.seq as u64,
             content: m.content.clone(),
             encryption: i32::from(m.encryption),
+            edited_at: m.edited_at as u64,
         }
     }
 }
