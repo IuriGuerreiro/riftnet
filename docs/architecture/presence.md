@@ -58,7 +58,7 @@ sequenceDiagram
 | — (push, id 0)            | `presence_updated {user_id, status}` | to friends, DM members, and your other devices |
 
 - Pushes go only on a real change (online → idle, …), through NATS `user.<id>`.
-- The client calls `get_presence` with its friends + DM members after every
+- The client calls `get_presence` (in pages of 200) with its friends + DM members after every
   (re)connect, and again when those lists change (new friend, new DM).
 - A new friend or DM doesn't push presence: the client's reload covers it.
 

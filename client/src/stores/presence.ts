@@ -9,6 +9,7 @@ import { GetPresenceSchema, PresenceStatus, SetIdleSchema } from "../gen/v1/pres
 // Also reports this window as idle after 5 min without input, or while hidden.
 
 const IDLE_AFTER_MS = 5 * 60_000;
+/** Server limit per get_presence (MAX_PRESENCE_IDS in the api). */
 const MAX_IDS = 200;
 
 interface PresenceState {
@@ -40,21 +41,27 @@ export const usePresence = create<PresenceState>()((set) => ({
   },
 
   load: async (ws, userIds) => {
-    const ids = [...new Set(userIds)].slice(0, MAX_IDS);
-    if (ids.length === 0) return;
-    try {
-      const reply = await ws.request({
-        case: "getPresence",
-        value: createProto(GetPresenceSchema, { userIds: ids.map(BigInt) }),
-      });
-      if (reply.case !== "presences") return;
-      const next: Record<string, PresenceStatus> = {};
-      for (const id of ids) next[id] = PresenceStatus.OFFLINE; // not returned = can't see = offline
-      for (const p of reply.value.presences) next[p.userId.toString()] = p.status;
-      set((s) => ({ statuses: { ...s.statuses, ...next } }));
-    } catch {
-      // socket closed: reloads on reconnect
-    }
+    const ids = [...new Set(userIds)];
+    // The server takes at most 200 ids per request: ask in pages, all at once.
+    const pages: string[][] = [];
+    for (let i = 0; i < ids.length; i += MAX_IDS) pages.push(ids.slice(i, i + MAX_IDS));
+    await Promise.all(
+      pages.map(async (page) => {
+        try {
+          const reply = await ws.request({
+            case: "getPresence",
+            value: createProto(GetPresenceSchema, { userIds: page.map(BigInt) }),
+          });
+          if (reply.case !== "presences") return;
+          const next: Record<string, PresenceStatus> = {};
+          for (const id of page) next[id] = PresenceStatus.OFFLINE; // not returned = can't see = offline
+          for (const p of reply.value.presences) next[p.userId.toString()] = p.status;
+          set((s) => ({ statuses: { ...s.statuses, ...next } }));
+        } catch {
+          // socket closed: reloads on reconnect
+        }
+      }),
+    );
   },
 }));
 
