@@ -81,6 +81,7 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
 
     let file_store = Arc::new(S3FileStore::new(&S3Config {
         endpoint: &config.s3_endpoint,
+        public_endpoint: config.s3_public_endpoint.as_deref(),
         region: &config.s3_region,
         bucket: &config.s3_bucket,
         access_key: &config.s3_access_key,

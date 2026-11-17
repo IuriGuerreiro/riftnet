@@ -17,6 +17,7 @@ pub struct Config {
     pub cors_origins: Vec<String>,
     /// S3-compatible file store: MinIO locally, R2 in production.
     pub s3_endpoint: String,
+    pub s3_public_endpoint: Option<String>,
     pub s3_region: String,
     pub s3_bucket: String,
     pub s3_access_key: String,
@@ -55,6 +56,7 @@ impl Config {
                 .into(),
             machine_id: env_or("MACHINE_ID", "1").parse()?,
             s3_endpoint: env_or("S3_ENDPOINT", "http://127.0.0.1:7106"),
+            s3_public_endpoint: std::env::var("S3_PUBLIC_ENDPOINT").ok(),
             s3_region: env_or("S3_REGION", "auto"),
             s3_bucket: env_or("S3_BUCKET", "attachments"),
             s3_access_key: env_or("S3_ACCESS_KEY", "minio"),

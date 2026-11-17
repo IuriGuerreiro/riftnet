@@ -52,6 +52,8 @@ pub trait FileStore: Send + Sync {
 
 pub struct S3Config<'a> {
     pub endpoint: &'a str,
+    /// Host put in download links, when browsers reach S3 by another address.
+    pub public_endpoint: Option<&'a str>,
     pub region: &'a str,
     pub bucket: &'a str,
     pub access_key: &'a str,
@@ -60,22 +62,27 @@ pub struct S3Config<'a> {
 
 pub struct S3FileStore {
     client: Client,
+    presigner: Client,
     bucket: String,
 }
 
 impl S3FileStore {
     pub fn new(cfg: &S3Config<'_>) -> Self {
-        let creds = Credentials::new(cfg.access_key, cfg.secret_key, None, None, "config");
-        let conf = aws_sdk_s3::Config::builder()
-            .behavior_version(BehaviorVersion::latest())
-            .endpoint_url(cfg.endpoint)
-            .region(Region::new(cfg.region.to_string()))
-            .credentials_provider(creds)
-            // MinIO needs bucket-in-path; R2 accepts it too.
-            .force_path_style(true)
-            .build();
+        let client_for = |endpoint: &str| {
+            let creds = Credentials::new(cfg.access_key, cfg.secret_key, None, None, "config");
+            let conf = aws_sdk_s3::Config::builder()
+                .behavior_version(BehaviorVersion::latest())
+                .endpoint_url(endpoint)
+                .region(Region::new(cfg.region.to_string()))
+                .credentials_provider(creds)
+                // MinIO needs bucket-in-path; R2 accepts it too.
+                .force_path_style(true)
+                .build();
+            Client::from_conf(conf)
+        };
         Self {
-            client: Client::from_conf(conf),
+            client: client_for(cfg.endpoint),
+            presigner: client_for(cfg.public_endpoint.unwrap_or(cfg.endpoint)),
             bucket: cfg.bucket.to_string(),
         }
     }
@@ -250,7 +257,7 @@ impl FileStore for S3FileStore {
         ttl: Duration,
     ) -> anyhow::Result<String> {
         let req = self
-            .client
+            .presigner
             .get_object()
             .bucket(&self.bucket)
             .key(key)
@@ -299,6 +306,7 @@ mod minio_tests {
     async fn minio_multipart_roundtrip() {
         let store = S3FileStore::new(&S3Config {
             endpoint: "http://127.0.0.1:7106",
+            public_endpoint: None,
             region: "auto",
             bucket: "attachments-test",
             access_key: "minio",
