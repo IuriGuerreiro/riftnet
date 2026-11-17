@@ -7,6 +7,19 @@ pub struct Message {
     pub content: Vec<u8>,
     pub encryption: i8,
     pub edited_at: i64,
+    pub attachments: Vec<MessageAttachment>,
+}
+
+/// A file's details as shown on the message. A copy made at send; the
+/// upload itself lives in the attachments feature (Postgres + file store).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MessageAttachment {
+    pub id: i64,
+    pub filename: String,
+    pub content_type: String,
+    pub size: i64,
+    pub blake3: Vec<u8>,
+    pub expires_at_ms: i64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -35,6 +48,7 @@ impl ChangeKind {
 pub const MAX_CONTENT_BYTES: usize = 8 * 1024;
 pub const MAX_SYNC: usize = 200;
 pub const MAX_NONCE_LEN: usize = 64;
+pub const MAX_ATTACHMENTS: usize = 10;
 
 const BUCKET_MS: u64 = 10 * 24 * 60 * 60 * 1000;
 

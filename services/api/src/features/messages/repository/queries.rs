@@ -5,12 +5,12 @@ pub const GET_NONCE: &str = "SELECT message_id FROM message_nonces \
      WHERE conversation_id = ? AND author_id = ? AND nonce = ?";
 
 pub const INSERT_MESSAGE: &str = "INSERT INTO messages \
-     (conversation_id, bucket, id, seq, author_id, content, encryption) VALUES (?, ?, ?, ?, ?, ?, ?)";
+     (conversation_id, bucket, id, seq, author_id, content, encryption, attachments) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
 
-pub const GET_MESSAGE: &str = "SELECT conversation_id, id, seq, author_id, content, encryption, edited_at \
+pub const GET_MESSAGE: &str = "SELECT conversation_id, id, seq, author_id, content, encryption, edited_at, attachments \
      FROM messages WHERE conversation_id = ? AND bucket = ? AND id = ?";
 
-pub const HISTORY: &str = "SELECT conversation_id, id, seq, author_id, content, encryption, edited_at \
+pub const HISTORY: &str = "SELECT conversation_id, id, seq, author_id, content, encryption, edited_at, attachments \
      FROM messages WHERE conversation_id = ? AND bucket = ? AND id < ? LIMIT ?";
 
 pub const EDIT_MESSAGE: &str = "UPDATE messages SET content = ?, edited_at = ? \

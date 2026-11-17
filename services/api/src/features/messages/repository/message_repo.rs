@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use scylla::statement::Consistency;
 use scylla::statement::batch::{Batch, BatchType};
 
-use super::scylla_message_repo::{Row, ScyllaMessageRepo, to_message};
+use super::scylla_message_repo::{Row, ScyllaMessageRepo, attachment_blobs, to_message};
 use crate::common::error::RepoError;
 use crate::common::scylla::lwt_applied;
 use crate::features::messages::models::{ChangeKind, Message, MessageChange, bucket_at, bucket_of};
@@ -113,6 +113,7 @@ impl MessageRepo for ScyllaMessageRepo {
                     m.author_id,
                     &m.content,
                     m.encryption,
+                    attachment_blobs(m),
                 ),
             )
             .await

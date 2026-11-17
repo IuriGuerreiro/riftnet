@@ -10,6 +10,19 @@ message Message {
   bytes content = 5; // opaque: UTF-8 text now, encrypted later
   Encryption encryption = 6;
   uint64 edited_at = 7; // unix ms of the last edit, 0 = never edited
+  repeated Attachment attachments = 8; // fixed once sent; edits don't change them
+}
+
+// A file on a message. Upload it first over HTTP (POST /attachments, chunks,
+// complete), then put its id in SendMessage.attachment_ids. To download, call
+// GET /attachments/{id} for a short-lived link, then check the file's BLAKE3.
+message Attachment {
+  uint64 id = 1;
+  string filename = 2;
+  string content_type = 3;
+  uint64 size = 4; // bytes
+  bytes blake3 = 5; // 32-byte BLAKE3 of the whole file
+  uint64 expires_at = 6; // unix ms; after this the file is gone, show "expired"
 }
 
 enum Encryption {
@@ -21,6 +34,9 @@ message SendMessage {
   uint64 conversation_id = 1;
   bytes content = 2;
   string nonce = 3; // client-made; dedupe + match the ack
+  // Finished uploads (max 10) from this sender, in this conversation, not on
+  // another message yet. content may be empty when this isn't.
+  repeated uint64 attachment_ids = 4;
 }
 
 message MessageAck {

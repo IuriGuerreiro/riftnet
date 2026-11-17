@@ -121,6 +121,10 @@ async fn send_message(
             session.user_id,
             req.conversation_id as i64,
             req.content,
+            &req.attachment_ids
+                .iter()
+                .map(|id| *id as i64)
+                .collect::<Vec<_>>(),
             &req.nonce,
         )
         .await?;

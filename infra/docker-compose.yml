@@ -34,6 +34,17 @@ services:
     image: redis:8
     ports: ["127.0.0.1:6379:6379"]
 
+  # S3-compatible file store for attachments (R2 in production).
+  # The api creates the bucket on start. Console: http://localhost:7107
+  minio:
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z # community build; minio/minio left Docker Hub
+    command: server /data --console-address :9001
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio-dev-secret
+    ports: ["127.0.0.1:7106:9000", "127.0.0.1:7107:9001"]
+    volumes: [minio:/data]
+
   zitadel:
     image: ghcr.io/zitadel/zitadel:v4.6.2
     command: start-from-init --masterkeyFromEnv --tlsMode disabled
@@ -69,5 +80,6 @@ services:
         condition: service_healthy
 
 volumes:
+  minio:
   postgres:
   scylla:
