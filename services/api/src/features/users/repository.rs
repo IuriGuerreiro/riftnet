@@ -20,6 +20,20 @@ pub trait UserRepo: Send + Sync {
     ) -> Result<Vec<User>, RepoError>;
     async fn create(&self, id: i64, zitadel_id: &str) -> Result<User, RepoError>;
     async fn set_username(&self, id: i64, username: &str) -> Result<Option<User>, RepoError>;
+    /// Writes both fields as given (None clears). None if the user is gone.
+    async fn set_profile(
+        &self,
+        id: i64,
+        display_name: Option<&str>,
+        bio: Option<&str>,
+    ) -> Result<Option<User>, RepoError>;
+    /// Swaps the avatar hash. Returns the user and the hash it replaced,
+    /// so the caller can delete the old files. None if the user is gone.
+    async fn set_avatar(
+        &self,
+        id: i64,
+        hash: Option<&[u8]>,
+    ) -> Result<Option<(User, Option<Vec<u8>>)>, RepoError>;
 }
 
 pub struct PgUserRepo {
@@ -108,5 +122,50 @@ impl UserRepo for PgUserRepo {
                 .fetch_optional(&self.pool)
                 .await?,
         )
+    }
+
+    #[tracing::instrument(name = "db UPDATE users", skip_all, err(Display), fields(otel.kind = "client", db.system = "postgresql", db.operation = "UPDATE", db.collection.name = "users"))]
+    async fn set_profile(
+        &self,
+        id: i64,
+        display_name: Option<&str>,
+        bio: Option<&str>,
+    ) -> Result<Option<User>, RepoError> {
+        Ok(
+            sqlx::query_as(
+                "UPDATE users SET display_name = $2, bio = $3 WHERE id = $1 RETURNING *",
+            )
+            .bind(id)
+            .bind(display_name)
+            .bind(bio)
+            .fetch_optional(&self.pool)
+            .await?,
+        )
+    }
+
+    #[tracing::instrument(name = "db UPDATE users", skip_all, err(Display), fields(otel.kind = "client", db.system = "postgresql", db.operation = "UPDATE", db.collection.name = "users"))]
+    async fn set_avatar(
+        &self,
+        id: i64,
+        hash: Option<&[u8]>,
+    ) -> Result<Option<(User, Option<Vec<u8>>)>, RepoError> {
+        let mut tx = self.pool.begin().await?;
+        // Row lock: two uploads at once each see the hash they really replaced.
+        let old: Option<(Option<Vec<u8>>,)> =
+            sqlx::query_as("SELECT avatar_hash FROM users WHERE id = $1 FOR UPDATE")
+                .bind(id)
+                .fetch_optional(&mut *tx)
+                .await?;
+        let Some((old,)) = old else {
+            return Ok(None);
+        };
+        let user: User =
+            sqlx::query_as("UPDATE users SET avatar_hash = $2 WHERE id = $1 RETURNING *")
+                .bind(id)
+                .bind(hash)
+                .fetch_one(&mut *tx)
+                .await?;
+        tx.commit().await?;
+        Ok(Some((user, old)))
     }
 }

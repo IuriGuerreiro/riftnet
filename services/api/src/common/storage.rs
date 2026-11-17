@@ -41,6 +41,10 @@ pub trait FileStore: Send + Sync {
     /// Size of a finished object, None if it doesn't exist.
     async fn object_size(&self, key: &str) -> anyhow::Result<Option<i64>>;
     async fn delete(&self, key: &str) -> anyhow::Result<()>;
+    /// Stores a small object in one request (no multipart).
+    async fn put_object(&self, key: &str, content_type: &str, data: Bytes) -> anyhow::Result<()>;
+    /// A short-lived link that shows the object inline (e.g. an image).
+    async fn view_url(&self, key: &str, ttl: Duration) -> anyhow::Result<String>;
     /// A short-lived link anyone holding it can download from.
     async fn download_url(
         &self,
@@ -248,6 +252,31 @@ impl FileStore for S3FileStore {
             .await
             .context("s3 delete object")?;
         Ok(())
+    }
+
+    async fn put_object(&self, key: &str, content_type: &str, data: Bytes) -> anyhow::Result<()> {
+        self.client
+            .put_object()
+            .bucket(&self.bucket)
+            .key(key)
+            .content_type(content_type)
+            .body(ByteStream::from(data))
+            .send()
+            .await
+            .context("s3 put object")?;
+        Ok(())
+    }
+
+    async fn view_url(&self, key: &str, ttl: Duration) -> anyhow::Result<String> {
+        let req = self
+            .client
+            .get_object()
+            .bucket(&self.bucket)
+            .key(key)
+            .presigned(PresigningConfig::expires_in(ttl)?)
+            .await
+            .context("s3 presign get")?;
+        Ok(req.uri().to_string())
     }
 
     async fn download_url(
