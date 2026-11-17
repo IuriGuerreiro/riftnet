@@ -14,6 +14,7 @@ import {
 } from "../gen/v1/conversations_pb";
 import type { Envelope } from "../gen/v1/envelope_pb";
 import {
+  type Attachment,
   DeleteMessageSchema,
   EditMessageSchema,
   GetHistorySchema,
@@ -31,6 +32,7 @@ export interface ChatMessage {
   authorId: bigint;
   text: string;
   editedAt?: bigint;
+  attachments?: Attachment[];
   pending?: boolean;
   failed?: boolean;
 }
@@ -49,7 +51,7 @@ interface ChatState {
   leaveGroup: (ws: WsClient) => Promise<void>;
   openDm: (ws: WsClient, username: string) => Promise<void>;
   select: (ws: WsClient, conversationId: bigint) => Promise<void>;
-  send: (ws: WsClient, myId: bigint, text: string) => Promise<void>;
+  send: (ws: WsClient, myId: bigint, text: string, attachmentIds?: bigint[]) => Promise<void>;
   edit: (ws: WsClient, messageId: bigint, text: string) => Promise<boolean>;
   remove: (ws: WsClient, messageId: bigint) => Promise<boolean>;
 }
@@ -63,6 +65,7 @@ const toChat = (m: Message): ChatMessage => ({
   authorId: m.authorId,
   text: dec.decode(m.content),
   editedAt: m.editedAt || undefined,
+  attachments: m.attachments.length ? m.attachments : undefined,
 });
 
 export const isGroup = (c: Conversation) => c.kind === ConversationKind.GROUP;
@@ -270,9 +273,9 @@ export const useChat = create<ChatState>()((set, get) => {
       }));
     },
 
-    send: async (ws, myId, text) => {
+    send: async (ws, myId, text, attachmentIds = []) => {
       const conversationId = get().selected;
-      if (!conversationId || !text.trim()) return;
+      if (!conversationId || (!text.trim() && !attachmentIds.length)) return;
       const nonce = crypto.randomUUID();
       addMessages(conversationId, [
         { id: 0n, nonce, seq: 0n, authorId: myId, text, pending: true },
@@ -284,6 +287,7 @@ export const useChat = create<ChatState>()((set, get) => {
             conversationId,
             content: enc.encode(text),
             nonce,
+            attachmentIds,
           }),
         });
         if (reply.case === "messageAck" && reply.value.message) {

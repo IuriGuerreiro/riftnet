@@ -15,6 +15,8 @@ export class ApiError extends Error {
 interface Options {
   method?: "GET" | "POST" | "PUT" | "DELETE";
   body?: unknown;
+  raw?: Blob;
+  headers?: Record<string, string>;
   auth?: boolean;
 }
 
@@ -30,15 +32,16 @@ export async function http<T>(path: string, opts: Options = {}): Promise<T> {
 }
 
 function send(path: string, opts: Options, auth: boolean): Promise<Response> {
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = { ...opts.headers };
   if (opts.body !== undefined) headers["Content-Type"] = "application/json";
+  if (opts.raw !== undefined) headers["Content-Type"] = "application/octet-stream";
   const token = useAuth.getState().accessToken;
   if (auth && token) headers.Authorization = `Bearer ${token}`;
 
   return fetch(platform.httpUrl + path, {
     method: opts.method ?? "GET",
     headers,
-    body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
+    body: opts.raw ?? (opts.body === undefined ? undefined : JSON.stringify(opts.body)),
   });
 }
 

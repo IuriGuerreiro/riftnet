@@ -1,11 +1,13 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 
+import { downloadFile, formatSize, uploadFile } from "../api/attachments";
 import { useLogout } from "../api/auth";
 import type { Friend } from "../api/types";
 import { CallBar, IncomingCall, RemoteScreen } from "../call/CallBar";
 import { StatusDot } from "../components/StatusDot";
 import type { Conversation } from "../gen/v1/conversations_pb";
+import type { Attachment } from "../gen/v1/messages_pb";
 import { useCalls } from "../stores/calls";
 import { type ChatMessage, isGroup, useChat } from "../stores/chat";
 import { useConnection } from "../stores/connection";
@@ -134,9 +136,10 @@ export function HomePage() {
             <Messages conversationId={selected.id} myId={me?.id} />
             <TypingIndicator conversation={selected} />
             <Composer
+              conversationId={selected.id}
               disabled={!ws}
               onType={() => ws && useTyping.getState().typed(ws, selected.id)}
-              onSend={(text) => ws && me && chat.send(ws, me.id, text)}
+              onSend={(text, ids) => ws && me && chat.send(ws, me.id, text, ids)}
             />
           </>
         ) : (
@@ -505,6 +508,9 @@ function MessageRow({ m, mine }: { m: ChatMessage; mine: boolean }) {
         title={m.pending ? "sending…" : `seq ${m.seq}`}
       >
         {m.text}
+        {m.attachments?.map((a) => (
+          <AttachmentChip key={a.id.toString()} a={a} mine={mine} />
+        ))}
         {m.editedAt ? (
           <span
             className={`ml-1.5 text-[10px] ${mine ? "text-zinc-800" : "text-zinc-500"}`}
@@ -526,42 +532,155 @@ function TypingIndicator({ conversation }: { conversation: Conversation }) {
   return <p className="h-5 truncate px-4 text-xs italic text-zinc-400">{typingText(names)}</p>;
 }
 
+function AttachmentChip({ a, mine }: { a: Attachment; mine: boolean }) {
+  const [state, setState] = useState<"idle" | "busy" | "error">("idle");
+  const [error, setError] = useState("");
+  const [now] = useState(() => Date.now());
+  const expired = Number(a.expiresAt) <= now;
+  return (
+    <button
+      type="button"
+      disabled={expired || state === "busy"}
+      onClick={async () => {
+        setState("busy");
+        try {
+          await downloadFile(a.id, a.filename, a.blake3);
+          setState("idle");
+        } catch (e) {
+          setError((e as Error).message);
+          setState("error");
+        }
+      }}
+      title={expired ? "expired" : error || "download"}
+      className={`mt-1 flex w-full items-center gap-2 rounded border px-2 py-1 text-left text-xs ${
+        mine ? "border-zinc-800/40" : "border-zinc-600"
+      } ${expired ? "opacity-50 line-through" : "hover:underline"}`}
+    >
+      <span>📎</span>
+      <span className="truncate">{a.filename}</span>
+      <span className="ml-auto shrink-0 opacity-70">
+        {expired
+          ? "expired"
+          : state === "busy"
+            ? "downloading…"
+            : state === "error"
+              ? "failed"
+              : formatSize(a.size)}
+      </span>
+    </button>
+  );
+}
+
 function Composer({
+  conversationId,
   disabled,
   onType,
   onSend,
 }: {
+  conversationId: bigint;
   disabled: boolean;
   onType: () => void;
-  onSend: (text: string) => void;
+  onSend: (text: string, attachmentIds: bigint[]) => void;
 }) {
   const [text, setText] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
+  const [progress, setProgress] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const picker = useRef<HTMLInputElement>(null);
+  const busy = progress !== null;
+
+  async function submit() {
+    if (!text.trim() && !files.length) return;
+    setError(null);
+    const ids: bigint[] = [];
+    try {
+      for (const [i, f] of files.entries()) {
+        setProgress(`uploading ${i + 1}/${files.length} · hashing…`);
+        ids.push(
+          await uploadFile(conversationId, f, (p) =>
+            setProgress(`uploading ${i + 1}/${files.length} · ${Math.round(p * 100)}%`),
+          ),
+        );
+      }
+    } catch (e) {
+      setError((e as Error).message);
+      setProgress(null);
+      return;
+    }
+    setProgress(null);
+    onSend(text, ids);
+    setText("");
+    setFiles([]);
+  }
+
   return (
     <form
-      className="flex gap-2 border-t border-zinc-800 p-3"
+      className="flex flex-col gap-2 border-t border-zinc-800 p-3"
       onSubmit={(e) => {
         e.preventDefault();
-        if (!text.trim()) return;
-        onSend(text);
-        setText("");
+        void submit();
       }}
     >
-      <input
-        value={text}
-        onChange={(e) => {
-          setText(e.target.value);
-          if (e.target.value.trim()) onType();
-        }}
-        placeholder="Message"
-        maxLength={4000}
-        className="min-w-0 flex-1 rounded-lg bg-zinc-800 px-3 py-2 text-sm outline-none ring-brand focus:ring-2"
-      />
-      <button
-        disabled={disabled}
-        className="rounded-lg bg-brand px-4 font-semibold text-zinc-950 disabled:opacity-50"
-      >
-        Send
-      </button>
+      {(files.length > 0 || error !== null || busy) && (
+        <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-400">
+          {files.map((f, i) => (
+            <span
+              key={`${f.name}:${f.size}:${f.lastModified}`}
+              className="flex items-center gap-1 rounded bg-zinc-800 px-2 py-1"
+            >
+              📎 {f.name} · {formatSize(f.size)}
+              {!busy && (
+                <button
+                  type="button"
+                  onClick={() => setFiles(files.filter((_, j) => j !== i))}
+                  className="ml-1 hover:text-red-400"
+                >
+                  ✕
+                </button>
+              )}
+            </span>
+          ))}
+          {busy && <span>{progress}</span>}
+          {error && <span className="text-red-400">{error}</span>}
+        </div>
+      )}
+      <div className="flex gap-2">
+        <input
+          ref={picker}
+          type="file"
+          multiple
+          hidden
+          onChange={(e) => {
+            setFiles([...files, ...Array.from(e.target.files ?? [])].slice(0, 10));
+            e.target.value = "";
+          }}
+        />
+        <button
+          type="button"
+          disabled={disabled || busy}
+          onClick={() => picker.current?.click()}
+          title="Attach files"
+          className="rounded-lg bg-zinc-800 px-3 text-lg disabled:opacity-50"
+        >
+          +
+        </button>
+        <input
+          value={text}
+          onChange={(e) => {
+            setText(e.target.value);
+            if (e.target.value.trim()) onType();
+          }}
+          placeholder="Message"
+          maxLength={4000}
+          className="min-w-0 flex-1 rounded-lg bg-zinc-800 px-3 py-2 text-sm outline-none ring-brand focus:ring-2"
+        />
+        <button
+          disabled={disabled || busy}
+          className="rounded-lg bg-brand px-4 font-semibold text-zinc-950 disabled:opacity-50"
+        >
+          Send
+        </button>
+      </div>
     </form>
   );
 }
