@@ -4,6 +4,9 @@ use anyhow::Context;
 use scylla::client::session::Session;
 use scylla::statement::prepared::PreparedStatement;
 
+use protocol::Message as _;
+use protocol::v1;
+
 use super::queries as q;
 use crate::features::messages::models::Message;
 
@@ -30,6 +33,7 @@ pub(super) type Row = (
     Option<Vec<u8>>,
     Option<i8>,
     Option<i64>,
+    Option<Vec<Vec<u8>>>,
 );
 
 impl ScyllaMessageRepo {
@@ -61,7 +65,7 @@ impl ScyllaMessageRepo {
 }
 
 pub(super) fn to_message(
-    (conversation_id, id, seq, author_id, content, encryption, edited_at): Row,
+    (conversation_id, id, seq, author_id, content, encryption, edited_at, attachments): Row,
 ) -> Message {
     Message {
         id,
@@ -71,5 +75,27 @@ pub(super) fn to_message(
         content: content.unwrap_or_default(),
         encryption: encryption.unwrap_or(0),
         edited_at: edited_at.unwrap_or(0),
+        attachments: attachments
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|b| match v1::Attachment::decode(b.as_slice()) {
+                Ok(a) => Some(a.into()),
+                Err(err) => {
+                    tracing::warn!(error = %err, message.id = id, "bad attachment blob");
+                    None
+                }
+            })
+            .collect(),
     }
+}
+
+/// Each attachment as an encoded app.v1.Attachment (see 005_message_attachments.cql).
+/// None for no attachments, so Scylla stores nothing.
+pub(super) fn attachment_blobs(m: &Message) -> Option<Vec<Vec<u8>>> {
+    (!m.attachments.is_empty()).then(|| {
+        m.attachments
+            .iter()
+            .map(|a| v1::Attachment::from(a).encode_to_vec())
+            .collect()
+    })
 }

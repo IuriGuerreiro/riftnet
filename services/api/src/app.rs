@@ -10,7 +10,10 @@ use tower_http::cors::CorsLayer;
 use crate::common::events::{EventBus, NatsEventBus};
 use crate::common::middleware::http_metrics;
 use crate::common::middleware::rate_limit::RateLimiter;
+use crate::common::storage::{S3Config, S3FileStore};
 use crate::config::Config;
+use crate::features::attachments::repository::PgAttachmentRepo;
+use crate::features::attachments::service::{AttachmentService, Limits};
 use crate::features::auth::identity::ZitadelClient;
 use crate::features::auth::repository::PgAuthRepo;
 use crate::features::auth::service::AuthService;
@@ -29,10 +32,11 @@ use crate::features::presence::store::RedisPresenceStore;
 use crate::features::typing::service::TypingService;
 use crate::features::users::repository::{PgUserRepo, UserRepo};
 use crate::features::users::service::UserService;
-use crate::features::{auth, friends, gateway, health, users};
+use crate::features::{attachments, auth, friends, gateway, health, users};
 
 #[derive(Clone)]
 pub struct AppState {
+    pub attachments: Arc<AttachmentService>,
     pub auth: Arc<AuthService>,
     pub users: Arc<UserService>,
     pub conversations: Arc<ConversationService>,
@@ -75,7 +79,33 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
         crate::features::gateway::PRESENCE_TTL,
     ));
 
+    let file_store = Arc::new(S3FileStore::new(&S3Config {
+        endpoint: &config.s3_endpoint,
+        region: &config.s3_region,
+        bucket: &config.s3_bucket,
+        access_key: &config.s3_access_key,
+        secret_key: &config.s3_secret_key,
+    }));
+    if !config.is_production() {
+        file_store.ensure_bucket().await?;
+    }
+    let attachment_service = Arc::new(AttachmentService::new(
+        Arc::new(PgAttachmentRepo::new(pool.clone())),
+        conversation_repo.clone(),
+        file_store,
+        ids.clone(),
+        Limits {
+            max_bytes: config.attachment_max_bytes,
+            ttl: std::time::Duration::from_secs(config.attachment_ttl_hours * 60 * 60),
+        },
+    ));
+    attachments::spawn_cleanup(
+        attachment_service.clone(),
+        std::time::Duration::from_secs(60 * 60),
+    );
+
     let state = AppState {
+        attachments: attachment_service.clone(),
         auth: Arc::new(AuthService::new(
             identity,
             user_repo.clone(),
@@ -88,6 +118,7 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
             conversation_repo.clone(),
             events.clone(),
             ids.clone(),
+            attachment_service.clone(),
         )),
         conversations: Arc::new(ConversationService::new(
             conversation_repo.clone(),
@@ -131,13 +162,18 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
     let cors = CorsLayer::new()
         .allow_origin(origins)
         .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE])
-        .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE]);
+        .allow_headers([
+            header::AUTHORIZATION,
+            header::CONTENT_TYPE,
+            header::HeaderName::from_static(attachments::CHUNK_HASH_HEADER),
+        ]);
 
     Ok(Router::new()
         .merge(health::routes(prometheus))
         .merge(auth::routes())
         .merge(users::routes())
         .merge(friends::routes())
+        .merge(attachments::routes())
         .merge(gateway::routes())
         .layer(middleware::from_fn(http_metrics::track))
         .layer(cors)

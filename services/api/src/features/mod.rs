@@ -1,3 +1,4 @@
+pub mod attachments;
 pub mod auth;
 pub mod calls;
 pub mod conversations;

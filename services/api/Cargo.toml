@@ -33,3 +33,5 @@ futures = "0.3.34"
 async-nats = "0.52.0"
 bytes = "1.12.1"
 redis = { version = "0.32", features = ["tokio-comp", "connection-manager"] }
+blake3 = "1.8"
+aws-sdk-s3 = { version = "1", default-features = false, features = ["rt-tokio", "default-https-client", "behavior-version-latest"] }

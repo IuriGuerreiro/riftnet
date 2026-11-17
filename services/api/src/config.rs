@@ -15,6 +15,14 @@ pub struct Config {
     pub signing_key_file: PathBuf,
     pub machine_id: u16,
     pub cors_origins: Vec<String>,
+    /// S3-compatible file store: MinIO locally, R2 in production.
+    pub s3_endpoint: String,
+    pub s3_region: String,
+    pub s3_bucket: String,
+    pub s3_access_key: String,
+    pub s3_secret_key: String,
+    pub attachment_max_bytes: i64,
+    pub attachment_ttl_hours: u64,
 }
 
 impl Config {
@@ -46,6 +54,13 @@ impl Config {
             signing_key_file: env_or("API_SIGNING_KEY_FILE", "infra/.secrets/api_signing_key")
                 .into(),
             machine_id: env_or("MACHINE_ID", "1").parse()?,
+            s3_endpoint: env_or("S3_ENDPOINT", "http://127.0.0.1:7106"),
+            s3_region: env_or("S3_REGION", "auto"),
+            s3_bucket: env_or("S3_BUCKET", "attachments"),
+            s3_access_key: env_or("S3_ACCESS_KEY", "minio"),
+            s3_secret_key: env_or("S3_SECRET_KEY", "minio-dev-secret"),
+            attachment_max_bytes: env_or("ATTACHMENT_MAX_BYTES", "104857600").parse()?, // 100 MiB
+            attachment_ttl_hours: env_or("ATTACHMENT_TTL_HOURS", "168").parse()?,     // 7 days
             cors_origins: env_or(
                 "CORS_ORIGINS",
                 "http://localhost:7104,https://server.tailcbbc1b.ts.net:7103,tauri://localhost,http://tauri.localhost",

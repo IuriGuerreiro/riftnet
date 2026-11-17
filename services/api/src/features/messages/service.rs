@@ -8,6 +8,7 @@ use super::models::{ChangeKind, MAX_CONTENT_BYTES, MAX_NONCE_LEN, MAX_SYNC, Mess
 use super::repository::MessageRepo;
 use crate::common::error::ApiError;
 use crate::common::events::EventBus;
+use crate::features::attachments::service::AttachmentLinker;
 use crate::features::conversations::models::ConversationRecord;
 use crate::features::conversations::repository::ConversationRepo;
 
@@ -25,6 +26,7 @@ pub struct MessageService {
     conversations: Arc<dyn ConversationRepo>,
     events: Arc<dyn EventBus>,
     ids: Arc<Snowflake>,
+    attachments: Arc<dyn AttachmentLinker>,
 }
 
 impl MessageService {
@@ -33,12 +35,14 @@ impl MessageService {
         conversations: Arc<dyn ConversationRepo>,
         events: Arc<dyn EventBus>,
         ids: Arc<Snowflake>,
+        attachments: Arc<dyn AttachmentLinker>,
     ) -> Self {
         Self {
             repo,
             conversations,
             events,
             ids,
+            attachments,
         }
     }
 
@@ -48,9 +52,10 @@ impl MessageService {
         me: i64,
         conversation_id: i64,
         content: Vec<u8>,
+        attachment_ids: &[i64],
         nonce: &str,
     ) -> Result<Message, ApiError> {
-        check_content(&content)?;
+        check_content(&content, !attachment_ids.is_empty())?;
         if nonce.is_empty() || nonce.len() > MAX_NONCE_LEN {
             return Err(ApiError::bad_request(
                 "bad_nonce",
@@ -72,6 +77,12 @@ impl MessageService {
             }
         }
 
+        // Postgres first, then Scylla. If the Scylla write fails, the client's
+        // retry (same nonce, same id) claims the same files again, which is allowed.
+        let attachments = self
+            .attachments
+            .attach(me, conversation_id, id, attachment_ids)
+            .await?;
         let seq = self.conversations.next_seq(conversation_id).await?;
         let message = Message {
             id,
@@ -81,6 +92,7 @@ impl MessageService {
             content,
             encryption: 0,
             edited_at: 0,
+            attachments,
         };
         self.repo.insert(&message).await?;
 
@@ -180,13 +192,13 @@ impl MessageService {
         message_id: i64,
         content: Vec<u8>,
     ) -> Result<(Message, i64), ApiError> {
-        check_content(&content)?;
         let conversation = self.member_conversation(me, conversation_id).await?;
         let mut message = self
             .repo
             .get(conversation_id, message_id)
             .await?
             .ok_or_else(message_not_found)?;
+        check_content(&content, !message.attachments.is_empty())?;
         if message.author_id != me {
             return Err(not_your_message());
         }
@@ -223,6 +235,12 @@ impl MessageService {
 
         let seq = self.conversations.next_seq(conversation_id).await?;
         self.repo.delete(conversation_id, message_id, seq).await?;
+        if !message.attachments.is_empty()
+            && let Err(err) = self.attachments.release(message_id).await
+        {
+            // WARN: the message is already gone; its files just live until they expire.
+            tracing::warn!(error = %err, message.id = message_id, "release attachments failed");
+        }
 
         let push = Payload::MessageDeleted(MessageDeleted {
             conversation_id: conversation_id as u64,
@@ -263,8 +281,9 @@ impl MessageService {
     }
 }
 
-fn check_content(content: &[u8]) -> Result<(), ApiError> {
-    if content.is_empty() {
+/// Text may be empty only when the message has files.
+fn check_content(content: &[u8], has_attachments: bool) -> Result<(), ApiError> {
+    if content.is_empty() && !has_attachments {
         return Err(ApiError::bad_request("empty_message", "message is empty"));
     }
     if content.len() > MAX_CONTENT_BYTES {
@@ -301,6 +320,27 @@ mod tests {
     const BOB: i64 = 2;
     const EVE: i64 = 3;
     const DM: i64 = 100;
+
+    struct NoAttachments;
+    #[async_trait]
+    impl AttachmentLinker for NoAttachments {
+        async fn attach(
+            &self,
+            _: i64,
+            _: i64,
+            _: i64,
+            ids: &[i64],
+        ) -> Result<Vec<crate::features::messages::models::MessageAttachment>, ApiError> {
+            if ids.is_empty() {
+                Ok(Vec::new())
+            } else {
+                Err(ApiError::bad_request("bad_attachment", "no files here"))
+            }
+        }
+        async fn release(&self, _: i64) -> Result<(), ApiError> {
+            Ok(())
+        }
+    }
 
     #[derive(Default)]
     struct FakeConversations {
@@ -499,6 +539,7 @@ mod tests {
             conversations.clone(),
             events.clone(),
             Arc::new(Snowflake::new(1)),
+            Arc::new(NoAttachments),
         );
         Setup {
             svc,
@@ -511,7 +552,10 @@ mod tests {
     impl Setup {
         async fn send(&self, from: i64, text: &str) -> Message {
             let nonce = format!("n-{}", self.repo.nonces.lock().unwrap().len());
-            self.svc.send(from, DM, text.into(), &nonce).await.unwrap()
+            self.svc
+                .send(from, DM, text.into(), &[], &nonce)
+                .await
+                .unwrap()
         }
         fn pushes(&self, user: i64) -> Vec<&'static str> {
             self.events
@@ -664,14 +708,14 @@ mod tests {
         let t = setup();
         let m = t
             .svc
-            .send(ALICE, DM, "oops".into(), "retry-me")
+            .send(ALICE, DM, "oops".into(), &[], "retry-me")
             .await
             .unwrap();
         t.svc.delete(ALICE, DM, m.id).await.unwrap();
 
         let err = t
             .svc
-            .send(ALICE, DM, "oops".into(), "retry-me")
+            .send(ALICE, DM, "oops".into(), &[], "retry-me")
             .await
             .unwrap_err();
 
@@ -683,8 +727,16 @@ mod tests {
     #[tokio::test]
     async fn send_retry_still_returns_the_same_message() {
         let t = setup();
-        let first = t.svc.send(ALICE, DM, "hi".into(), "same").await.unwrap();
-        let again = t.svc.send(ALICE, DM, "hi".into(), "same").await.unwrap();
+        let first = t
+            .svc
+            .send(ALICE, DM, "hi".into(), &[], "same")
+            .await
+            .unwrap();
+        let again = t
+            .svc
+            .send(ALICE, DM, "hi".into(), &[], "same")
+            .await
+            .unwrap();
         assert_eq!(first.id, again.id);
         assert_eq!(t.repo.messages.lock().unwrap().len(), 1);
     }

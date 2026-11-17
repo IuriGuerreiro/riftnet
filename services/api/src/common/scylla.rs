@@ -10,6 +10,7 @@ const SCHEMA: &[&str] = &[
     include_str!("../../scylla/002_messages.cql"),
     include_str!("../../scylla/003_group_dms.cql"),
     include_str!("../../scylla/004_message_edits.cql"),
+    include_str!("../../scylla/005_message_attachments.cql"),
 ];
 
 pub async fn connect(

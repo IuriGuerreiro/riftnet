@@ -5,3 +5,4 @@ pub mod middleware;
 pub mod redis;
 pub mod scylla;
 pub mod secrets;
+pub mod storage;
