@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use axum::Json;
-use axum::body::Bytes;
+use axum::body::Body;
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
 
@@ -16,6 +16,8 @@ pub const CHUNK_HASH_HEADER: &str = "x-chunk-blake3";
 
 const HOUR: Duration = Duration::from_secs(60 * 60);
 const UPLOADS_PER_HOUR: u32 = 60;
+/// 60 uploads x 13 chunks (100 MiB) plus retries.
+const CHUNKS_PER_HOUR: u32 = 1000;
 
 pub async fn start(
     auth: AuthUser,
@@ -49,15 +51,31 @@ pub async fn put_chunk(
     State(state): State<AppState>,
     Path((id, idx)): Path<(String, i32)>,
     headers: HeaderMap,
-    body: Bytes,
+    body: Body,
 ) -> Result<StatusCode, ApiError> {
+    // Everything cheap first; the body is only read once the request is
+    // known good and there's memory for it.
+    state.limiter.check(
+        &format!("attachment_chunk:user:{}", auth.user_id),
+        CHUNKS_PER_HOUR,
+        HOUR,
+    )?;
     let hash = headers
         .get(CHUNK_HASH_HEADER)
         .and_then(|v| v.to_str().ok())
         .ok_or_else(|| ApiError::bad_request("bad_hash", "missing x-chunk-blake3 header"))?;
+    let id = parse_id(&id)?;
+    let expected = state
+        .attachments
+        .chunk_target(auth.user_id, id, idx)
+        .await?;
+    let _slot = state.attachments.chunk_slot().await;
+    let data = axum::body::to_bytes(body, expected)
+        .await
+        .map_err(|_| ApiError::bad_request("bad_chunk", "chunk has the wrong size"))?;
     state
         .attachments
-        .put_chunk(auth.user_id, parse_id(&id)?, idx, hash, body)
+        .put_chunk(auth.user_id, id, idx, hash, data)
         .await?;
     Ok(StatusCode::NO_CONTENT)
 }

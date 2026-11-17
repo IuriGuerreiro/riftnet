@@ -31,7 +31,15 @@ pub trait FileStore: Send + Sync {
         upload_id: &str,
         etags: &[String],
     ) -> anyhow::Result<()>;
+    /// Parts S3 actually holds, in order: (0-based part, etag, size).
+    async fn list_parts(
+        &self,
+        key: &str,
+        upload_id: &str,
+    ) -> anyhow::Result<Vec<(u32, String, i64)>>;
     async fn abort_upload(&self, key: &str, upload_id: &str) -> anyhow::Result<()>;
+    /// Size of a finished object, None if it doesn't exist.
+    async fn object_size(&self, key: &str) -> anyhow::Result<Option<i64>>;
     async fn delete(&self, key: &str) -> anyhow::Result<()>;
     /// A short-lived link anyone holding it can download from.
     async fn download_url(
@@ -162,6 +170,56 @@ impl FileStore for S3FileStore {
         Ok(())
     }
 
+    async fn list_parts(
+        &self,
+        key: &str,
+        upload_id: &str,
+    ) -> anyhow::Result<Vec<(u32, String, i64)>> {
+        let mut out = Vec::new();
+        let mut marker: Option<String> = None;
+        loop {
+            let page = self
+                .client
+                .list_parts()
+                .bucket(&self.bucket)
+                .key(key)
+                .upload_id(upload_id)
+                .set_part_number_marker(marker.take())
+                .send()
+                .await
+                .context("s3 list parts")?;
+            for p in page.parts() {
+                let n = p.part_number().context("part without number")?;
+                let etag = p.e_tag().context("part without etag")?;
+                out.push(((n - 1) as u32, etag.to_string(), p.size().unwrap_or(0)));
+            }
+            if page.is_truncated() != Some(true) {
+                break;
+            }
+            marker = page.next_part_number_marker().map(String::from);
+            if marker.is_none() {
+                break;
+            }
+        }
+        out.sort_by_key(|(n, _, _)| *n);
+        Ok(out)
+    }
+
+    async fn object_size(&self, key: &str) -> anyhow::Result<Option<i64>> {
+        match self
+            .client
+            .head_object()
+            .bucket(&self.bucket)
+            .key(key)
+            .send()
+            .await
+        {
+            Ok(out) => Ok(Some(out.content_length().unwrap_or(0))),
+            Err(err) if err.as_service_error().is_some_and(|e| e.is_not_found()) => Ok(None),
+            Err(err) => Err(anyhow::Error::from(err).context("s3 head object")),
+        }
+    }
+
     async fn abort_upload(&self, key: &str, upload_id: &str) -> anyhow::Result<()> {
         self.client
             .abort_multipart_upload()
@@ -255,8 +313,16 @@ mod minio_tests {
             .put_part(key, &id, 1, Bytes::from_static(b"tail"))
             .await
             .unwrap();
+        let parts = store.list_parts(key, &id).await.unwrap();
+        assert_eq!(parts.len(), 2);
+        assert_eq!((parts[0].0, parts[1].0, parts[1].2), (0, 1, 4));
+        assert_eq!(store.object_size(key).await.unwrap(), None);
         store.finish_upload(key, &id, &[e0, e1]).await.unwrap();
 
+        assert_eq!(
+            store.object_size(key).await.unwrap(),
+            Some(big.len() as i64 + 4)
+        );
         let url = store
             .download_url(key, "a b.txt", Duration::from_secs(60))
             .await

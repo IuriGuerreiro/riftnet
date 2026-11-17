@@ -10,6 +10,8 @@ pub const MAX_CONTENT_TYPE_LEN: usize = 127;
 pub enum Status {
     Uploading,
     Ready,
+    /// Picked by cleanup; bytes being removed. Never comes back.
+    Deleting,
 }
 
 impl Status {
@@ -17,6 +19,7 @@ impl Status {
         match self {
             Self::Uploading => "uploading",
             Self::Ready => "ready",
+            Self::Deleting => "deleting",
         }
     }
 }
@@ -41,6 +44,10 @@ pub struct Attachment {
 }
 
 impl Attachment {
+    pub fn is_uploading(&self) -> bool {
+        self.status == Status::Uploading.as_str()
+    }
+
     pub fn is_ready(&self) -> bool {
         self.status == Status::Ready.as_str()
     }

@@ -6,6 +6,8 @@
 -- own copy of the file details, so loading messages never reads this table.
 --
 -- The cleanup job deletes expired rows, and uploads never sent within a day.
+-- It first flips a row to 'deleting' (claims need 'ready'), so a file can't be
+-- put on a message while its bytes are being removed.
 -- Deleting a message sets expires_at = now(), so its files go on the next run.
 
 CREATE TABLE attachments (
@@ -25,7 +27,7 @@ CREATE TABLE attachments (
     created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
     expires_at       TIMESTAMPTZ NOT NULL,
 
-    CHECK (status IN ('uploading', 'ready')),
+    CHECK (status IN ('uploading', 'ready', 'deleting')),
     CHECK (size > 0),
     CHECK (octet_length(blake3) = 32)
 );

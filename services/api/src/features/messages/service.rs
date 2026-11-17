@@ -233,14 +233,15 @@ impl MessageService {
             return Err(not_your_message());
         }
 
+        // Files first: if this fails the message stays and a retry redoes both.
+        // (The other order could leave a deleted message's files downloadable.)
+        if !message.attachments.is_empty() {
+            self.attachments
+                .release(me, conversation_id, message_id)
+                .await?;
+        }
         let seq = self.conversations.next_seq(conversation_id).await?;
         self.repo.delete(conversation_id, message_id, seq).await?;
-        if !message.attachments.is_empty()
-            && let Err(err) = self.attachments.release(message_id).await
-        {
-            // WARN: the message is already gone; its files just live until they expire.
-            tracing::warn!(error = %err, message.id = message_id, "release attachments failed");
-        }
 
         let push = Payload::MessageDeleted(MessageDeleted {
             conversation_id: conversation_id as u64,
@@ -337,7 +338,7 @@ mod tests {
                 Err(ApiError::bad_request("bad_attachment", "no files here"))
             }
         }
-        async fn release(&self, _: i64) -> Result<(), ApiError> {
+        async fn release(&self, _: i64, _: i64, _: i64) -> Result<(), ApiError> {
             Ok(())
         }
     }

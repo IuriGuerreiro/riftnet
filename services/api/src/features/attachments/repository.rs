@@ -17,8 +17,6 @@ pub trait AttachmentRepo: Send + Sync {
         blake3: &[u8],
         etag: &str,
     ) -> Result<(), RepoError>;
-    /// Etags in chunk order.
-    async fn chunk_etags(&self, id: i64) -> Result<Vec<String>, RepoError>;
     /// 'uploading' -> 'ready'. False if it wasn't uploading any more.
     async fn mark_ready(&self, id: i64) -> Result<bool, RepoError>;
     /// Ties the files to `message_id`, all or none. Each must be the uploader's,
@@ -32,14 +30,29 @@ pub trait AttachmentRepo: Send + Sync {
         message_id: i64,
     ) -> Result<Option<Vec<Attachment>>, RepoError>;
     /// Marks the message's files expired; the next cleanup deletes them.
-    async fn expire_for_message(&self, message_id: i64) -> Result<(), RepoError>;
-    /// Expired files, and files created before `stale_before` that were never sent.
+    async fn expire_for_message(
+        &self,
+        message_id: i64,
+        uploader_id: i64,
+        conversation_id: i64,
+    ) -> Result<(), RepoError>;
+    /// Expired files, files created before `stale_before` that were never
+    /// sent, and rows a previous cleanup run didn't finish.
+    /// `mark_deleting` confirms each one before anything is removed.
     async fn find_dead(
         &self,
         now: DateTime<Utc>,
         stale_before: DateTime<Utc>,
         limit: i64,
     ) -> Result<Vec<Attachment>, RepoError>;
+    /// Flips the row to 'deleting' if it's still dead. False if it was
+    /// claimed for a message in the meantime: leave it alone.
+    async fn mark_deleting(
+        &self,
+        id: i64,
+        now: DateTime<Utc>,
+        stale_before: DateTime<Utc>,
+    ) -> Result<bool, RepoError>;
     async fn delete(&self, id: i64) -> Result<(), RepoError>;
 }
 
@@ -111,16 +124,6 @@ impl AttachmentRepo for PgAttachmentRepo {
         Ok(())
     }
 
-    #[tracing::instrument(name = "db SELECT attachment_chunks", skip_all, err(Display), fields(otel.kind = "client", db.system = "postgresql", db.operation = "SELECT", db.collection.name = "attachment_chunks"))]
-    async fn chunk_etags(&self, id: i64) -> Result<Vec<String>, RepoError> {
-        Ok(sqlx::query_scalar(
-            "SELECT etag FROM attachment_chunks WHERE attachment_id = $1 ORDER BY idx",
-        )
-        .bind(id)
-        .fetch_all(&self.pool)
-        .await?)
-    }
-
     #[tracing::instrument(name = "db UPDATE attachments", skip_all, err(Display), fields(otel.kind = "client", db.system = "postgresql", db.operation = "UPDATE", db.collection.name = "attachments"))]
     async fn mark_ready(&self, id: i64) -> Result<bool, RepoError> {
         let done = sqlx::query(
@@ -163,11 +166,21 @@ impl AttachmentRepo for PgAttachmentRepo {
     }
 
     #[tracing::instrument(name = "db UPDATE attachments", skip_all, err(Display), fields(otel.kind = "client", db.system = "postgresql", db.operation = "UPDATE", db.collection.name = "attachments"))]
-    async fn expire_for_message(&self, message_id: i64) -> Result<(), RepoError> {
-        sqlx::query("UPDATE attachments SET expires_at = now() WHERE message_id = $1")
-            .bind(message_id)
-            .execute(&self.pool)
-            .await?;
+    async fn expire_for_message(
+        &self,
+        message_id: i64,
+        uploader_id: i64,
+        conversation_id: i64,
+    ) -> Result<(), RepoError> {
+        sqlx::query(
+            "UPDATE attachments SET expires_at = LEAST(expires_at, now()) \
+             WHERE message_id = $1 AND uploader_id = $2 AND conversation_id = $3",
+        )
+        .bind(message_id)
+        .bind(uploader_id)
+        .bind(conversation_id)
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 
@@ -182,6 +195,8 @@ impl AttachmentRepo for PgAttachmentRepo {
             "SELECT * FROM attachments WHERE expires_at <= $1 \
              UNION \
              SELECT * FROM attachments WHERE message_id IS NULL AND created_at <= $2 \
+             UNION \
+             SELECT * FROM attachments WHERE status = 'deleting' \
              LIMIT $3",
         )
         .bind(now)
@@ -189,6 +204,28 @@ impl AttachmentRepo for PgAttachmentRepo {
         .bind(limit)
         .fetch_all(&self.pool)
         .await?)
+    }
+
+    #[tracing::instrument(name = "db UPDATE attachments", skip_all, err(Display), fields(otel.kind = "client", db.system = "postgresql", db.operation = "UPDATE", db.collection.name = "attachments"))]
+    async fn mark_deleting(
+        &self,
+        id: i64,
+        now: DateTime<Utc>,
+        stale_before: DateTime<Utc>,
+    ) -> Result<bool, RepoError> {
+        // Row lock: a concurrent claim() either lands first (then this matches
+        // nothing) or waits and then fails its status = 'ready' check.
+        let done = sqlx::query(
+            "UPDATE attachments SET status = 'deleting' WHERE id = $1 AND ( \
+               status = 'deleting' OR expires_at <= $2 \
+               OR (message_id IS NULL AND created_at <= $3))",
+        )
+        .bind(id)
+        .bind(now)
+        .bind(stale_before)
+        .execute(&self.pool)
+        .await?;
+        Ok(done.rows_affected() == 1)
     }
 
     #[tracing::instrument(name = "db DELETE attachments", skip_all, err(Display), fields(otel.kind = "client", db.system = "postgresql", db.operation = "DELETE", db.collection.name = "attachments"))]

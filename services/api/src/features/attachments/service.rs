@@ -5,6 +5,7 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use common::snowflake::Snowflake;
+use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
 use super::models::{
     Attachment, CHUNK_SIZE, MAX_CONTENT_TYPE_LEN, MAX_FILENAME_CHARS, Status, chunk_count,
@@ -28,8 +29,9 @@ pub trait AttachmentLinker: Send + Sync {
         message_id: i64,
         ids: &[i64],
     ) -> Result<Vec<MessageAttachment>, ApiError>;
-    /// The message is gone: expire its files so the cleanup deletes them.
-    async fn release(&self, message_id: i64) -> Result<(), ApiError>;
+    /// The message is being deleted: expire its files so the cleanup removes them.
+    async fn release(&self, me: i64, conversation_id: i64, message_id: i64)
+    -> Result<(), ApiError>;
 }
 
 /// How long a download link works once handed out.
@@ -37,6 +39,8 @@ const DOWNLOAD_URL_TTL: Duration = Duration::from_secs(5 * 60);
 /// Uploads not finished after this long are thrown away.
 const STALE_UPLOAD: Duration = Duration::from_secs(24 * 60 * 60);
 const CLEANUP_BATCH: i64 = 100;
+/// Chunk bodies held in memory at once, across all users: 32 x 8 MiB = 256 MiB max.
+const CHUNKS_IN_FLIGHT: usize = 32;
 
 pub struct Limits {
     pub max_bytes: i64,
@@ -58,6 +62,7 @@ pub struct AttachmentService {
     store: Arc<dyn FileStore>,
     ids: Arc<Snowflake>,
     limits: Limits,
+    chunk_slots: Arc<Semaphore>,
 }
 
 impl AttachmentService {
@@ -74,6 +79,7 @@ impl AttachmentService {
             store,
             ids,
             limits,
+            chunk_slots: Arc::new(Semaphore::new(CHUNKS_IN_FLIGHT)),
         }
     }
 
@@ -93,6 +99,7 @@ impl AttachmentService {
         let id = self.ids.next_id() as i64;
         let object_key = format!("attachments/{}/{id}", new.conversation_id);
         let upload_id = self.store.start_upload(&object_key, &content_type).await?;
+        let upload_id_for_abort = upload_id.clone();
         let now = Utc::now();
         let attachment = Attachment {
             id,
@@ -111,8 +118,39 @@ impl AttachmentService {
             created_at: now,
             expires_at: now + self.limits.ttl,
         };
-        self.repo.insert(&attachment).await?;
+        if let Err(err) = self.repo.insert(&attachment).await {
+            // No row means cleanup would never find it; abort now.
+            // (A crash right here still leaks it: set an abort-incomplete-multipart
+            // lifecycle rule on the bucket in production.)
+            let _ = self
+                .store
+                .abort_upload(&attachment.object_key, &upload_id_for_abort)
+                .await;
+            return Err(err.into());
+        }
         Ok(attachment)
+    }
+
+    /// Checks a chunk request before its body is read: the upload is yours,
+    /// still uploading, and `idx` is in range. Returns the chunk's expected size.
+    pub async fn chunk_target(&self, me: i64, id: i64, idx: i32) -> Result<usize, ApiError> {
+        let a = self.own_upload(me, id).await?;
+        if idx < 0 || idx >= a.chunk_count {
+            return Err(ApiError::bad_request(
+                "bad_chunk",
+                "chunk index out of range",
+            ));
+        }
+        Ok(a.chunk_len(idx) as usize)
+    }
+
+    /// Waits for room to hold one more chunk in memory. Keep it until done.
+    pub async fn chunk_slot(&self) -> OwnedSemaphorePermit {
+        self.chunk_slots
+            .clone()
+            .acquire_owned()
+            .await
+            .expect("chunk semaphore is never closed")
     }
 
     /// Stores chunk `idx` only if its BLAKE3 matches `hash_hex`.
@@ -163,23 +201,45 @@ impl AttachmentService {
         Ok(())
     }
 
-    /// Joins the chunks into the final file. Safe to call twice.
+    /// Joins the chunks into the final file. Safe to call twice, and safe to
+    /// retry after a crash or lost reply between S3 and Postgres.
     #[tracing::instrument(name = "attachments.complete", skip_all, fields(user.id = me, attachment.id = id))]
     pub async fn complete(&self, me: i64, id: i64) -> Result<Attachment, ApiError> {
         let mut a = self.own_attachment(me, id).await?;
         if a.is_ready() {
             return Ok(a);
         }
-        let etags = self.repo.chunk_etags(id).await?;
-        if etags.len() != a.chunk_count as usize {
-            return Err(ApiError::bad_request(
-                "missing_chunks",
-                format!("{} of {} chunks uploaded", etags.len(), a.chunk_count),
-            ));
+        if !a.is_uploading() {
+            return Err(ApiError::NotFound);
         }
-        self.store
-            .finish_upload(&a.object_key, &a.upload_id, &etags)
-            .await?;
+        // Already joined by an earlier try that died before marking it ready?
+        let joined = self.store.object_size(&a.object_key).await? == Some(a.size);
+        if !joined {
+            // Ask S3 which parts it holds (not our own etag rows): if the same
+            // chunk was sent twice at once, S3 keeps one and we must join that one.
+            let parts = self.store.list_parts(&a.object_key, &a.upload_id).await?;
+            let complete = parts.len() == a.chunk_count as usize
+                && parts
+                    .iter()
+                    .enumerate()
+                    .all(|(i, (n, _, size))| *n as usize == i && *size == a.chunk_len(i as i32));
+            if !complete {
+                return Err(ApiError::bad_request(
+                    "missing_chunks",
+                    format!("{} of {} chunks uploaded", parts.len(), a.chunk_count),
+                ));
+            }
+            let etags: Vec<String> = parts.into_iter().map(|(_, etag, _)| etag).collect();
+            // A lost reply can hide a join that worked; check before failing.
+            if let Err(err) = self
+                .store
+                .finish_upload(&a.object_key, &a.upload_id, &etags)
+                .await
+                && self.store.object_size(&a.object_key).await? != Some(a.size)
+            {
+                return Err(err.into());
+            }
+        }
         self.repo.mark_ready(id).await?;
         a.status = Status::Ready.as_str().into();
         Ok(a)
@@ -216,13 +276,19 @@ impl AttachmentService {
             let batch = dead.len();
             let mut batch_removed = 0;
             for a in dead {
-                let gone = if a.is_ready() {
-                    self.store.delete(&a.object_key).await
-                } else {
-                    self.store.abort_upload(&a.object_key, &a.upload_id).await
-                };
-                // WARN: on a store error keep the row, so the next run retries.
-                if let Err(err) = gone {
+                // Claimed for a message since we looked? Then it's not dead.
+                if !self.repo.mark_deleting(a.id, now, stale_before).await? {
+                    continue;
+                }
+                // Do both: we can't be sure how far the upload got.
+                // Deleting a missing object is fine in S3.
+                if !a.is_ready()
+                    && let Err(err) = self.store.abort_upload(&a.object_key, &a.upload_id).await
+                {
+                    tracing::debug!(error = %err, attachment.id = a.id, "cleanup: abort failed (likely already gone)");
+                }
+                // WARN: on a store error keep the row ('deleting'), so the next run retries.
+                if let Err(err) = self.store.delete(&a.object_key).await {
                     tracing::warn!(error = %err, attachment.id = a.id, "cleanup: store delete failed");
                     continue;
                 }
@@ -252,7 +318,11 @@ impl AttachmentService {
         self.repo
             .get(id)
             .await?
-            .filter(|a| a.uploader_id == me && a.expires_at > Utc::now())
+            .filter(|a| {
+                a.uploader_id == me
+                    && a.status != Status::Deleting.as_str()
+                    && a.expires_at > Utc::now()
+            })
             .ok_or(ApiError::NotFound)
     }
 
@@ -317,8 +387,16 @@ impl AttachmentLinker for AttachmentService {
             .collect())
     }
 
-    async fn release(&self, message_id: i64) -> Result<(), ApiError> {
-        Ok(self.repo.expire_for_message(message_id).await?)
+    async fn release(
+        &self,
+        me: i64,
+        conversation_id: i64,
+        message_id: i64,
+    ) -> Result<(), ApiError> {
+        Ok(self
+            .repo
+            .expire_for_message(message_id, me, conversation_id)
+            .await?)
     }
 }
 
@@ -357,6 +435,7 @@ mod tests {
     use std::collections::HashMap;
     use std::sync::Mutex;
 
+    use anyhow::Context;
     use async_trait::async_trait;
 
     use super::*;
@@ -429,12 +508,6 @@ mod tests {
             self.chunks.lock().unwrap().insert((id, idx), etag.into());
             Ok(())
         }
-        async fn chunk_etags(&self, id: i64) -> Result<Vec<String>, RepoError> {
-            let chunks = self.chunks.lock().unwrap();
-            let mut v: Vec<_> = chunks.iter().filter(|((a, _), _)| *a == id).collect();
-            v.sort_by_key(|((_, i), _)| *i);
-            Ok(v.into_iter().map(|(_, e)| e.clone()).collect())
-        }
         async fn mark_ready(&self, id: i64) -> Result<bool, RepoError> {
             let mut rows = self.rows.lock().unwrap();
             let a = rows.get_mut(&id).unwrap();
@@ -468,9 +541,17 @@ mod tests {
                     .collect(),
             ))
         }
-        async fn expire_for_message(&self, message_id: i64) -> Result<(), RepoError> {
+        async fn expire_for_message(
+            &self,
+            message_id: i64,
+            me: i64,
+            conversation_id: i64,
+        ) -> Result<(), RepoError> {
             for a in self.rows.lock().unwrap().values_mut() {
-                if a.message_id == Some(message_id) {
+                if a.message_id == Some(message_id)
+                    && a.uploader_id == me
+                    && a.conversation_id == conversation_id
+                {
                     a.expires_at = Utc::now();
                 }
             }
@@ -487,11 +568,24 @@ mod tests {
                 .lock()
                 .unwrap()
                 .values()
-                .filter(|a| {
-                    a.expires_at <= now || (a.message_id.is_none() && a.created_at <= stale)
-                })
+                .filter(|a| dead(a, now, stale))
                 .cloned()
                 .collect())
+        }
+        async fn mark_deleting(
+            &self,
+            id: i64,
+            now: DateTime<Utc>,
+            stale: DateTime<Utc>,
+        ) -> Result<bool, RepoError> {
+            let mut rows = self.rows.lock().unwrap();
+            match rows.get_mut(&id) {
+                Some(a) if dead(a, now, stale) => {
+                    a.status = "deleting".into();
+                    Ok(true)
+                }
+                _ => Ok(false),
+            }
         }
         async fn delete(&self, id: i64) -> Result<(), RepoError> {
             self.rows.lock().unwrap().remove(&id);
@@ -499,28 +593,88 @@ mod tests {
         }
     }
 
+    fn dead(a: &Attachment, now: DateTime<Utc>, stale: DateTime<Utc>) -> bool {
+        a.status == "deleting"
+            || a.expires_at <= now
+            || (a.message_id.is_none() && a.created_at <= stale)
+    }
+
+    /// Parts per key until joined, then a finished object.
     #[derive(Default)]
     struct FakeStore {
+        /// Every put_part call, in order.
         parts: Mutex<Vec<u32>>,
+        pending: Mutex<HashMap<String, std::collections::BTreeMap<u32, i64>>>,
+        objects: Mutex<HashMap<String, i64>>,
         deleted: Mutex<Vec<String>>,
+        /// Join works but the reply is "lost" (returns an error).
+        lose_finish_reply: std::sync::atomic::AtomicBool,
     }
     #[async_trait]
     impl FileStore for FakeStore {
-        async fn start_upload(&self, _: &str, _: &str) -> anyhow::Result<String> {
+        async fn start_upload(&self, key: &str, _: &str) -> anyhow::Result<String> {
+            self.pending
+                .lock()
+                .unwrap()
+                .insert(key.into(), Default::default());
             Ok("up-1".into())
         }
-        async fn put_part(&self, _: &str, _: &str, part: u32, _: Bytes) -> anyhow::Result<String> {
+        async fn put_part(
+            &self,
+            key: &str,
+            _: &str,
+            part: u32,
+            data: Bytes,
+        ) -> anyhow::Result<String> {
             self.parts.lock().unwrap().push(part);
+            self.pending
+                .lock()
+                .unwrap()
+                .get_mut(key)
+                .context("no such upload")?
+                .insert(part, data.len() as i64);
             Ok(format!("etag-{part}"))
         }
-        async fn finish_upload(&self, _: &str, _: &str, _: &[String]) -> anyhow::Result<()> {
+        async fn finish_upload(&self, key: &str, _: &str, _: &[String]) -> anyhow::Result<()> {
+            let parts = self
+                .pending
+                .lock()
+                .unwrap()
+                .remove(key)
+                .context("no such upload")?;
+            self.objects
+                .lock()
+                .unwrap()
+                .insert(key.into(), parts.values().sum());
+            if self
+                .lose_finish_reply
+                .load(std::sync::atomic::Ordering::SeqCst)
+            {
+                anyhow::bail!("connection reset");
+            }
             Ok(())
+        }
+        async fn list_parts(&self, key: &str, _: &str) -> anyhow::Result<Vec<(u32, String, i64)>> {
+            let pending = self.pending.lock().unwrap();
+            let parts = pending.get(key).context("no such upload")?;
+            Ok(parts
+                .iter()
+                .map(|(n, size)| (*n, format!("etag-{n}"), *size))
+                .collect())
         }
         async fn abort_upload(&self, key: &str, _: &str) -> anyhow::Result<()> {
-            self.deleted.lock().unwrap().push(key.into());
+            self.pending
+                .lock()
+                .unwrap()
+                .remove(key)
+                .context("no such upload")?;
             Ok(())
         }
+        async fn object_size(&self, key: &str) -> anyhow::Result<Option<i64>> {
+            Ok(self.objects.lock().unwrap().get(key).copied())
+        }
         async fn delete(&self, key: &str) -> anyhow::Result<()> {
+            self.objects.lock().unwrap().remove(key);
             self.deleted.lock().unwrap().push(key.into());
             Ok(())
         }
@@ -753,13 +907,88 @@ mod tests {
         svc.attach(ALICE, DM, 7, &[id]).await.unwrap();
         svc.download(BOB, id).await.unwrap();
 
-        svc.release(7).await.unwrap();
+        // Only the uploader, in that conversation, can release.
+        svc.release(BOB, DM, 7).await.unwrap();
+        svc.download(BOB, id).await.unwrap();
+        svc.release(ALICE, DM, 7).await.unwrap();
         assert!(matches!(
             svc.download(BOB, id).await,
             Err(ApiError::NotFound)
         ));
         assert_eq!(svc.cleanup(Utc::now()).await.unwrap(), 1);
         assert_eq!(store.deleted.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn complete_survives_a_lost_reply() {
+        let (svc, repo, store) = service(100 << 20);
+        let data = Bytes::from_static(b"hello");
+        let h = blake3::hash(&data).to_hex();
+        let a = svc.start(ALICE, upload(5, &h)).await.unwrap();
+        svc.put_chunk(ALICE, a.id, 0, &h, data).await.unwrap();
+
+        // S3 joined the file but we never heard back: still "uploading".
+        store
+            .lose_finish_reply
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        // The join worked, so complete sees the object and succeeds anyway.
+        svc.complete(ALICE, a.id).await.unwrap();
+        assert!(repo.rows.lock().unwrap()[&a.id].is_ready());
+    }
+
+    #[tokio::test]
+    async fn complete_retry_after_crash_finds_joined_object() {
+        let (svc, repo, store) = service(100 << 20);
+        let data = Bytes::from_static(b"hello");
+        let h = blake3::hash(&data).to_hex();
+        let a = svc.start(ALICE, upload(5, &h)).await.unwrap();
+        svc.put_chunk(ALICE, a.id, 0, &h, data).await.unwrap();
+        // Simulate: S3 join done, process died before mark_ready.
+        store
+            .finish_upload(&a.object_key, &a.upload_id, &[])
+            .await
+            .unwrap();
+        svc.complete(ALICE, a.id).await.unwrap();
+        assert!(repo.rows.lock().unwrap()[&a.id].is_ready());
+    }
+
+    #[tokio::test]
+    async fn cleanup_skips_a_file_claimed_after_it_was_listed() {
+        let (svc, repo, store) = service(100 << 20);
+        let id = ready_upload(&svc, ALICE).await;
+        let later = Utc::now() + chrono::Duration::days(2);
+        // Cleanup lists it as unsent and stale...
+        let listed = repo
+            .find_dead(later, later - STALE_UPLOAD, 10)
+            .await
+            .unwrap();
+        assert_eq!(listed.len(), 1);
+        // ...then a send claims it before cleanup confirms.
+        svc.attach(ALICE, DM, 5, &[id]).await.unwrap();
+        assert!(
+            !repo
+                .mark_deleting(id, later, later - STALE_UPLOAD)
+                .await
+                .unwrap()
+        );
+        assert_eq!(svc.cleanup(later).await.unwrap(), 0);
+        assert!(store.deleted.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn deleting_files_cannot_be_claimed_or_uploaded_to() {
+        let (svc, repo, _) = service(100 << 20);
+        let id = ready_upload(&svc, ALICE).await;
+        repo.rows.lock().unwrap().get_mut(&id).unwrap().status = "deleting".into();
+        assert!(svc.attach(ALICE, DM, 5, &[id]).await.is_err());
+        assert!(matches!(
+            svc.complete(ALICE, id).await,
+            Err(ApiError::NotFound)
+        ));
+        assert!(matches!(
+            svc.chunk_target(ALICE, id, 0).await,
+            Err(ApiError::NotFound)
+        ));
     }
 
     #[test]
