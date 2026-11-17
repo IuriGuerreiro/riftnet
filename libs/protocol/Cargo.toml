@@ -1,4 +1,5 @@
 [package]
+publish = false
 name = "protocol"
 description = "Rust types generated from proto/"
 version.workspace = true

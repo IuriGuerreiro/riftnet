@@ -3,13 +3,13 @@ syntax = "proto3";
 package app.v1;
 
 message Message {
-  uint64 id = 1;               // Snowflake (also encodes the send time)
+  uint64 id = 1;
   uint64 conversation_id = 2;
   uint64 author_id = 3;
-  uint64 seq = 4;              // 1, 2, 3... per conversation, for sync
-  bytes content = 5;           // opaque: UTF-8 text now, encrypted later
+  uint64 seq = 4;
+  bytes content = 5; // opaque: UTF-8 text now, encrypted later
   Encryption encryption = 6;
-  uint64 edited_at = 7;        // unix ms of the last edit, 0 = never edited
+  uint64 edited_at = 7; // unix ms of the last edit, 0 = never edited
 }
 
 enum Encryption {
@@ -20,7 +20,7 @@ enum Encryption {
 message SendMessage {
   uint64 conversation_id = 1;
   bytes content = 2;
-  string nonce = 3;            // client-made; dedupe + match the ack
+  string nonce = 3; // client-made; dedupe + match the ack
 }
 
 message MessageAck {
@@ -28,18 +28,16 @@ message MessageAck {
   Message message = 2;
 }
 
-// Scrolling up: messages older than `before_id` (0 = newest).
 message GetHistory {
   uint64 conversation_id = 1;
   uint64 before_id = 2;
-  uint32 limit = 3;            // max 100
+  uint32 limit = 3;
 }
 
 message History {
   repeated Message messages = 1; // newest first
 }
 
-// Reconnect: "I have up to seq N, send me what I missed".
 message Sync {
   uint64 conversation_id = 1;
   uint64 after_seq = 2;
@@ -47,13 +45,12 @@ message Sync {
 
 message SyncResult {
   repeated Message messages = 1; // oldest first
-  bool complete = 2;             // false = too many missed: these are the newest; load older with GetHistory
-  repeated Message edited = 3;   // older messages edited since after_seq (current version)
+  bool complete = 2; // false = too many missed: these are the newest; load older with GetHistory
+  repeated Message edited = 3; // older messages edited since after_seq (current version)
   repeated uint64 deleted_ids = 4; // messages deleted since after_seq
-  uint64 last_seq = 5;           // you're now up to here: use it as the next after_seq
+  uint64 last_seq = 5; // you're now up to here: use it as the next after_seq
 }
 
-// Push: a new message in a conversation you're in.
 message MessageCreated {
   Message message = 1;
 }

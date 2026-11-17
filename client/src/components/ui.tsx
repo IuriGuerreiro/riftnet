@@ -1,13 +1,17 @@
-// Tiny shared UI pieces. José will replace these with the real design system.
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react";
-import { forwardRef } from "react";
+import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, Ref } from "react";
 
 export function Card({ children }: { children: ReactNode }) {
-  return <div className="w-full max-w-sm space-y-4 rounded-xl bg-zinc-900 p-6 shadow-lg">{children}</div>;
+  return (
+    <div className="w-full max-w-sm space-y-4 rounded-xl bg-zinc-900 p-6 shadow-lg">{children}</div>
+  );
 }
 
-export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement> & { error?: string }>(
-  ({ error, ...props }, ref) => (
+export function Input({
+  error,
+  ref,
+  ...props
+}: InputHTMLAttributes<HTMLInputElement> & { error?: string; ref?: Ref<HTMLInputElement> }) {
+  return (
     <div className="space-y-1">
       <input
         ref={ref}
@@ -16,8 +20,8 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
       />
       {error && <p className="text-xs text-red-400">{error}</p>}
     </div>
-  ),
-);
+  );
+}
 
 export function Button(props: ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
@@ -30,5 +34,13 @@ export function Button(props: ButtonHTMLAttributes<HTMLButtonElement>) {
 
 export function ErrorText({ error }: { error: unknown }) {
   if (!error) return null;
-  return <p className="text-sm text-red-400">{error instanceof Error ? error.message : String(error)}</p>;
+  return (
+    <p className="text-sm text-red-400">
+      {error instanceof Error
+        ? error.message
+        : typeof error === "string"
+          ? error
+          : "Something went wrong"}
+    </p>
+  );
 }

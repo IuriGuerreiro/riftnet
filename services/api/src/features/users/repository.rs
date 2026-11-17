@@ -4,17 +4,13 @@ use sqlx::PgPool;
 use super::models::User;
 use crate::common::error::RepoError;
 
-/// Data access for users. Services depend on this trait, so a cache
-/// (`CachedUserRepo`) or an in-memory fake can wrap or replace `PgUserRepo`.
 #[async_trait]
 pub trait UserRepo: Send + Sync {
     async fn find_by_id(&self, id: i64) -> Result<Option<User>, RepoError>;
     async fn find_by_zitadel_id(&self, zitadel_id: &str) -> Result<Option<User>, RepoError>;
     async fn find_by_ids(&self, ids: &[i64]) -> Result<Vec<User>, RepoError>;
-    /// `username` must already be normalized (lowercase).
+    // INVARIANT: `username` must already be lowercase.
     async fn find_by_username(&self, username: &str) -> Result<Option<User>, RepoError>;
-    /// Users with `prefix <= username < upper_bound` (byte order), sorted by
-    /// username, skipping `exclude_id`. Both bounds already lowercase.
     async fn search_by_username_prefix(
         &self,
         prefix: &str,
@@ -23,7 +19,6 @@ pub trait UserRepo: Send + Sync {
         limit: i64,
     ) -> Result<Vec<User>, RepoError>;
     async fn create(&self, id: i64, zitadel_id: &str) -> Result<User, RepoError>;
-    /// `Err(Conflict)` if the username is taken.
     async fn set_username(&self, id: i64, username: &str) -> Result<Option<User>, RepoError>;
 }
 
@@ -79,9 +74,6 @@ impl UserRepo for PgUserRepo {
         exclude_id: i64,
         limit: i64,
     ) -> Result<Vec<User>, RepoError> {
-        // A range, not `LIKE $1 || '%'`: Postgres can't use the index for a
-        // LIKE pattern that is a parameter once it caches a generic plan.
-        // `~>=~` / `~<~` are the byte-order operators `text_pattern_ops` indexes.
         Ok(sqlx::query_as(
             "SELECT * FROM users \
              WHERE username ~>=~ $1 AND username ~<~ $2 AND id <> $3 \

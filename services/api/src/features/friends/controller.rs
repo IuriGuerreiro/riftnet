@@ -10,7 +10,6 @@ use crate::common::error::ApiError;
 use crate::common::middleware::auth::AuthUser;
 
 const HOUR: Duration = Duration::from_secs(60 * 60);
-/// Friend requests a user can send per hour.
 const REQUESTS_PER_HOUR: u32 = 20;
 
 pub async fn list(

@@ -19,7 +19,6 @@ message Envelope {
   uint64 id = 1;
 
   oneof payload {
-    // client -> server
     Ping ping = 10;
     SendMessage send_message = 11;
     GetHistory get_history = 12;
@@ -33,11 +32,10 @@ message Envelope {
     RenameGroup rename_group = 20;
     EditMessage edit_message = 22;
     DeleteMessage delete_message = 23;
-    StartTyping start_typing = 21;  // fire-and-forget: send with id 0, no reply
+    StartTyping start_typing = 21; // fire-and-forget: send with id 0, no reply
     SetIdle set_idle = 24;
     GetPresence get_presence = 25;
 
-    // server -> client (replies)
     Pong pong = 50;
     Error error = 51;
     MessageAck message_ack = 52;
@@ -50,7 +48,6 @@ message Envelope {
     DeleteMessageAck delete_message_ack = 64;
     Presences presences = 67;
 
-    // server -> client (pushes, id = 0)
     MessageCreated message_created = 54;
     UserUpdated user_updated = 55;
     ConversationUpdated conversation_updated = 60;
@@ -60,17 +57,15 @@ message Envelope {
     TypingStarted typing_started = 62;
     PresenceUpdated presence_updated = 68;
 
-    // calls (100-139 reserved, see docs/architecture/calls.md)
-    // client -> server
+    // calls: field numbers 100-139 are reserved for them
     CallStart call_start = 100;
     CallAccept call_accept = 101;
     CallDecline call_decline = 102;
     CallJoin call_join = 103;
+    CallScreenShare call_screen_share = 104;
     CallLeave call_leave = 105;
-    // server -> client (replies)
     CallResult call_result = 120;
     CallJoined call_joined = 121;
-    // server -> client (pushes, id = 0)
     CallIncoming call_incoming = 130;
     CallUpdated call_updated = 131;
     CallEnded call_ended = 133;
@@ -85,7 +80,6 @@ message Error {
   string message = 2;
 }
 
-// First frame: the access token from /auth/login (same one used for HTTP).
 message Authenticate {
   string access_token = 1;
 }

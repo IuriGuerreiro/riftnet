@@ -1,5 +1,3 @@
-//! Our models → protobuf types sent over the WebSocket.
-
 use protocol::v1;
 
 use super::models::{Conversation, Kind};

@@ -1,8 +1,3 @@
-//! CQL for conversations. Tables: `services/api/scylla/001_conversations.cql`.
-//! Each `?` is filled with a value when the statement runs.
-
-/// Claim the DM for a pair. IF NOT EXISTS = lightweight transaction (LWT):
-/// replicas agree on one winner. The reply's first column is `[applied]`.
 pub const CLAIM_DM_KEY: &str =
     "INSERT INTO dm_keys (dm_key, conversation_id) VALUES (?, ?) IF NOT EXISTS";
 
@@ -20,8 +15,6 @@ pub const GET_CONVERSATION: &str =
 pub const DELETE_BY_USER: &str =
     "DELETE FROM conversations_by_user WHERE user_id = ? AND conversation_id = ?";
 
-/// Compare-and-set on the member list (LWT): only applies if nobody changed
-/// it since we read it. Values: new members, id, the members we expect.
 pub const SET_MEMBERS: &str = "UPDATE conversations SET members = ? WHERE id = ? IF members = ?";
 
 pub const RENAME: &str = "UPDATE conversations SET name = ? WHERE id = ?";
@@ -29,6 +22,4 @@ pub const RENAME: &str = "UPDATE conversations SET name = ? WHERE id = ?";
 pub const LIST_BY_USER: &str =
     "SELECT conversation_id FROM conversations_by_user WHERE user_id = ? LIMIT 200";
 
-/// Compare-and-set (LWT): only applies if `last_seq` is still the value we read.
-/// Values: new last_seq, conversation id, the last_seq we expect.
 pub const BUMP_SEQ: &str = "UPDATE conversations SET last_seq = ? WHERE id = ? IF last_seq = ?";

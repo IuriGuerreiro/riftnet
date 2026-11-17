@@ -1,17 +1,3 @@
-//! One connected socket, from open to close.
-//!
-//! 1. Wait (max 10s) for the first frame. It must be `Authenticate`.
-//! 2. Check the access token, the same way HTTP does (`TokenService`).
-//! 3. Reply `AuthOk { user }`, subscribe to this user's live events (NATS),
-//!    then handle requests and forward pushes until the socket closes.
-//!
-//! Anything wrong in step 1–2 → an `Error` frame, then close with code 4001.
-//! Requests are handled in `handlers.rs`.
-//!
-//! Heartbeat: every 30s the server sends a WebSocket ping (browsers answer
-//! with a pong on their own) and refreshes this socket's presence. No frame
-//! from the client for 75s → the socket is dead, close it.
-
 use std::time::{Duration, Instant};
 
 use axum::extract::ws::{CloseFrame, Message as WsMessage, WebSocket};
@@ -25,21 +11,15 @@ use super::handlers;
 use crate::app::AppState;
 
 const AUTH_TIMEOUT: Duration = Duration::from_secs(10);
-/// WebSocket close code for "not authenticated" (4000–4999 are free for apps).
 const CLOSE_UNAUTHORIZED: u16 = 4001;
 const HEARTBEAT: Duration = Duration::from_secs(30);
-/// Nothing heard for this long (2 missed pongs) → drop the socket.
 const DEAD_AFTER: Duration = Duration::from_secs(75);
-/// A socket's presence entry lives this long without a heartbeat. Covers
-/// two missed heartbeats, then a crashed server's users go offline.
 pub const PRESENCE_TTL: Duration = Duration::from_secs(90);
 
-/// Who is on the other end. Lives as long as the socket.
 #[derive(Debug, Clone, Copy)]
 pub struct Session {
     pub user_id: i64,
     pub device_id: i64,
-    /// Random id for this socket (two tabs can share a device id).
     pub connection_id: u64,
 }
 
@@ -66,7 +46,6 @@ pub async fn run(mut socket: WebSocket, state: AppState) {
     );
     metrics::gauge!("ws_connections").increment(1.0);
 
-    // Live events for this user (new messages...), from any api server.
     let mut pushes = match state.events.subscribe_user(session.user_id).await {
         Ok(stream) => stream,
         Err(err) => {
@@ -76,26 +55,23 @@ pub async fn run(mut socket: WebSocket, state: AppState) {
         }
     };
 
-    // Subscribed first, so the "came online" pushes of others aren't missed.
     state
         .presence
         .connected(session.user_id, session.connection_id)
         .await;
     let mut heartbeat = tokio::time::interval(HEARTBEAT);
-    heartbeat.tick().await; // the first tick is immediate
+    heartbeat.tick().await;
     let mut last_heard = Instant::now();
 
-    // Wait for whichever comes first: a frame from the client, a push, or a heartbeat.
     loop {
         tokio::select! {
             frame = socket.recv() => {
-                let Some(Ok(frame)) = frame else { break }; // closed or broken
+                let Some(Ok(frame)) = frame else { break };
                 last_heard = Instant::now();
                 let WsMessage::Binary(bytes) = frame else {
-                    continue; // ping/pong/text frames: ignore
+                    continue;
                 };
                 let reply = match Envelope::decode(bytes) {
-                    // Fire-and-forget: no reply, not even an error.
                     Ok(Envelope { payload: Some(Payload::StartTyping(req)), .. }) => {
                         start_typing(&state, &session, req).await;
                         continue;
@@ -108,8 +84,7 @@ pub async fn run(mut socket: WebSocket, state: AppState) {
                 }
             }
             push = pushes.next() => {
-                let Some(bytes) = push else { break }; // NATS gone: client reconnects
-                // Already an encoded Envelope (id 0): forward as is.
+                let Some(bytes) = push else { break };
                 if socket.send(WsMessage::Binary(bytes)).await.is_err() {
                     break;
                 }
@@ -127,7 +102,6 @@ pub async fn run(mut socket: WebSocket, state: AppState) {
         }
     }
 
-    // Socket gone: whatever call it was in, it's out.
     state.calls.connection_closed(session.connection_id).await;
 
     state
@@ -138,8 +112,6 @@ pub async fn run(mut socket: WebSocket, state: AppState) {
     tracing::info!(user.id = session.user_id, "ws disconnected");
 }
 
-/// Step 1–2: read the first frame and check its token.
-/// Returns an error code (sent to the client) on failure.
 async fn authenticate(socket: &mut WebSocket, state: &AppState) -> Result<Session, &'static str> {
     let frame = tokio::time::timeout(AUTH_TIMEOUT, socket.recv())
         .await
@@ -155,7 +127,6 @@ async fn authenticate(socket: &mut WebSocket, state: &AppState) -> Result<Sessio
         return Err("not_authenticated");
     };
 
-    // Same check as the HTTP `AuthUser` extractor. Never log the token.
     let claims = state
         .tokens
         .verify_access(&auth.access_token)
@@ -181,7 +152,6 @@ async fn authenticate(socket: &mut WebSocket, state: &AppState) -> Result<Sessio
     Ok(session)
 }
 
-/// `start_typing` has no reply; failures (not a member…) are only logged.
 async fn start_typing(state: &AppState, session: &Session, req: protocol::v1::StartTyping) {
     metrics::counter!("ws_requests_total").increment(1);
     if let Err(err) = state
@@ -193,7 +163,6 @@ async fn start_typing(state: &AppState, session: &Session, req: protocol::v1::St
     }
 }
 
-/// Step 3: one request in, one reply out (same `id`).
 async fn handle(state: &AppState, session: &Session, req: Envelope) -> Envelope {
     metrics::counter!("ws_requests_total").increment(1);
     let Some(payload) = req.payload else {

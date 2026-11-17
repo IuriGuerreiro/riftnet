@@ -1,5 +1,3 @@
-//! Users: profile of the logged-in user, picking a username, search.
-
 mod controller;
 pub mod dto;
 pub mod models;

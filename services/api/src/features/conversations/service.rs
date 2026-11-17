@@ -39,7 +39,6 @@ impl ConversationService {
         }
     }
 
-    /// Opens the DM between `me` and `username` (creates it the first time).
     #[tracing::instrument(name = "conversations.open_dm", skip_all, fields(user.id = me))]
     pub async fn open_dm(&self, me: i64, username: &str) -> Result<Conversation, ApiError> {
         let other = self.find_user(username).await?;
@@ -65,9 +64,6 @@ impl ConversationService {
         self.with_members(records).await
     }
 
-    // --- group DMs ---
-
-    /// New group with me + `usernames` (3-5 people in total).
     #[tracing::instrument(name = "conversations.create_group", skip_all, fields(user.id = me))]
     pub async fn create_group(
         &self,
@@ -77,12 +73,11 @@ impl ConversationService {
     ) -> Result<Conversation, ApiError> {
         let name = clean_group_name(name)?;
 
-        // Usernames → user ids. Me first, then the others in the order given.
         let mut member_ids = vec![me];
         for username in usernames {
             let user = self.find_user(username).await?;
             if !member_ids.contains(&user.id) {
-                member_ids.push(user.id); // ignore duplicates (and me)
+                member_ids.push(user.id);
             }
         }
         if !(MIN_GROUP_MEMBERS..=MAX_GROUP_MEMBERS).contains(&member_ids.len()) {
@@ -103,7 +98,6 @@ impl ConversationService {
         self.announce(&group, &group.member_ids).await
     }
 
-    /// A member adds someone (max 5).
     #[tracing::instrument(name = "conversations.add_member", skip_all, fields(user.id = me, conversation.id = conversation_id))]
     pub async fn add_member(
         &self,
@@ -113,14 +107,11 @@ impl ConversationService {
     ) -> Result<Conversation, ApiError> {
         let new_user = self.find_user(username).await?;
 
-        // Two people adding at once could make 6 members. `set_members` only
-        // writes if the list didn't change since we read it; if it did, read
-        // again and re-check.
         loop {
             let group = self.member_group(me, conversation_id).await?;
 
             if group.member_ids.contains(&new_user.id) {
-                return self.announce(&group, &[]).await; // already in: nothing to do
+                return self.announce(&group, &[]).await;
             }
 
             if group.member_ids.len() >= MAX_GROUP_MEMBERS {
@@ -146,7 +137,6 @@ impl ConversationService {
         }
     }
 
-    /// I leave. The others are told; my other devices drop it from the list.
     #[tracing::instrument(name = "conversations.leave_group", skip_all, fields(user.id = me, conversation.id = conversation_id))]
     pub async fn leave_group(&self, me: i64, conversation_id: i64) -> Result<(), ApiError> {
         loop {
@@ -163,7 +153,6 @@ impl ConversationService {
                 .set_members(conversation_id, &group.member_ids, &new_members)
                 .await?
             {
-                // Tell everyone, me included (the push shows I'm no longer a member).
                 let notify = group.member_ids.clone();
                 let group = ConversationRecord {
                     member_ids: new_members,
@@ -189,7 +178,6 @@ impl ConversationService {
         self.announce(&group, &group.member_ids).await
     }
 
-    /// The group, if it is one and `me` is in it.
     async fn member_group(&self, me: i64, id: i64) -> Result<ConversationRecord, ApiError> {
         self.repo
             .get(id)
@@ -209,8 +197,6 @@ impl ConversationService {
             .ok_or_else(not_found)
     }
 
-    /// Adds profiles, then pushes `conversation_updated` to `notify` (live, all
-    /// their devices). Like messages: saved first, so a failed push is only logged.
     async fn announce(
         &self,
         group: &ConversationRecord,
@@ -235,7 +221,6 @@ impl ConversationService {
         Ok(conversation)
     }
 
-    /// Records only hold member ids; look up their profiles in one query.
     async fn with_members(
         &self,
         records: Vec<ConversationRecord>,
@@ -272,7 +257,6 @@ impl ConversationService {
     }
 }
 
-/// Trimmed, 1-100 characters.
 fn clean_group_name(raw: &str) -> Result<String, ApiError> {
     let name = raw.trim();
     if name.is_empty() || name.chars().count() > MAX_GROUP_NAME_CHARS {

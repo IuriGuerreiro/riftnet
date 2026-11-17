@@ -1,4 +1,5 @@
 [package]
+publish = false
 name = "api"
 description = "API server: accounts, friends, DMs. WebSocket + a little HTTP."
 version.workspace = true

@@ -1,4 +1,5 @@
 [package]
+publish = false
 name = "common"
 description = "Shared helpers: Snowflake IDs, tracing setup"
 version.workspace = true

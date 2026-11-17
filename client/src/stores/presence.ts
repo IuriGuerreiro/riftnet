@@ -1,23 +1,17 @@
 import { create as createProto } from "@bufbuild/protobuf";
 import { create } from "zustand";
+
 import type { WsClient } from "../api/ws";
 import { GetPresenceSchema, PresenceStatus, SetIdleSchema } from "../gen/v1/presence_pb";
 
-// Who's online, for friends and DM members (see docs/architecture/presence.md).
-//   - get_presence: current status, after (re)connect and when the lists change
-//   - push:         presenceUpdated, live
-// Also reports this window as idle after 5 min without input, or while hidden.
+export { PresenceStatus };
 
 const IDLE_AFTER_MS = 5 * 60_000;
-/** Server limit per get_presence (MAX_PRESENCE_IDS in the api). */
 const MAX_IDS = 200;
 
 interface PresenceState {
-  /** user id (string) → status. Unknown = offline. */
   statuses: Record<string, PresenceStatus>;
-  /** Socket (re)connected: follow pushes and report idle. */
   attach: (ws: WsClient) => void;
-  /** Load the status of these users (friends + DM members). */
   load: (ws: WsClient, userIds: string[]) => Promise<void>;
 }
 
@@ -42,7 +36,6 @@ export const usePresence = create<PresenceState>()((set) => ({
 
   load: async (ws, userIds) => {
     const ids = [...new Set(userIds)];
-    // The server takes at most 200 ids per request: ask in pages, all at once.
     const pages: string[][] = [];
     for (let i = 0; i < ids.length; i += MAX_IDS) pages.push(ids.slice(i, i + MAX_IDS));
     await Promise.all(
@@ -54,20 +47,19 @@ export const usePresence = create<PresenceState>()((set) => ({
           });
           if (reply.case !== "presences") return;
           const next: Record<string, PresenceStatus> = {};
-          for (const id of page) next[id] = PresenceStatus.OFFLINE; // not returned = can't see = offline
+          for (const id of page) next[id] = PresenceStatus.OFFLINE;
           for (const p of reply.value.presences) next[p.userId.toString()] = p.status;
           set((s) => ({ statuses: { ...s.statuses, ...next } }));
         } catch {
-          // socket closed: reloads on reconnect
+          return;
         }
       }),
     );
   },
 }));
 
-/** Calls `report` when this window becomes idle or active (only on changes). */
 function watchIdle(report: (idle: boolean) => void): () => void {
-  let idle = false; // a new socket starts active
+  let idle = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
 
   const setIdle = (next: boolean) => {

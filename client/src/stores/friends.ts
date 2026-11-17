@@ -1,21 +1,16 @@
 import { create } from "zustand";
+
 import { http } from "../api/http";
 import type { Friend, FriendsList, FriendState as JsonFriendState } from "../api/types";
 import type { WsClient } from "../api/ws";
 import { FriendState, type FriendUpdated } from "../gen/v1/friends_pb";
 
-// Friends and pending requests. Actions go over HTTP (/friends); the socket
-// pushes `friendUpdated` to both people, so other devices and the other
-// person update live.
-
 interface FriendsStore {
   list: FriendsList;
   error: string | null;
-  /** Socket (re)connected: reload, then follow pushes. */
   attach: (ws: WsClient) => Promise<void>;
   sendRequest: (username: string) => Promise<boolean>;
   accept: (userId: string) => Promise<void>;
-  /** Decline a request I got, or cancel one I sent. */
   deleteRequest: (userId: string) => Promise<void>;
   removeFriend: (userId: string) => Promise<void>;
 }
@@ -31,7 +26,6 @@ const listFor: Record<JsonFriendState, (typeof lists)[number]> = {
 let stopListening: (() => void) | undefined;
 
 export const useFriends = create<FriendsStore>()((set, get) => {
-  // Put `entry` in the right list (or drop it when state is null).
   function upsert(userId: string, entry: Friend | null) {
     const next = { ...get().list };
     for (const name of lists) next[name] = next[name].filter((f) => f.user.id !== userId);
@@ -41,7 +35,11 @@ export const useFriends = create<FriendsStore>()((set, get) => {
 
   function onFriendUpdated(update: FriendUpdated) {
     if (!update.user) return;
-    const user = { id: update.user.id.toString(), username: update.user.username, display_name: update.user.displayName || null };
+    const user = {
+      id: update.user.id.toString(),
+      username: update.user.username,
+      display_name: update.user.displayName || null,
+    };
     const state: JsonFriendState | null =
       update.state === FriendState.FRIEND
         ? "friend"
@@ -53,7 +51,6 @@ export const useFriends = create<FriendsStore>()((set, get) => {
     upsert(user.id, state ? { user, state, since: new Date().toISOString() } : null);
   }
 
-  // Run an HTTP action; show its error (e.g. user_not_found) instead of throwing.
   async function run<T>(action: () => Promise<T>): Promise<T | undefined> {
     try {
       const result = await action();
@@ -78,23 +75,31 @@ export const useFriends = create<FriendsStore>()((set, get) => {
     },
 
     sendRequest: async (username) => {
-      const entry = await run(() => http<Friend>("/friends/requests", { method: "POST", body: { username } }));
+      const entry = await run(() =>
+        http<Friend>("/friends/requests", { method: "POST", body: { username } }),
+      );
       if (entry) upsert(entry.user.id, entry);
       return !!entry;
     },
 
     accept: async (userId) => {
-      const entry = await run(() => http<Friend>(`/friends/requests/${userId}/accept`, { method: "POST" }));
+      const entry = await run(() =>
+        http<Friend>(`/friends/requests/${userId}/accept`, { method: "POST" }),
+      );
       if (entry) upsert(userId, entry);
     },
 
     deleteRequest: async (userId) => {
-      const done = await run(() => http<void>(`/friends/requests/${userId}`, { method: "DELETE" }).then(() => true));
+      const done = await run(() =>
+        http<undefined>(`/friends/requests/${userId}`, { method: "DELETE" }).then(() => true),
+      );
       if (done) upsert(userId, null);
     },
 
     removeFriend: async (userId) => {
-      const done = await run(() => http<void>(`/friends/${userId}`, { method: "DELETE" }).then(() => true));
+      const done = await run(() =>
+        http<undefined>(`/friends/${userId}`, { method: "DELETE" }).then(() => true),
+      );
       if (done) upsert(userId, null);
     },
   };

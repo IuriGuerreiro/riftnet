@@ -1,5 +1,3 @@
-//! Our message model → the protobuf `Message` sent over the WebSocket.
-
 use protocol::v1;
 
 use super::models::Message;

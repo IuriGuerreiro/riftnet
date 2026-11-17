@@ -1,6 +1,3 @@
-//! ScyllaDB connection + schema. Holds DM data on the hub
-//! (see docs/architecture/messaging.md).
-
 use std::sync::Arc;
 
 use scylla::client::session::Session;
@@ -8,8 +5,6 @@ use scylla::client::session_builder::SessionBuilder;
 use scylla::response::query_result::QueryRowsResult;
 use scylla::value::Row;
 
-/// Schema files in `scylla/`, applied in order on every start. Everything is
-/// IF NOT EXISTS, except `ALTER TABLE .. ADD` (see `already_applied`).
 const SCHEMA: &[&str] = &[
     include_str!("../../scylla/001_conversations.cql"),
     include_str!("../../scylla/002_messages.cql"),
@@ -17,10 +12,6 @@ const SCHEMA: &[&str] = &[
     include_str!("../../scylla/004_message_edits.cql"),
 ];
 
-/// Connects, creates the keyspace if needed, and applies the schema.
-/// Tablets are off: in Scylla 2025 they don't support lightweight
-/// transactions (`IF NOT EXISTS`), which we need for DMs and message seq.
-/// `replication` is how many copies of each row Scylla keeps (1 in dev, 3 in prod).
 pub async fn connect(
     nodes: &[String],
     keyspace: &str,
@@ -52,9 +43,6 @@ pub async fn connect(
     Ok(Arc::new(session))
 }
 
-/// For statements with `IF ...` (lightweight transactions): did the write
-/// happen? Scylla puts the answer in the first column, named `[applied]`.
-/// When it's false, the other columns hold the row that already existed.
 pub fn lwt_applied(reply: &QueryRowsResult) -> anyhow::Result<bool> {
     let row = reply
         .rows::<Row>()?
@@ -70,8 +58,6 @@ pub fn lwt_applied(reply: &QueryRowsResult) -> anyhow::Result<bool> {
         == Some(true))
 }
 
-/// Scylla has no `ALTER TABLE .. ADD IF NOT EXISTS`, so adding a column fails
-/// on every start after the first. That one error means "already done".
 fn already_applied(statement: &str, error: &str) -> bool {
     statement
         .trim_start()
@@ -80,7 +66,6 @@ fn already_applied(statement: &str, error: &str) -> bool {
         && error.contains("conflicts with an existing column")
 }
 
-/// Splits a .cql file into statements, skipping `--` comments.
 fn statements(file: &str) -> Vec<String> {
     let without_comments: String = file
         .lines()

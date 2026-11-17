@@ -1,6 +1,3 @@
-//! `ScyllaMessageRepo`: the struct, its prepared statements and helpers.
-//! Its `MessageRepo` methods are in `message_repo.rs`. CQL is in `queries.rs`.
-
 use std::sync::Arc;
 
 use anyhow::Context;
@@ -25,7 +22,6 @@ pub struct ScyllaMessageRepo {
     pub(super) was_deleted: PreparedStatement,
 }
 
-/// Columns of `GET_MESSAGE` / `HISTORY`, in order.
 pub(super) type Row = (
     i64,
     i64,

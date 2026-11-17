@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use super::models::User;
 
-/// IDs are strings in JSON: Snowflakes don't fit in a JS number.
+// INVARIANT: IDs are strings in JSON because Snowflakes don't fit in a JS number.
 #[derive(Debug, Serialize)]
 pub struct UserDto {
     pub id: String,
@@ -20,7 +20,6 @@ impl From<User> for UserDto {
     }
 }
 
-/// For the WebSocket (protobuf). IDs are real numbers there.
 impl From<&User> for protocol::v1::User {
     fn from(u: &User) -> Self {
         Self {
@@ -36,7 +35,6 @@ pub struct SetUsernameRequest {
     pub username: String,
 }
 
-/// `GET /users/search?q=mon&limit=20`
 #[derive(Debug, Deserialize)]
 pub struct SearchUsersQuery {
     pub q: String,

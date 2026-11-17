@@ -12,11 +12,8 @@ use crate::features::conversations::repository::ConversationRepo;
 use crate::features::friends::models::FriendshipStatus;
 use crate::features::friends::repository::FriendRepo;
 
-/// Max ids in one `GetPresence`.
 pub const MAX_PRESENCE_IDS: usize = 200;
 
-/// Presence is best effort: a store or push error is logged, never shown to
-/// the user, and never closes their socket.
 pub struct PresenceService {
     store: Arc<dyn PresenceStore>,
     friends: Arc<dyn FriendRepo>,
@@ -39,32 +36,26 @@ impl PresenceService {
         }
     }
 
-    /// A socket opened. First socket → online.
     #[tracing::instrument(name = "presence.connected", skip_all, fields(user.id = user_id))]
     pub async fn connected(&self, user_id: i64, connection_id: u64) {
         self.apply(user_id, connection_id, Op::Touch).await;
     }
 
-    /// Still alive. Normally no change, unless this socket had expired.
     pub async fn heartbeat(&self, user_id: i64, connection_id: u64) {
         self.apply(user_id, connection_id, Op::Touch).await;
     }
 
-    /// This socket went idle or came back. Idle only when all sockets are.
     #[tracing::instrument(name = "presence.set_idle", skip_all, fields(user.id = user_id))]
     pub async fn set_idle(&self, user_id: i64, connection_id: u64, idle: bool) {
         let op = if idle { Op::Idle } else { Op::Active };
         self.apply(user_id, connection_id, op).await;
     }
 
-    /// A socket closed. Last socket → offline.
     #[tracing::instrument(name = "presence.disconnected", skip_all, fields(user.id = user_id))]
     pub async fn disconnected(&self, user_id: i64, connection_id: u64) {
         self.apply(user_id, connection_id, Op::Drop).await;
     }
 
-    /// Status of the users `me` is allowed to see, out of `user_ids`.
-    /// Others (not friends, no shared DM) are left out.
     #[tracing::instrument(name = "presence.get", skip_all, fields(user.id = me))]
     pub async fn get(&self, me: i64, user_ids: &[i64]) -> Result<Vec<(i64, Status)>, ApiError> {
         if user_ids.len() > MAX_PRESENCE_IDS {
@@ -101,8 +92,6 @@ impl PresenceService {
         }
     }
 
-    /// Pushes the new status to everyone who can see it, and to my own
-    /// other devices.
     async fn announce(&self, user_id: i64, change: Change) {
         let mut receivers: Vec<i64> = match self.audience(user_id).await {
             Ok(set) => set.into_iter().collect(),
@@ -125,8 +114,6 @@ impl PresenceService {
         }
     }
 
-    /// Who can see `user_id`'s status: accepted friends and members of
-    /// their DMs and groups. Never `user_id` itself.
     async fn audience(&self, user_id: i64) -> Result<HashSet<i64>, ApiError> {
         let mut ids: HashSet<i64> = self
             .friends
@@ -168,11 +155,9 @@ mod tests {
     use crate::features::presence::store::MemoryPresenceStore;
 
     const ANA: i64 = 10;
-    const BOB: i64 = 20; // Ana's friend
-    const CAT: i64 = 30; // in a DM with Ana
-    const DAN: i64 = 40; // a stranger
-
-    // --- in-memory fakes ---
+    const BOB: i64 = 20;
+    const CAT: i64 = 30;
+    const DAN: i64 = 40;
 
     struct FakeFriends(Vec<Friendship>);
 
@@ -240,7 +225,6 @@ mod tests {
         }
     }
 
-    /// Remembers every presence push as (receivers, user_id, status).
     #[derive(Default)]
     struct FakeEvents {
         sent: Mutex<Vec<(Vec<i64>, i64, v1::PresenceStatus)>>,
@@ -283,7 +267,6 @@ mod tests {
     }
 
     impl Setup {
-        /// Pushes so far, then forgets them.
         fn take(&self) -> Vec<(Vec<i64>, i64, v1::PresenceStatus)> {
             std::mem::take(&mut *self.events.sent.lock().unwrap())
         }
@@ -295,7 +278,6 @@ mod tests {
         let events = Arc::new(FakeEvents::default());
         let friends = FakeFriends(vec![
             friendship(ANA, BOB, FriendshipStatus::Accepted),
-            // a pending request doesn't share presence
             friendship(DAN, ANA, FriendshipStatus::Pending),
         ]);
         let conversations = FakeConversations(vec![ConversationRecord {
@@ -324,7 +306,6 @@ mod tests {
     async fn connect_and_disconnect_push_to_friends_and_dm_members_only() {
         let t = setup();
         t.service.connected(ANA, 1).await;
-        // Bob (friend), Cat (DM) and Ana's own devices. Not Dan.
         assert_eq!(t.take(), vec![(vec![ANA, BOB, CAT], ANA, P::Online)]);
 
         t.service.disconnected(ANA, 1).await;
@@ -337,7 +318,6 @@ mod tests {
         t.service.connected(ANA, 1).await;
         t.service.connected(ANA, 2).await;
         t.service.disconnected(ANA, 1).await;
-        // Only the first "online": the other steps changed nothing.
         assert_eq!(t.take(), vec![(vec![ANA, BOB, CAT], ANA, P::Online)]);
 
         t.service.disconnected(ANA, 2).await;
@@ -357,14 +337,12 @@ mod tests {
         t.service.set_idle(ANA, 2, true).await;
         assert_eq!(t.take()[0].2, P::Idle);
 
-        // A heartbeat keeps the idle flag.
         t.service.heartbeat(ANA, 2).await;
         assert!(t.take().is_empty());
 
         t.service.set_idle(ANA, 1, false).await;
         assert_eq!(t.take()[0].2, P::Online);
 
-        // Closing the active device leaves an idle one.
         t.service.disconnected(ANA, 1).await;
         assert_eq!(t.take()[0].2, P::Idle);
     }
@@ -375,17 +353,14 @@ mod tests {
         t.service.connected(ANA, 1).await;
         t.take();
 
-        // Within the TTL, a heartbeat changes nothing.
         t.store.set_clock(1_000_000 + 60_000);
         t.service.heartbeat(ANA, 1).await;
         assert!(t.take().is_empty());
 
-        // Its server died: no heartbeat for longer than the TTL.
         t.store.set_clock(1_000_000 + 60_000 + 91_000);
         let seen = t.service.get(BOB, &[ANA]).await.unwrap();
         assert_eq!(seen, vec![(ANA, Status::Offline)]);
 
-        // A new socket counts as coming back online.
         t.service.connected(ANA, 2).await;
         assert_eq!(t.take()[0].2, P::Online);
     }
@@ -399,7 +374,6 @@ mod tests {
         let seen = t.service.get(ANA, &[BOB, CAT, DAN, BOB]).await.unwrap();
         assert_eq!(seen, vec![(BOB, Status::Online), (CAT, Status::Offline)]);
 
-        // Dan only has a pending request: he can't see Ana either.
         assert!(t.service.get(DAN, &[ANA]).await.unwrap().is_empty());
 
         let too_many: Vec<i64> = (0..=MAX_PRESENCE_IDS as i64).collect();

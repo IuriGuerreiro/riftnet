@@ -1,56 +1,47 @@
 import { create as createProto } from "@bufbuild/protobuf";
 import { create } from "zustand";
+
 import type { WsClient } from "../api/ws";
 import {
   AddMemberSchema,
+  type Conversation,
+  ConversationKind,
   CreateGroupSchema,
   LeaveGroupSchema,
   ListConversationsSchema,
   OpenDmSchema,
   RenameGroupSchema,
-  type Conversation,
 } from "../gen/v1/conversations_pb";
 import type { Envelope } from "../gen/v1/envelope_pb";
 import {
   DeleteMessageSchema,
   EditMessageSchema,
   GetHistorySchema,
+  type Message,
   SendMessageSchema,
   SyncSchema,
-  type Message,
 } from "../gen/v1/messages_pb";
 
-// Test chat state: DMs, their messages, and what we've seen (lastSeq).
-//
-// Where messages come from:
-//   - get_history: opening a chat (and older pages)
-//   - send ack:    my own message, with its server id + seq
-//   - push:        someone else's message, live
-//   - sync:        what we missed while the socket was down
-// They all go through `addMessages`, which dedupes by id and bumps lastSeq.
-// Edits and deletes take a seq too (so sync can replay them): `noteSeq`.
-
-type Key = string; // conversation id as a string (bigint can't be an object key)
+type Key = string;
 
 export interface ChatMessage {
-  id: bigint; // 0 while pending
-  nonce?: string; // my sends: matches the ack
+  id: bigint;
+  nonce?: string;
   seq: bigint;
   authorId: bigint;
   text: string;
-  editedAt?: bigint; // unix ms, set once edited
+  editedAt?: bigint;
   pending?: boolean;
   failed?: boolean;
 }
 
 interface ChatState {
   conversations: Conversation[];
-  messages: Record<Key, ChatMessage[]>; // oldest first
-  lastSeq: Record<Key, bigint>; // highest seq we have, per conversation
+  messages: Record<Key, ChatMessage[]>;
+  lastSeq: Record<Key, bigint>;
   selected: bigint | null;
   error: string | null;
 
-  /** Socket (re)connected: listen for pushes, refresh the list, catch up. */
   attach: (ws: WsClient, myId: bigint) => Promise<void>;
   createGroup: (ws: WsClient, name: string, usernames: string[]) => Promise<void>;
   addMember: (ws: WsClient, username: string) => Promise<void>;
@@ -59,7 +50,6 @@ interface ChatState {
   openDm: (ws: WsClient, username: string) => Promise<void>;
   select: (ws: WsClient, conversationId: bigint) => Promise<void>;
   send: (ws: WsClient, myId: bigint, text: string) => Promise<void>;
-  /** Edit / delete my own message in the open chat. True if it worked. */
   edit: (ws: WsClient, messageId: bigint, text: string) => Promise<boolean>;
   remove: (ws: WsClient, messageId: bigint) => Promise<boolean>;
 }
@@ -75,76 +65,88 @@ const toChat = (m: Message): ChatMessage => ({
   editedAt: m.editedAt || undefined,
 });
 
+export const isGroup = (c: Conversation) => c.kind === ConversationKind.GROUP;
+
 export const useChat = create<ChatState>()((set, get) => {
-  // Merge into a conversation: replace by id (or by nonce for my pending
-  // sends), sort by seq, and remember the highest seq.
   function addMessages(conversationId: bigint, incoming: ChatMessage[]) {
     const k = key(conversationId);
     let list = get().messages[k] ?? [];
     for (const m of incoming) {
-      // My own push can arrive before my ack, so a message can match both a
-      // pending bubble (by nonce) and a pushed copy (by id). Fold all into one.
-      const same = (x: ChatMessage) => (m.id !== 0n && x.id === m.id) || (!!m.nonce && x.nonce === m.nonce);
-      const merged = Object.assign({}, ...list.filter(same), m, { pending: m.pending, failed: m.failed });
+      const same = (x: ChatMessage) =>
+        (m.id !== 0n && x.id === m.id) || (!!m.nonce && x.nonce === m.nonce);
+      const merged = Object.assign({}, ...list.filter(same), m, {
+        pending: m.pending,
+        failed: m.failed,
+      }) as ChatMessage;
       list = [...list.filter((x) => !same(x)), merged];
     }
-    // Pending ones (seq 0) stay at the bottom.
     list.sort((a, b) => (a.pending ? 1 : 0) - (b.pending ? 1 : 0) || Number(a.seq - b.seq));
-    const seen = incoming.filter((m) => !m.pending).reduce((max, m) => (m.seq > max ? m.seq : max), get().lastSeq[k] ?? 0n);
+    const seen = incoming
+      .filter((m) => !m.pending)
+      .reduce((max, m) => (m.seq > max ? m.seq : max), get().lastSeq[k] ?? 0n);
     set((s) => ({ messages: { ...s.messages, [k]: list }, lastSeq: { ...s.lastSeq, [k]: seen } }));
   }
 
   function removeMessages(conversationId: bigint, ids: bigint[]) {
     const k = key(conversationId);
-    set((s) => ({ messages: { ...s.messages, [k]: (s.messages[k] ?? []).filter((m) => !ids.includes(m.id)) } }));
+    set((s) => ({
+      messages: { ...s.messages, [k]: (s.messages[k] ?? []).filter((m) => !ids.includes(m.id)) },
+    }));
   }
 
-  // An edit/delete took `seq`. Missed one in between? Sync. Then remember it.
   function noteSeq(ws: WsClient, conversationId: bigint, seq: bigint) {
     const k = key(conversationId);
     const last = get().lastSeq[k];
-    if (last === undefined) return; // chat never opened: history will load it fresh
+    if (last === undefined) return;
     if (seq > last + 1n) void sync(ws, conversationId);
     else if (seq > last) set((s) => ({ lastSeq: { ...s.lastSeq, [k]: seq } }));
   }
 
-  // "I have up to lastSeq, what did I miss?" Repeats while the server says
-  // there's more; if too much was missed, start over from the newest.
   async function sync(ws: WsClient, conversationId: bigint) {
     const after = get().lastSeq[key(conversationId)] ?? 0n;
-    const reply = await ws.request({ case: "sync", value: createProto(SyncSchema, { conversationId, afterSeq: after }) });
+    const reply = await ws.request({
+      case: "sync",
+      value: createProto(SyncSchema, { conversationId, afterSeq: after }),
+    });
     if (reply.case !== "syncResult") return;
     if (!reply.value.complete) {
-      // Too far behind: drop the old copy, keep the newest page.
       set((s) => ({ messages: { ...s.messages, [key(conversationId)]: [] } }));
     }
     const r = reply.value;
     addMessages(conversationId, [...r.messages, ...r.edited].map(toChat));
     removeMessages(conversationId, r.deletedIds);
     const k = key(conversationId);
-    set((s) => ({ lastSeq: { ...s.lastSeq, [k]: r.lastSeq > (s.lastSeq[k] ?? 0n) ? r.lastSeq : s.lastSeq[k] } }));
+    set((s) => ({
+      lastSeq: {
+        ...s.lastSeq,
+        [k]: r.lastSeq > (s.lastSeq[k] ?? 0n) ? r.lastSeq : (s.lastSeq[k] ?? 0n),
+      },
+    }));
   }
 
   async function loadConversations(ws: WsClient) {
-    const reply = await ws.request({ case: "listConversations", value: createProto(ListConversationsSchema) });
+    const reply = await ws.request({
+      case: "listConversations",
+      value: createProto(ListConversationsSchema),
+    });
     if (reply.case === "conversations") set({ conversations: reply.value.conversations });
   }
 
-  // Add or replace a conversation in the list (newest changes on top).
-  // If I'm no longer a member (I left, maybe on another device), drop it.
   function upsertConversation(c: Conversation, myId: bigint) {
     const stillMember = c.members.some((m) => m.id === myId);
     set((s) => ({
-      conversations: stillMember ? [c, ...s.conversations.filter((x) => x.id !== c.id)] : s.conversations.filter((x) => x.id !== c.id),
+      conversations: stillMember
+        ? [c, ...s.conversations.filter((x) => x.id !== c.id)]
+        : s.conversations.filter((x) => x.id !== c.id),
       selected: !stillMember && s.selected === c.id ? null : s.selected,
     }));
   }
 
-  // Run a group request; show its error (e.g. group_full) instead of throwing.
   async function groupRequest(ws: WsClient, payload: Envelope["payload"]) {
     try {
       const reply = await ws.request(payload);
-      if (reply.case === "conversation" && reply.value.conversation) upsertConversation(reply.value.conversation, myId);
+      if (reply.case === "conversation" && reply.value.conversation)
+        upsertConversation(reply.value.conversation, myId);
       set({ error: null });
       return reply;
     } catch (e) {
@@ -155,29 +157,29 @@ export const useChat = create<ChatState>()((set, get) => {
   let myId = 0n;
 
   function onPush(payload: Envelope["payload"], ws: WsClient) {
-    // A group changed (created, someone joined/left, renamed).
     if (payload.case === "conversationUpdated" && payload.value.conversation) {
-      return upsertConversation(payload.value.conversation, myId);
+      upsertConversation(payload.value.conversation, myId);
+      return;
     }
     if (payload.case === "messageUpdated" && payload.value.message) {
       const m = payload.value.message;
-      // Only if we have it (loaded or pending sync); never add an old message mid-list.
-      if (get().messages[key(m.conversationId)]?.some((x) => x.id === m.id)) addMessages(m.conversationId, [toChat(m)]);
-      return noteSeq(ws, m.conversationId, payload.value.seq);
+      if (get().messages[key(m.conversationId)]?.some((x) => x.id === m.id))
+        addMessages(m.conversationId, [toChat(m)]);
+      noteSeq(ws, m.conversationId, payload.value.seq);
+      return;
     }
     if (payload.case === "messageDeleted") {
       const { conversationId, messageId, seq } = payload.value;
       removeMessages(conversationId, [messageId]);
-      return noteSeq(ws, conversationId, seq);
+      noteSeq(ws, conversationId, seq);
+      return;
     }
     if (payload.case !== "messageCreated" || !payload.value.message) return;
     const m = payload.value.message;
     const k = key(m.conversationId);
-    // A gap (e.g. got 16 but we're at 14)? Ask for what's in between.
     const last = get().lastSeq[k];
     if (last !== undefined && m.seq > last + 1n) void sync(ws, m.conversationId);
     addMessages(m.conversationId, [toChat(m)]);
-    // A DM we don't know yet (someone just messaged us first): refresh the list.
     if (!get().conversations.some((c) => c.id === m.conversationId)) void loadConversations(ws);
   }
 
@@ -193,7 +195,6 @@ export const useChat = create<ChatState>()((set, get) => {
       ws.onPush = (p) => onPush(p, ws);
       try {
         await loadConversations(ws);
-        // Catch up every chat we already have messages for.
         for (const k of Object.keys(get().lastSeq)) await sync(ws, BigInt(k));
       } catch (e) {
         set({ error: (e as Error).message });
@@ -202,7 +203,10 @@ export const useChat = create<ChatState>()((set, get) => {
 
     openDm: async (ws, username) => {
       try {
-        const reply = await ws.request({ case: "openDm", value: createProto(OpenDmSchema, { username }) });
+        const reply = await ws.request({
+          case: "openDm",
+          value: createProto(OpenDmSchema, { username }),
+        });
         if (reply.case !== "conversation" || !reply.value.conversation) return;
         await loadConversations(ws);
         await get().select(ws, reply.value.conversation.id);
@@ -213,55 +217,82 @@ export const useChat = create<ChatState>()((set, get) => {
     },
 
     createGroup: async (ws, name, usernames) => {
-      const reply = await groupRequest(ws, { case: "createGroup", value: createProto(CreateGroupSchema, { name, usernames }) });
-      if (reply?.case === "conversation" && reply.value.conversation) await get().select(ws, reply.value.conversation.id);
+      const reply = await groupRequest(ws, {
+        case: "createGroup",
+        value: createProto(CreateGroupSchema, { name, usernames }),
+      });
+      if (reply?.case === "conversation" && reply.value.conversation)
+        await get().select(ws, reply.value.conversation.id);
     },
 
     addMember: async (ws, username) => {
       const conversationId = get().selected;
-      if (conversationId) await groupRequest(ws, { case: "addMember", value: createProto(AddMemberSchema, { conversationId, username }) });
+      if (conversationId)
+        await groupRequest(ws, {
+          case: "addMember",
+          value: createProto(AddMemberSchema, { conversationId, username }),
+        });
     },
 
     renameGroup: async (ws, name) => {
       const conversationId = get().selected;
-      if (conversationId) await groupRequest(ws, { case: "renameGroup", value: createProto(RenameGroupSchema, { conversationId, name }) });
+      if (conversationId)
+        await groupRequest(ws, {
+          case: "renameGroup",
+          value: createProto(RenameGroupSchema, { conversationId, name }),
+        });
     },
 
     leaveGroup: async (ws) => {
       const conversationId = get().selected;
       if (!conversationId) return;
-      const reply = await groupRequest(ws, { case: "leaveGroup", value: createProto(LeaveGroupSchema, { conversationId }) });
-      if (reply) set((s) => ({ conversations: s.conversations.filter((c) => c.id !== conversationId), selected: null }));
+      const reply = await groupRequest(ws, {
+        case: "leaveGroup",
+        value: createProto(LeaveGroupSchema, { conversationId }),
+      });
+      if (reply)
+        set((s) => ({
+          conversations: s.conversations.filter((c) => c.id !== conversationId),
+          selected: null,
+        }));
     },
 
     select: async (ws, conversationId) => {
       set({ selected: conversationId });
-      // First open: load the newest page. After that, sync keeps it fresh.
       if (get().lastSeq[key(conversationId)] !== undefined) return sync(ws, conversationId);
       const reply = await ws.request({
         case: "getHistory",
         value: createProto(GetHistorySchema, { conversationId, limit: 50 }),
       });
       if (reply.case === "history") addMessages(conversationId, reply.value.messages.map(toChat));
-      set((s) => ({ lastSeq: { ...s.lastSeq, [key(conversationId)]: s.lastSeq[key(conversationId)] ?? 0n } }));
+      set((s) => ({
+        lastSeq: { ...s.lastSeq, [key(conversationId)]: s.lastSeq[key(conversationId)] ?? 0n },
+      }));
     },
 
     send: async (ws, myId, text) => {
       const conversationId = get().selected;
       if (!conversationId || !text.trim()) return;
-      // The nonce makes a retry safe and lets us swap the pending bubble for the real one.
       const nonce = crypto.randomUUID();
-      addMessages(conversationId, [{ id: 0n, nonce, seq: 0n, authorId: myId, text, pending: true }]);
+      addMessages(conversationId, [
+        { id: 0n, nonce, seq: 0n, authorId: myId, text, pending: true },
+      ]);
       try {
         const reply = await ws.request({
           case: "sendMessage",
-          value: createProto(SendMessageSchema, { conversationId, content: enc.encode(text), nonce }),
+          value: createProto(SendMessageSchema, {
+            conversationId,
+            content: enc.encode(text),
+            nonce,
+          }),
         });
         if (reply.case === "messageAck" && reply.value.message) {
           addMessages(conversationId, [{ ...toChat(reply.value.message), nonce, pending: false }]);
         }
       } catch (e) {
-        addMessages(conversationId, [{ id: 0n, nonce, seq: 0n, authorId: myId, text, pending: true, failed: true }]);
+        addMessages(conversationId, [
+          { id: 0n, nonce, seq: 0n, authorId: myId, text, pending: true, failed: true },
+        ]);
         set({ error: (e as Error).message });
       }
     },
@@ -272,7 +303,11 @@ export const useChat = create<ChatState>()((set, get) => {
       try {
         const reply = await ws.request({
           case: "editMessage",
-          value: createProto(EditMessageSchema, { conversationId, messageId, content: enc.encode(text) }),
+          value: createProto(EditMessageSchema, {
+            conversationId,
+            messageId,
+            content: enc.encode(text),
+          }),
         });
         if (reply.case === "editMessageAck" && reply.value.message) {
           addMessages(conversationId, [toChat(reply.value.message)]);
@@ -295,7 +330,8 @@ export const useChat = create<ChatState>()((set, get) => {
           value: createProto(DeleteMessageSchema, { conversationId, messageId }),
         });
         removeMessages(conversationId, [messageId]);
-        if (reply.case === "deleteMessageAck" && reply.value.seq) noteSeq(ws, conversationId, reply.value.seq);
+        if (reply.case === "deleteMessageAck" && reply.value.seq)
+          noteSeq(ws, conversationId, reply.value.seq);
         set({ error: null });
         return true;
       } catch (e) {

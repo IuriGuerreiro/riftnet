@@ -2,8 +2,6 @@ import { platform } from "../platform";
 import { useAuth } from "../stores/auth";
 import type { ApiErrorBody, Session } from "./types";
 
-// Thrown for any non-2xx response. `code` is the api's error code
-// (e.g. "username_taken"), handy for showing the right message.
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -17,10 +15,9 @@ export class ApiError extends Error {
 interface Options {
   method?: "GET" | "POST" | "PUT" | "DELETE";
   body?: unknown;
-  auth?: boolean; // send the access token (default true)
+  auth?: boolean;
 }
 
-// Small fetch wrapper: JSON in/out, bearer token, one automatic refresh on 401.
 export async function http<T>(path: string, opts: Options = {}): Promise<T> {
   const { auth = true } = opts;
   if (auth) await refreshIfExpiring();
@@ -47,7 +44,7 @@ function send(path: string, opts: Options, auth: boolean): Promise<Response> {
 
 async function parse<T>(res: Response): Promise<T> {
   if (res.status === 204) return undefined as T;
-  const data = await res.json().catch(() => null);
+  const data: unknown = await res.json().catch(() => null);
   if (!res.ok) {
     const err = data as ApiErrorBody | null;
     throw new ApiError(res.status, err?.code ?? "unknown", err?.message ?? res.statusText);
@@ -55,13 +52,11 @@ async function parse<T>(res: Response): Promise<T> {
   return data as T;
 }
 
-// A valid access token (refreshed first if it's about to expire), for the WebSocket.
 export async function freshAccessToken(): Promise<string | null> {
   await refreshIfExpiring();
   return useAuth.getState().accessToken;
 }
 
-// Refresh a bit before the access token expires, so requests don't fail.
 async function refreshIfExpiring() {
   const { accessExpiresAt, refreshToken } = useAuth.getState();
   if (refreshToken && accessExpiresAt && accessExpiresAt - Date.now() / 1000 < 30) {
@@ -69,9 +64,6 @@ async function refreshIfExpiring() {
   }
 }
 
-// Only one refresh at a time: within this tab (`inFlight`) and across tabs
-// (Web Locks). Tabs share tokens through localStorage, so if two tabs refreshed
-// with the same token, the server would see it used twice.
 let inFlight: Promise<boolean> | null = null;
 
 function refresh(): Promise<boolean> {
@@ -83,32 +75,30 @@ function refresh(): Promise<boolean> {
 }
 
 async function doRefresh(startedWith: string | null): Promise<boolean> {
-  // Another tab may have refreshed while we waited for the lock: reload from storage.
   await useAuth.persist.rehydrate();
   const refreshToken = useAuth.getState().refreshToken;
   if (!refreshToken) return false;
-  if (refreshToken !== startedWith) return true; // someone else already did it
+  if (refreshToken !== startedWith) return true;
 
   try {
-    const res = await send("/auth/refresh", { method: "POST", body: { refresh_token: refreshToken } }, false);
+    const res = await send(
+      "/auth/refresh",
+      { method: "POST", body: { refresh_token: refreshToken } },
+      false,
+    );
     useAuth.getState().setSession(await parse<Session>(res));
     return true;
   } catch (err) {
     if (err instanceof ApiError && err.code === "refresh_superseded") {
-      // Lost a race with another request: the newer token is (or soon will be) in storage.
       await useAuth.persist.rehydrate();
       return useAuth.getState().refreshToken !== refreshToken;
     }
-    // Only a real rejection (401: expired, revoked, reused) means "log in again".
-    // Offline, 429 or a 5xx is temporary: keep the tokens and let the caller retry.
     if (err instanceof ApiError && err.status === 401) useAuth.getState().clear();
     return false;
   }
 }
 
 function withRefreshLock<T>(fn: () => Promise<T>): Promise<T> {
-  // Web Locks: supported by all current browsers and Tauri webviews. Fall back
-  // to the in-tab guard only if missing.
   if (!("locks" in navigator)) return fn();
   return navigator.locks.request("auth-refresh", fn);
 }

@@ -1,48 +1,43 @@
-import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { useEffect, useRef, useState } from "react";
+
 import { useLogout } from "../api/auth";
-import { ConversationKind, type Conversation } from "../gen/v1/conversations_pb";
 import type { Friend } from "../api/types";
-import { CallBar, IncomingCall } from "../call/CallBar";
-import { useCalls } from "../stores/calls";
-import { useChat, type ChatMessage } from "../stores/chat";
-import { useFriends } from "../stores/friends";
-import { typingText, useTyping } from "../stores/typing";
-import { useConnection } from "../stores/connection";
-import { usePresence } from "../stores/presence";
+import { CallBar, IncomingCall, RemoteScreen } from "../call/CallBar";
 import { StatusDot } from "../components/StatusDot";
+import type { Conversation } from "../gen/v1/conversations_pb";
+import { useCalls } from "../stores/calls";
+import { type ChatMessage, isGroup, useChat } from "../stores/chat";
+import { useConnection } from "../stores/connection";
+import { useFriends } from "../stores/friends";
+import { usePresence } from "../stores/presence";
+import { typingText, useTyping } from "../stores/typing";
 
 const dot = { online: "bg-green-500", connecting: "bg-yellow-500", offline: "bg-red-500" };
 
-// Test chat screen: DM list on the left, the open chat on the right.
-// Plain on purpose; José's designs replace it.
 export function HomePage() {
   const logout = useLogout();
   const navigate = useNavigate();
   const { status, error: connError, ws, user: me, connect, disconnect } = useConnection();
   const chat = useChat();
 
-  // Keep the socket open while this page is shown.
   useEffect(() => {
     void connect();
     return () => {
       disconnect();
-      useTyping.getState().reset(); // logout / leaving the page
+      useTyping.getState().reset();
     };
   }, [connect, disconnect]);
 
-  // Every (re)connect: listen for pushes, reload the list, sync what we missed.
   useEffect(() => {
     if (!ws) return;
     if (me) void useChat.getState().attach(ws, me.id);
-    useCalls.getState().attach(ws, me?.id); // after chat: it chains onto chat's push handler
+    useCalls.getState().attach(ws, me?.id);
     void useFriends.getState().attach(ws);
     if (me) useTyping.getState().attach(ws, me.id);
     usePresence.getState().attach(ws);
   }, [ws, me]);
 
-  // Status of everyone shown: friends and DM/group members. Reloads when the
-  // set changes (new friend, new DM) or after a reconnect.
   const friends = useFriends((s) => s.list.friends);
   const watchedIds = [
     ...friends.map((f) => f.user.id),
@@ -57,19 +52,19 @@ export function HomePage() {
 
   const selected = chat.conversations.find((c) => c.id === chat.selected);
   const other = (c: Conversation) => c.members.find((m) => m.id !== me?.id) ?? c.members[0];
-  const isGroup = (c: Conversation) => c.kind === ConversationKind.GROUP;
-  // Groups show their name, DMs the other person.
   const title = (c: Conversation) => (isGroup(c) ? `# ${c.name}` : `@${other(c)?.username}`);
 
   return (
     <div className="flex h-full w-full max-w-5xl overflow-hidden rounded-xl bg-zinc-900 shadow-lg">
+      <RemoteScreen />
       <IncomingCall
         ws={ws}
         callerName={(id) =>
-          chat.conversations.flatMap((c) => c.members).find((m) => m.id === id)?.username ?? "someone"
+          chat.conversations.flatMap((c) => c.members).find((m) => m.id === id)?.username ??
+          "someone"
         }
       />
-      {/* --- sidebar --- */}
+      {}
       <aside className="flex w-64 shrink-0 flex-col border-r border-zinc-800">
         <header className="space-y-1 border-b border-zinc-800 p-4">
           <p className="font-bold">
@@ -83,7 +78,10 @@ export function HomePage() {
         </header>
 
         <NewDm disabled={!ws} onOpen={(username) => ws && chat.openDm(ws, username)} />
-        <NewGroup disabled={!ws} onCreate={(name, usernames) => ws && chat.createGroup(ws, name, usernames)} />
+        <NewGroup
+          disabled={!ws}
+          onCreate={(name, usernames) => ws && chat.createGroup(ws, name, usernames)}
+        />
         <FriendsPanel onDm={(username) => ws && chat.openDm(ws, username)} />
 
         <nav className="flex-1 overflow-y-auto">
@@ -97,21 +95,23 @@ export function HomePage() {
               <span className="truncate">{title(c)}</span>
             </button>
           ))}
-          {chat.conversations.length === 0 && <p className="p-4 text-xs text-zinc-500">No conversations yet.</p>}
+          {chat.conversations.length === 0 && (
+            <p className="p-4 text-xs text-zinc-500">No conversations yet.</p>
+          )}
         </nav>
 
         <button
           className="border-t border-zinc-800 p-3 text-sm text-zinc-400 hover:text-zinc-100"
           onClick={() => {
             disconnect();
-            logout.mutate(undefined, { onSettled: () => navigate({ to: "/login" }) });
+            logout.mutate(undefined, { onSettled: () => void navigate({ to: "/login" }) });
           }}
         >
           Log out
         </button>
       </aside>
 
-      {/* --- chat --- */}
+      {}
       <section className="flex min-w-0 flex-1 flex-col">
         {selected ? (
           <>
@@ -136,10 +136,13 @@ export function HomePage() {
             <Composer
               disabled={!ws}
               onType={() => ws && useTyping.getState().typed(ws, selected.id)}
-              onSend={(text) => ws && me && chat.send(ws, me.id, text)} />
+              onSend={(text) => ws && me && chat.send(ws, me.id, text)}
+            />
           </>
         ) : (
-          <p className="m-auto text-sm text-zinc-500">Pick a conversation, or start a DM or a group.</p>
+          <p className="m-auto text-sm text-zinc-500">
+            Pick a conversation, or start a DM or a group.
+          </p>
         )}
         {chat.error && <p className="px-4 pb-2 text-xs text-red-400">{chat.error}</p>}
       </section>
@@ -147,8 +150,13 @@ export function HomePage() {
   );
 }
 
-// Group name + 2-4 usernames, comma separated (3-5 people with you).
-function NewGroup({ disabled, onCreate }: { disabled: boolean; onCreate: (name: string, usernames: string[]) => void }) {
+function NewGroup({
+  disabled,
+  onCreate,
+}: {
+  disabled: boolean;
+  onCreate: (name: string, usernames: string[]) => void;
+}) {
   const [name, setName] = useState("");
   const [usernames, setUsernames] = useState("");
   return (
@@ -156,17 +164,33 @@ function NewGroup({ disabled, onCreate }: { disabled: boolean; onCreate: (name: 
       className="space-y-2 border-b border-zinc-800 p-3"
       onSubmit={(e) => {
         e.preventDefault();
-        const list = usernames.split(",").map((u) => u.trim()).filter(Boolean);
+        const list = usernames
+          .split(",")
+          .map((u) => u.trim())
+          .filter(Boolean);
         if (!name.trim() || list.length === 0) return;
         onCreate(name.trim(), list);
         setName("");
         setUsernames("");
       }}
     >
-      <input value={name} onChange={(e) => setName(e.target.value)} placeholder="group name" className={field} />
+      <input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="group name"
+        className={field}
+      />
       <div className="flex gap-2">
-        <input value={usernames} onChange={(e) => setUsernames(e.target.value)} placeholder="ana, bob, carl" className={field} />
-        <button disabled={disabled} className="rounded-md bg-brand px-2 text-sm font-semibold text-zinc-950 disabled:opacity-50">
+        <input
+          value={usernames}
+          onChange={(e) => setUsernames(e.target.value)}
+          placeholder="ana, bob, carl"
+          className={field}
+        />
+        <button
+          disabled={disabled}
+          className="rounded-md bg-brand px-2 text-sm font-semibold text-zinc-950 disabled:opacity-50"
+        >
           Group
         </button>
       </div>
@@ -174,7 +198,6 @@ function NewGroup({ disabled, onCreate }: { disabled: boolean; onCreate: (name: 
   );
 }
 
-// Group chat header: name (click to rename), members, add someone, leave.
 function GroupHeader({
   group,
   onAdd,
@@ -205,7 +228,9 @@ function GroupHeader({
           Leave
         </button>
       </div>
-      <p className="text-xs text-zinc-400">{group.members.map((m) => `@${m.username}`).join(", ")}</p>
+      <p className="text-xs text-zinc-400">
+        {group.members.map((m) => `@${m.username}`).join(", ")}
+      </p>
       {group.members.length < 5 && (
         <form
           className="flex gap-2"
@@ -216,7 +241,12 @@ function GroupHeader({
             setUsername("");
           }}
         >
-          <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="add username" className={field} />
+          <input
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="add username"
+            className={field}
+          />
           <button className="rounded-md bg-zinc-700 px-2 text-sm hover:bg-zinc-600">Add</button>
         </form>
       )}
@@ -224,7 +254,6 @@ function GroupHeader({
   );
 }
 
-// Friends: add by username, answer requests, DM or remove friends.
 function FriendsPanel({ onDm }: { onDm: (username: string) => void }) {
   const { list, error, sendRequest, accept, deleteRequest, removeFriend } = useFriends();
   const [open, setOpen] = useState(true);
@@ -240,7 +269,9 @@ function FriendsPanel({ onDm }: { onDm: (username: string) => void }) {
       >
         <span>
           Friends ({list.friends.length})
-          {pendingCount > 0 && <span className="ml-2 rounded-full bg-brand px-1.5 text-zinc-950">{pendingCount}</span>}
+          {pendingCount > 0 && (
+            <span className="ml-2 rounded-full bg-brand px-1.5 text-zinc-950">{pendingCount}</span>
+          )}
         </span>
         <span>{open ? "−" : "+"}</span>
       </button>
@@ -255,27 +286,51 @@ function FriendsPanel({ onDm }: { onDm: (username: string) => void }) {
               if (await sendRequest(username.trim())) setUsername("");
             }}
           >
-            <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="add friend" className={field} />
+            <input
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="add friend"
+              className={field}
+            />
             <button className="rounded-md bg-zinc-700 px-2 text-sm hover:bg-zinc-600">Add</button>
           </form>
           {error && <p className="text-xs text-red-400">{error}</p>}
 
           {list.incoming.map((f) => (
             <FriendRow key={f.user.id} label={name(f)} hint="wants to be friends">
-              <RowButton onClick={() => accept(f.user.id)} className="text-green-400">Accept</RowButton>
-              <RowButton onClick={() => deleteRequest(f.user.id)} className="text-red-400">Decline</RowButton>
+              <RowButton onClick={() => accept(f.user.id)} className="text-green-400">
+                Accept
+              </RowButton>
+              <RowButton onClick={() => deleteRequest(f.user.id)} className="text-red-400">
+                Decline
+              </RowButton>
             </FriendRow>
           ))}
           {list.outgoing.map((f) => (
             <FriendRow key={f.user.id} label={name(f)} hint="request sent">
-              <RowButton onClick={() => deleteRequest(f.user.id)} className="text-zinc-400">Cancel</RowButton>
+              <RowButton onClick={() => deleteRequest(f.user.id)} className="text-zinc-400">
+                Cancel
+              </RowButton>
             </FriendRow>
           ))}
           {list.friends.map((f) => (
             <FriendRow key={f.user.id} label={name(f)} userId={f.user.id}>
-              <RowButton onClick={() => f.user.username && onDm(f.user.username)} className="text-brand">DM</RowButton>
               <RowButton
-                onClick={() => confirm(`Remove ${name(f)} from friends?`) && removeFriend(f.user.id)}
+                onClick={() => f.user.username && onDm(f.user.username)}
+                className="text-brand"
+              >
+                DM
+              </RowButton>
+              <RowButton
+                onClick={() => f.user.username && onDm(f.user.username)}
+                className="text-brand"
+              >
+                DM
+              </RowButton>
+              <RowButton
+                onClick={() =>
+                  confirm(`Remove ${name(f)} from friends?`) && removeFriend(f.user.id)
+                }
                 className="text-red-400"
               >
                 Remove
@@ -299,7 +354,6 @@ function FriendRow({
 }: {
   label: string;
   hint?: string;
-  /** Friends only: shows their status dot. */
   userId?: string;
   children: React.ReactNode;
 }) {
@@ -315,7 +369,15 @@ function FriendRow({
   );
 }
 
-function RowButton({ onClick, className, children }: { onClick: () => void; className: string; children: React.ReactNode }) {
+function RowButton({
+  onClick,
+  className,
+  children,
+}: {
+  onClick: () => void;
+  className: string;
+  children: React.ReactNode;
+}) {
   return (
     <button onClick={onClick} className={`text-xs hover:underline ${className}`}>
       {children}
@@ -323,7 +385,8 @@ function RowButton({ onClick, className, children }: { onClick: () => void; clas
   );
 }
 
-const field = "min-w-0 flex-1 rounded-md bg-zinc-800 px-2 py-1 text-sm outline-none ring-brand focus:ring-2";
+const field =
+  "min-w-0 flex-1 rounded-md bg-zinc-800 px-2 py-1 text-sm outline-none ring-brand focus:ring-2";
 
 function NewDm({ disabled, onOpen }: { disabled: boolean; onOpen: (username: string) => void }) {
   const [username, setUsername] = useState("");
@@ -343,7 +406,10 @@ function NewDm({ disabled, onOpen }: { disabled: boolean; onOpen: (username: str
         placeholder="username"
         className="min-w-0 flex-1 rounded-md bg-zinc-800 px-2 py-1 text-sm outline-none ring-brand focus:ring-2"
       />
-      <button disabled={disabled} className="rounded-md bg-brand px-2 text-sm font-semibold text-zinc-950 disabled:opacity-50">
+      <button
+        disabled={disabled}
+        className="rounded-md bg-brand px-2 text-sm font-semibold text-zinc-950 disabled:opacity-50"
+      >
         DM
       </button>
     </form>
@@ -367,7 +433,6 @@ function Messages({ conversationId, myId }: { conversationId: bigint; myId?: big
   );
 }
 
-// One bubble. My own sent messages get Edit / Delete on hover.
 function MessageRow({ m, mine }: { m: ChatMessage; mine: boolean }) {
   const ws = useConnection((s) => s.ws);
   const { edit, remove } = useChat();
@@ -378,7 +443,10 @@ function MessageRow({ m, mine }: { m: ChatMessage; mine: boolean }) {
   async function save() {
     if (!ws) return;
     const text = draft.trim();
-    if (!text || text === m.text) return setEditing(false);
+    if (!text || text === m.text) {
+      setEditing(false);
+      return;
+    }
     if (await edit(ws, m.id, text)) setEditing(false);
   }
 
@@ -421,7 +489,9 @@ function MessageRow({ m, mine }: { m: ChatMessage; mine: boolean }) {
             Edit
           </button>
           <button
-            onClick={() => ws && window.confirm("Delete this message? This can't be undone.") && void remove(ws, m.id)}
+            onClick={() =>
+              window.confirm("Delete this message? This can't be undone.") && void remove(ws, m.id)
+            }
             className="rounded px-1.5 py-0.5 hover:bg-zinc-800 hover:text-red-400"
           >
             Delete
@@ -435,21 +505,19 @@ function MessageRow({ m, mine }: { m: ChatMessage; mine: boolean }) {
         title={m.pending ? "sending…" : `seq ${m.seq}`}
       >
         {m.text}
-        {m.editedAt && (
+        {m.editedAt ? (
           <span
             className={`ml-1.5 text-[10px] ${mine ? "text-zinc-800" : "text-zinc-500"}`}
             title={new Date(Number(m.editedAt)).toLocaleString()}
           >
             (edited)
           </span>
-        )}
+        ) : null}
       </p>
     </div>
   );
 }
 
-// "ana is typing…" under the message list. The line keeps its height so the
-// list doesn't jump when it appears.
 function TypingIndicator({ conversation }: { conversation: Conversation }) {
   const typing = useTyping((s) => s.typing[conversation.id.toString()]);
   const names = Object.keys(typing ?? {}).map(
@@ -488,7 +556,10 @@ function Composer({
         maxLength={4000}
         className="min-w-0 flex-1 rounded-lg bg-zinc-800 px-3 py-2 text-sm outline-none ring-brand focus:ring-2"
       />
-      <button disabled={disabled} className="rounded-lg bg-brand px-4 font-semibold text-zinc-950 disabled:opacity-50">
+      <button
+        disabled={disabled}
+        className="rounded-lg bg-brand px-4 font-semibold text-zinc-950 disabled:opacity-50"
+      >
         Send
       </button>
     </form>

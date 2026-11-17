@@ -1,6 +1,3 @@
-//! The WebSocket "controller": one function per request type.
-//! Unpack the payload → call a service → wrap the result in a reply payload.
-
 use protocol::v1::{self, envelope::Payload};
 
 use super::connection::Session;
@@ -9,7 +6,6 @@ use crate::common::error::ApiError;
 use crate::features::conversations::models::Conversation;
 use crate::features::presence::service::update as presence_update;
 
-/// Routes one request to its handler. This `match` is the WebSocket's router.
 pub async fn dispatch(
     state: &AppState,
     session: &Session,
@@ -50,6 +46,17 @@ pub async fn dispatch(
                 .await,
         ),
         Payload::CallJoin(req) => call_join(state, session, req).await,
+        Payload::CallScreenShare(req) => call_result(
+            state
+                .calls
+                .screen_share(
+                    session.user_id,
+                    session.connection_id,
+                    req.call_id as i64,
+                    req.sharing,
+                )
+                .await,
+        ),
         Payload::CallLeave(req) => call_result(
             state
                 .calls
@@ -202,9 +209,6 @@ async fn delete_message(
     }))
 }
 
-// --- group DMs ---
-// Create, add and rename all answer with the updated conversation.
-
 async fn create_group(
     state: &AppState,
     session: &Session,
@@ -238,7 +242,6 @@ async fn leave_group(
         .conversations
         .leave_group(session.user_id, req.conversation_id as i64)
         .await?;
-    // Nothing to send back: you're not in it anymore.
     Ok(Payload::Conversation(v1::ConversationResult {
         conversation: None,
     }))

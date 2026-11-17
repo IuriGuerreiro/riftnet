@@ -1,31 +1,26 @@
 import { create as createProto } from "@bufbuild/protobuf";
 import { create } from "zustand";
+
 import type { WsClient } from "../api/ws";
 import {
+  type Call,
   CallAcceptSchema,
   CallDeclineSchema,
   CallJoinSchema,
   CallLeaveSchema,
+  CallScreenShareSchema,
   CallStartSchema,
   CallState,
-  type Call,
 } from "../gen/v1/calls_pb";
 import type { Envelope } from "../gen/v1/envelope_pb";
 
-// Voice calls (test UI). Signaling goes over our WebSocket; audio goes
-// straight to the media server (SFU) over WebRTC. See docs/architecture/calls.md.
-//
-//   call(conv)  → call_start, then join (we hear ringing on their side)
-//   incoming    → push call_incoming → Accept (call_accept + join) / Decline
-//   leave       → call_leave; last one out ends it (push call_ended)
-
 interface CallsState {
-  /** The call this device is in (or calling out on). */
   current: Call | null;
-  /** Someone is calling us. */
   incoming: Call | null;
-  joined: boolean; // audio connected to the SFU
+  joined: boolean;
   muted: boolean;
+  sharing: boolean;
+  remoteScreen: MediaStream | null;
   error: string | null;
 
   attach: (ws: WsClient, myId: bigint | undefined) => void;
@@ -34,11 +29,16 @@ interface CallsState {
   decline: (ws: WsClient) => Promise<void>;
   leave: (ws: WsClient) => Promise<void>;
   toggleMute: () => void;
+  toggleShare: (ws: WsClient) => Promise<void>;
 }
 
-// WebRTC objects live outside the store (not plain data).
 let pc: RTCPeerConnection | null = null;
 let mic: MediaStream | null = null;
+let screen: MediaStream | null = null;
+let videoSender: RTCRtpSender | null = null;
+let picking = false;
+let screenIn: MediaStream | null = null;
+let me: bigint | undefined;
 const speaker = new Audio();
 speaker.autoplay = true;
 
@@ -48,29 +48,38 @@ export function peerConnection() {
 
 function hangUpMedia() {
   pc?.close();
-  mic?.getTracks().forEach((t) => t.stop());
-  pc = mic = null;
+  for (const t of [...(mic?.getTracks() ?? []), ...(screen?.getTracks() ?? [])]) t.stop();
+  pc = mic = screen = screenIn = null;
+  videoSender = null;
   speaker.srcObject = null;
 }
 
 export const useCalls = create<CallsState>((set, get) => {
-  // Mic → WebRTC offer → call_join → SFU's answer.
   async function join(ws: WsClient, call: Call) {
     mic = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
     });
     pc = new RTCPeerConnection();
-    // One two-way audio track: our mic goes up, the other person comes back on it.
-    pc.addTransceiver(mic.getAudioTracks()[0], { direction: "sendrecv", streams: [mic] });
+    const micTrack = mic.getAudioTracks()[0];
+    if (!micTrack) throw new Error("No microphone track");
+    pc.addTransceiver(micTrack, { direction: "sendrecv", streams: [mic] });
+    // WARN: the idle video slot avoids renegotiation, which only works for 1:1 calls.
+    videoSender = pc.addTransceiver("video", { direction: "sendrecv" }).sender;
     pc.ontrack = (e) => {
-      speaker.srcObject = new MediaStream([e.track]);
+      const track = e.track;
+      if (track.kind === "audio") {
+        speaker.srcObject = new MediaStream([track]);
+        return;
+      }
+      screenIn = new MediaStream([track]);
+      showScreen(get().current);
     };
     pc.onconnectionstatechange = () => {
       if (pc?.connectionState === "connected") set({ joined: true });
-      if (pc?.connectionState === "failed") set({ error: "audio connection failed", joined: false });
+      if (pc?.connectionState === "failed")
+        set({ error: "audio connection failed", joined: false });
     };
     const offer = await pc.createOffer();
-    // Opus: DTX on (near-silent when quiet), 64 kbps.
     offer.sdp = offer.sdp?.replace(/(a=fmtp:111 [^\r\n]*)/, "$1;usedtx=1;maxaveragebitrate=64000");
     await pc.setLocalDescription(offer);
 
@@ -81,6 +90,32 @@ export const useCalls = create<CallsState>((set, get) => {
     if (reply.case !== "callJoined") throw new Error(`expected callJoined, got ${reply.case}`);
     await pc.setRemoteDescription({ type: "answer", sdp: reply.value.sdpAnswer });
     set({ current: reply.value.call ?? call });
+    showScreen(get().current);
+  }
+
+  function showScreen(call: Call | null) {
+    const other = call?.sharingUserIds.some((id) => id !== me) ?? false;
+    const remoteScreen = other ? screenIn : null;
+    if (get().remoteScreen !== remoteScreen) set({ remoteScreen });
+  }
+
+  async function announceShare(ws: WsClient, sharing: boolean) {
+    const call = get().current;
+    if (!call) return;
+    await ws
+      .request({
+        case: "callScreenShare",
+        value: createProto(CallScreenShareSchema, { callId: call.id, sharing }),
+      })
+      .catch((e: unknown) => console.warn("callScreenShare", e));
+  }
+
+  async function stopShare(ws: WsClient) {
+    for (const t of screen?.getTracks() ?? []) t.stop();
+    screen = null;
+    set({ sharing: false });
+    await videoSender?.replaceTrack(null);
+    await announceShare(ws, false);
   }
 
   async function run(fn: () => Promise<void>) {
@@ -89,7 +124,13 @@ export const useCalls = create<CallsState>((set, get) => {
       await fn();
     } catch (e) {
       hangUpMedia();
-      set({ current: null, joined: false, error: e instanceof Error ? e.message : String(e) });
+      set({
+        current: null,
+        joined: false,
+        sharing: false,
+        remoteScreen: null,
+        error: e instanceof Error ? e.message : String(e),
+      });
     }
   }
 
@@ -102,18 +143,27 @@ export const useCalls = create<CallsState>((set, get) => {
       case "callUpdated": {
         const call = p.value.call;
         if (!call) break;
-        if (current?.id === call.id) set({ current: call });
-        // Answered on another of my devices → stop ringing here.
-        if (incoming?.id === call.id && myId !== undefined && call.participantIds.includes(myId) && current?.id !== call.id)
+        if (current?.id === call.id) {
+          set({ current: call });
+          showScreen(call);
+        }
+        if (
+          incoming?.id === call.id &&
+          myId !== undefined &&
+          call.participantIds.includes(myId) &&
+          current?.id !== call.id
+        )
           set({ incoming: null });
         break;
       }
       case "callEnded":
         if (current?.id === p.value.callId) {
           hangUpMedia();
-          set({ current: null, joined: false, muted: false });
+          set({ current: null, joined: false, muted: false, sharing: false, remoteScreen: null });
         }
         if (incoming?.id === p.value.callId) set({ incoming: null });
+        break;
+      default:
         break;
     }
   }
@@ -123,26 +173,37 @@ export const useCalls = create<CallsState>((set, get) => {
     incoming: null,
     joined: false,
     muted: false,
+    sharing: false,
+    remoteScreen: null,
     error: null,
 
-    // Chain onto the chat store's push handler (call after useChat.attach).
     attach: (ws, myId) => {
+      me = myId;
       const chatPush = ws.onPush;
       ws.onPush = (p) => {
         onPush(p, myId);
         chatPush(p);
       };
-      // New socket = the server already dropped us from any call.
       if (get().current) {
         hangUpMedia();
-        set({ current: null, joined: false, error: "disconnected from the call" });
+        set({
+          current: null,
+          joined: false,
+          sharing: false,
+          remoteScreen: null,
+          error: "disconnected from the call",
+        });
       }
     },
 
     call: (ws, conversationId) =>
       run(async () => {
-        const reply = await ws.request({ case: "callStart", value: createProto(CallStartSchema, { conversationId }) });
-        if (reply.case !== "callResult" || !reply.value.call) throw new Error("could not start the call");
+        const reply = await ws.request({
+          case: "callStart",
+          value: createProto(CallStartSchema, { conversationId }),
+        });
+        if (reply.case !== "callResult" || !reply.value.call)
+          throw new Error("could not start the call");
         set({ current: reply.value.call });
         await join(ws, reply.value.call);
       }),
@@ -152,7 +213,10 @@ export const useCalls = create<CallsState>((set, get) => {
         const call = get().incoming;
         if (!call) return;
         set({ incoming: null, current: call });
-        await ws.request({ case: "callAccept", value: createProto(CallAcceptSchema, { callId: call.id }) });
+        await ws.request({
+          case: "callAccept",
+          value: createProto(CallAcceptSchema, { callId: call.id }),
+        });
         await join(ws, call);
       }),
 
@@ -161,21 +225,68 @@ export const useCalls = create<CallsState>((set, get) => {
         const call = get().incoming;
         if (!call) return;
         set({ incoming: null });
-        await ws.request({ case: "callDecline", value: createProto(CallDeclineSchema, { callId: call.id }) });
+        await ws.request({
+          case: "callDecline",
+          value: createProto(CallDeclineSchema, { callId: call.id }),
+        });
       }),
 
     leave: (ws) =>
       run(async () => {
         const call = get().current;
         hangUpMedia();
-        set({ current: null, joined: false, muted: false });
-        if (call) await ws.request({ case: "callLeave", value: createProto(CallLeaveSchema, { callId: call.id }) });
+        set({ current: null, joined: false, muted: false, sharing: false, remoteScreen: null });
+        if (call)
+          await ws.request({
+            case: "callLeave",
+            value: createProto(CallLeaveSchema, { callId: call.id }),
+          });
       }),
 
     toggleMute: () => {
       const muted = !get().muted;
-      mic?.getAudioTracks().forEach((t) => (t.enabled = !muted));
+      for (const t of mic?.getAudioTracks() ?? []) t.enabled = !muted;
       set({ muted });
+    },
+
+    toggleShare: async (ws) => {
+      const sender = videoSender;
+      if (!sender || picking) return;
+      if (get().sharing) {
+        await stopShare(ws);
+        return;
+      }
+      picking = true;
+      let picked: MediaStream;
+      try {
+        picked = await navigator.mediaDevices.getDisplayMedia({
+          video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 60 } },
+          audio: false,
+        });
+      } catch {
+        return;
+      } finally {
+        picking = false;
+      }
+      if (videoSender !== sender) {
+        for (const t of picked.getTracks()) t.stop();
+        return;
+      }
+      screen = picked;
+      const track = picked.getVideoTracks()[0];
+      if (!track) return;
+      track.contentHint = "detail";
+      track.onended = () => void stopShare(ws);
+      await sender.replaceTrack(track);
+      const params = sender.getParameters();
+      const encoding = params.encodings[0] ?? {};
+      encoding.maxBitrate = 8_000_000;
+      encoding.maxFramerate = 60;
+      params.encodings = [encoding, ...params.encodings.slice(1)];
+      params.degradationPreference = "maintain-framerate";
+      await sender.setParameters(params).catch((e: unknown) => console.warn("setParameters", e));
+      set({ sharing: true });
+      await announceShare(ws, true);
     },
   };
 });

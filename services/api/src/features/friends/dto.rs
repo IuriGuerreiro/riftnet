@@ -10,11 +10,9 @@ pub struct SendRequestBody {
     pub username: String,
 }
 
-/// One person: a friend or a pending request.
 #[derive(Debug, Serialize)]
 pub struct FriendDto {
     pub user: UserDto,
-    /// "friend", "incoming" or "outgoing".
     pub state: &'static str,
     pub since: DateTime<Utc>,
 }
@@ -34,7 +32,6 @@ impl From<FriendEntry> for FriendDto {
     }
 }
 
-/// `GET /friends`: split into the three lists the UI shows.
 #[derive(Debug, Serialize, Default)]
 pub struct FriendsResponse {
     pub friends: Vec<FriendDto>,

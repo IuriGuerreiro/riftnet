@@ -1,6 +1,3 @@
-//! Friends: requests, accept/decline/cancel, remove. HTTP routes; changes
-//! are pushed live to both people's sockets as `FriendUpdated`.
-
 mod controller;
 pub mod dto;
 pub mod models;

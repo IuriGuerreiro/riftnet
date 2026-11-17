@@ -1,5 +1,3 @@
-//! Our call model → the protobuf `Call` sent over the WebSocket.
-
 use protocol::v1;
 
 use super::models::Call;
@@ -13,6 +11,11 @@ impl From<&Call> for v1::Call {
             state: c.state as i32,
             participant_ids: c
                 .participant_user_ids()
+                .into_iter()
+                .map(|id| id as u64)
+                .collect(),
+            sharing_user_ids: c
+                .sharing_user_ids()
                 .into_iter()
                 .map(|id| id as u64)
                 .collect(),

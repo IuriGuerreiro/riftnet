@@ -9,8 +9,8 @@ message Conversation {
   uint64 id = 1;
   ConversationKind kind = 2;
   repeated User members = 3;
-  uint64 last_seq = 4;      // seq of the newest message (0 = empty)
-  string name = 5;          // group name ("" for DMs)
+  uint64 last_seq = 4; // seq of the newest message (0 = empty)
+  string name = 5; // group name ("" for DMs)
 }
 
 enum ConversationKind {

@@ -1,5 +1,4 @@
-// Shapes returned by the api's HTTP endpoints.
-// IDs are strings: Snowflakes don't fit in a JS number.
+// INVARIANT: IDs are strings because Snowflakes don't fit in a JS number.
 export interface User {
   id: string;
   username: string | null;
@@ -23,7 +22,7 @@ export type FriendState = "friend" | "incoming" | "outgoing";
 export interface Friend {
   user: User;
   state: FriendState;
-  since: string; // ISO date
+  since: string;
 }
 
 export interface FriendsList {

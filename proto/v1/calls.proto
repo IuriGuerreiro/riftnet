@@ -2,15 +2,10 @@ syntax = "proto3";
 
 package app.v1;
 
-// Voice calls. See docs/architecture/calls.md.
-//
-// Flow: call_start → (others get call_incoming) → call_accept → everyone
-// sends call_join with their WebRTC offer → media flows to the SFU.
-
 enum CallState {
   CALL_STATE_UNSPECIFIED = 0;
-  CALL_STATE_RINGING = 1; // started, nobody accepted yet
-  CALL_STATE_ACTIVE = 2;  // someone accepted
+  CALL_STATE_RINGING = 1;
+  CALL_STATE_ACTIVE = 2;
 }
 
 message Call {
@@ -18,42 +13,51 @@ message Call {
   uint64 conversation_id = 2;
   uint64 caller_id = 3;
   CallState state = 4;
-  repeated uint64 participant_ids = 5; // users connected to the SFU right now
+  repeated uint64 participant_ids = 5;
+  repeated uint64 sharing_user_ids = 6;
 }
 
-// --- client -> server ---
-
-// Start a call in a conversation. If one is already going, you get that one.
-message CallStart { uint64 conversation_id = 1; }
-message CallAccept { uint64 call_id = 1; }
-message CallDecline { uint64 call_id = 1; }
-// Connect this device to the call's SFU. `sdp_offer` = RTCPeerConnection offer.
+message CallStart {
+  uint64 conversation_id = 1;
+}
+message CallAccept {
+  uint64 call_id = 1;
+}
+message CallDecline {
+  uint64 call_id = 1;
+}
 message CallJoin {
   uint64 call_id = 1;
   string sdp_offer = 2;
 }
-message CallLeave { uint64 call_id = 1; }
+message CallLeave {
+  uint64 call_id = 1;
+}
+message CallScreenShare {
+  uint64 call_id = 1;
+  bool sharing = 2;
+}
 
-// --- server -> client (replies) ---
-
-message CallResult { Call call = 1; }  // reply to start / accept / decline / leave
+message CallResult {
+  Call call = 1;
+}
 message CallJoined {
   Call call = 1;
   string sdp_answer = 2;
 }
 
-// --- server -> client (pushes, id = 0) ---
-
-// Someone is calling you. Ring.
-message CallIncoming { Call call = 1; }
-// The call changed (accepted, someone joined/left). Sent to every member.
-message CallUpdated { Call call = 1; }
+message CallIncoming {
+  Call call = 1;
+}
+message CallUpdated {
+  Call call = 1;
+}
 
 enum CallEndReason {
   CALL_END_REASON_UNSPECIFIED = 0;
-  CALL_END_REASON_HANGUP = 1;   // last person left
+  CALL_END_REASON_HANGUP = 1;
   CALL_END_REASON_DECLINED = 2;
-  CALL_END_REASON_MISSED = 3;   // nobody answered in time
+  CALL_END_REASON_MISSED = 3;
 }
 message CallEnded {
   uint64 call_id = 1;

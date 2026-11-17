@@ -5,7 +5,6 @@ use sqlx::PgPool;
 use super::models::{NewDevice, RefreshTokenRecord};
 use crate::common::error::RepoError;
 
-/// Devices and refresh tokens.
 #[async_trait]
 pub trait AuthRepo: Send + Sync {
     async fn create_device(
@@ -25,8 +24,6 @@ pub trait AuthRepo: Send + Sync {
         &self,
         hash: &[u8],
     ) -> Result<Option<RefreshTokenRecord>, RepoError>;
-    /// Marks `old_id` used and stores the new token, atomically. Returns `false`
-    /// if `old_id` was already used (someone else got there first).
     async fn rotate_refresh_token(
         &self,
         old_id: i64,

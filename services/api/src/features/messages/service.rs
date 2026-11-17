@@ -11,18 +11,12 @@ use crate::common::events::EventBus;
 use crate::features::conversations::models::ConversationRecord;
 use crate::features::conversations::repository::ConversationRepo;
 
-/// What `sync` returns.
 #[derive(Debug, Default)]
 pub struct SyncResult {
-    /// New messages, oldest first.
     pub messages: Vec<Message>,
-    /// False = more than `MAX_SYNC` missed. Drop your copy, reload with history.
     pub complete: bool,
-    /// Older messages edited since `after_seq` (their current version).
     pub edited: Vec<Message>,
-    /// Messages deleted since `after_seq`.
     pub deleted_ids: Vec<i64>,
-    /// You're up to here now: the next `after_seq`.
     pub last_seq: i64,
 }
 
@@ -48,8 +42,6 @@ impl MessageService {
         }
     }
 
-    /// Sends a message. Calling again with the same `nonce` (a retry after a
-    /// network drop) returns the same message instead of a duplicate.
     #[tracing::instrument(name = "messages.send", skip_all, fields(user.id = me, conversation.id = conversation_id))]
     pub async fn send(
         &self,
@@ -67,7 +59,6 @@ impl MessageService {
         }
         let conversation = self.member_conversation(me, conversation_id).await?;
 
-        // 1. Retry? Then the nonce already points at a message id.
         let (id, is_first_send) = self
             .repo
             .claim_nonce(conversation_id, me, nonce, self.ids.next_id() as i64)
@@ -76,15 +67,11 @@ impl MessageService {
             if let Some(existing) = self.repo.get(conversation_id, id).await? {
                 return Ok(existing);
             }
-            // Saved, then deleted: don't bring it back.
             if self.repo.was_deleted(conversation_id, id).await? {
                 return Err(message_not_found());
             }
         }
-        // (A retry whose first attempt crashed before saving continues below
-        // with the same id, so it still can't create a duplicate.)
 
-        // 2. Next number in this conversation, then save.
         let seq = self.conversations.next_seq(conversation_id).await?;
         let message = Message {
             id,
@@ -97,7 +84,6 @@ impl MessageService {
         };
         self.repo.insert(&message).await?;
 
-        // 3. Live, to every member.
         let push = Payload::MessageCreated(MessageCreated {
             message: Some((&message).into()),
         });
@@ -105,7 +91,6 @@ impl MessageService {
         Ok(message)
     }
 
-    /// Messages older than `before_id` (None = latest), newest first.
     #[tracing::instrument(name = "messages.history", skip_all, fields(user.id = me, conversation.id = conversation_id))]
     pub async fn history(
         &self,
@@ -122,8 +107,6 @@ impl MessageService {
             .await?)
     }
 
-    /// What I missed since `after_seq` (e.g. after a reconnect): new
-    /// messages oldest first, plus edits and deletes of older ones.
     #[tracing::instrument(name = "messages.sync", skip_all, fields(user.id = me, conversation.id = conversation_id))]
     pub async fn sync(
         &self,
@@ -132,9 +115,6 @@ impl MessageService {
         after_seq: i64,
     ) -> Result<SyncResult, ApiError> {
         let conversation = self.member_conversation(me, conversation_id).await?;
-        // Common case: nothing new. The conversation row already says so.
-        // (`last_seq` there counts *reserved* seqs, including ones still being
-        // written, so below we only report seqs we actually saw.)
         if conversation.last_seq <= after_seq {
             return Ok(SyncResult {
                 complete: true,
@@ -142,7 +122,6 @@ impl MessageService {
                 ..Default::default()
             });
         }
-        // Ask for one extra: if it comes back, there were more than MAX_SYNC.
         let mut messages = self
             .repo
             .since_seq(conversation_id, after_seq, MAX_SYNC + 1, conversation.id)
@@ -151,8 +130,6 @@ impl MessageService {
             .repo
             .changes_since(conversation_id, after_seq, MAX_SYNC + 1)
             .await?;
-        // Too far behind: the client drops its copy and reloads, so changes
-        // don't matter and it can skip ahead to the newest seq.
         if messages.len() > MAX_SYNC || changes.len() > MAX_SYNC {
             messages.truncate(MAX_SYNC);
             messages.sort_by_key(|m| m.seq);
@@ -163,14 +140,8 @@ impl MessageService {
                 ..Default::default()
             });
         }
-        // Oldest first, by seq: parallel sends can get ids and seqs in
-        // slightly different orders.
         messages.sort_by_key(|m| m.seq);
 
-        // Latest change per message wins. New messages already come with
-        // their current content, so skip those.
-        // `last_seq` = the highest seq we saw, not the conversation's: a seq
-        // still being written (reserved, not saved) must not be skipped.
         let mut result = SyncResult {
             complete: true,
             last_seq: after_seq,
@@ -184,7 +155,6 @@ impl MessageService {
             match change.kind {
                 ChangeKind::Delete => result.deleted_ids.push(change.message_id),
                 ChangeKind::Edit if messages.iter().any(|m| m.id == change.message_id) => {}
-                // Gone (deleted, or the edit lost a race with a delete): skip.
                 ChangeKind::Edit => {
                     if let Some(m) = self.repo.get(conversation_id, change.message_id).await? {
                         result.edited.push(m);
@@ -202,7 +172,6 @@ impl MessageService {
         Ok(result)
     }
 
-    /// Replaces the text of my own message. Returns it and the change's seq.
     #[tracing::instrument(name = "messages.edit", skip_all, fields(user.id = me, conversation.id = conversation_id))]
     pub async fn edit(
         &self,
@@ -226,7 +195,7 @@ impl MessageService {
         message.content = content;
         message.edited_at = chrono::Utc::now().timestamp_millis();
         if !self.repo.edit(&message, seq).await? {
-            return Err(message_not_found()); // deleted meanwhile
+            return Err(message_not_found());
         }
 
         let push = Payload::MessageUpdated(MessageUpdated {
@@ -237,8 +206,6 @@ impl MessageService {
         Ok((message, seq))
     }
 
-    /// Deletes my own message for good. Returns the change's seq, or None if
-    /// it was already gone (deleting twice is fine).
     #[tracing::instrument(name = "messages.delete", skip_all, fields(user.id = me, conversation.id = conversation_id))]
     pub async fn delete(
         &self,
@@ -266,9 +233,6 @@ impl MessageService {
         Ok(Some(seq))
     }
 
-    /// Live: push to every member's open sockets (including my other devices).
-    /// The change is already saved, so if this fails nobody loses it: they
-    /// get it from history / sync. Just log it.
     async fn push(&self, member_ids: &[i64], payload: Payload) {
         let envelope = Envelope {
             id: 0,
@@ -283,8 +247,7 @@ impl MessageService {
         }
     }
 
-    /// The conversation, if `me` is in it. Same error whether it doesn't exist
-    /// or you're not a member (don't reveal which conversations exist).
+    // WARN: same error for missing and not-a-member, so we never reveal which conversations exist.
     async fn member_conversation(
         &self,
         me: i64,
@@ -300,7 +263,6 @@ impl MessageService {
     }
 }
 
-/// Same limits for sending and editing.
 fn check_content(content: &[u8]) -> Result<(), ApiError> {
     if content.is_empty() {
         return Err(ApiError::bad_request("empty_message", "message is empty"));
@@ -337,10 +299,9 @@ mod tests {
 
     const ALICE: i64 = 1;
     const BOB: i64 = 2;
-    const EVE: i64 = 3; // not in the DM
+    const EVE: i64 = 3;
     const DM: i64 = 100;
 
-    /// One DM (Alice + Bob) with a real seq counter.
     #[derive(Default)]
     struct FakeConversations {
         last_seq: Mutex<i64>,
@@ -383,7 +344,6 @@ mod tests {
         }
     }
 
-    /// Messages + change log in memory.
     #[derive(Default)]
     struct FakeMessages {
         messages: Mutex<Vec<Message>>,
@@ -499,7 +459,6 @@ mod tests {
         }
     }
 
-    /// Records every push as (user, payload kind).
     #[derive(Default)]
     struct FakeEvents {
         sent: Mutex<Vec<(i64, &'static str)>>,
@@ -579,13 +538,13 @@ mod tests {
 
         assert_eq!(edited.content, b"hello");
         assert!(edited.edited_at > 0);
-        assert_eq!(seq, 2); // the send took 1
+        assert_eq!(seq, 2);
         assert_eq!(
             t.svc.history(BOB, DM, None, 50).await.unwrap()[0].content,
             b"hello"
         );
         assert_eq!(t.pushes(BOB), ["created", "updated"]);
-        assert_eq!(t.pushes(ALICE), ["created", "updated"]); // my other devices
+        assert_eq!(t.pushes(ALICE), ["created", "updated"]);
     }
 
     #[tokio::test]
@@ -647,10 +606,8 @@ mod tests {
         assert!(t.svc.history(BOB, DM, None, 50).await.unwrap().is_empty());
         assert_eq!(t.pushes(BOB), ["created", "deleted"]);
 
-        // Again: no error, no new push.
         assert_eq!(t.svc.delete(ALICE, DM, m.id).await.unwrap(), None);
         assert_eq!(t.pushes(BOB), ["created", "deleted"]);
-        // And it can't be edited any more.
         assert_eq!(
             code(t.svc.edit(ALICE, DM, m.id, "x".into()).await.unwrap_err()),
             "message_not_found"
@@ -660,12 +617,11 @@ mod tests {
     #[tokio::test]
     async fn sync_reports_edits_and_deletes_of_older_messages() {
         let t = setup();
-        let a = t.send(ALICE, "one").await; // seq 1
-        let b = t.send(BOB, "two").await; // seq 2
-        // Bob goes offline at seq 2.
-        t.svc.edit(ALICE, DM, a.id, "one!".into()).await.unwrap(); // 3
-        t.svc.delete(BOB, DM, b.id).await.unwrap(); // 4
-        let c = t.send(ALICE, "three").await; // 5
+        let a = t.send(ALICE, "one").await;
+        let b = t.send(BOB, "two").await;
+        t.svc.edit(ALICE, DM, a.id, "one!".into()).await.unwrap();
+        t.svc.delete(BOB, DM, b.id).await.unwrap();
+        let c = t.send(ALICE, "three").await;
 
         let r = t.svc.sync(BOB, DM, 2).await.unwrap();
 
@@ -676,7 +632,6 @@ mod tests {
         assert_eq!(r.deleted_ids, [b.id]);
         assert_eq!(r.last_seq, 5);
 
-        // Caught up: nothing more.
         let r = t.svc.sync(BOB, DM, 5).await.unwrap();
         assert!(r.messages.is_empty() && r.edited.is_empty() && r.deleted_ids.is_empty());
         assert_eq!(r.last_seq, 5);
@@ -685,22 +640,20 @@ mod tests {
     #[tokio::test]
     async fn sync_folds_changes_to_the_same_message() {
         let t = setup();
-        let a = t.send(ALICE, "v1").await; // 1
-        let new = t.send(ALICE, "new").await; // 2
-        t.svc.edit(ALICE, DM, a.id, "v2".into()).await.unwrap(); // 3
-        t.svc.edit(ALICE, DM, a.id, "v3".into()).await.unwrap(); // 4
-        t.svc.edit(ALICE, DM, new.id, "new!".into()).await.unwrap(); // 5
+        let a = t.send(ALICE, "v1").await;
+        let new = t.send(ALICE, "new").await;
+        t.svc.edit(ALICE, DM, a.id, "v2".into()).await.unwrap();
+        t.svc.edit(ALICE, DM, a.id, "v3".into()).await.unwrap();
+        t.svc.edit(ALICE, DM, new.id, "new!".into()).await.unwrap();
 
         let r = t.svc.sync(BOB, DM, 1).await.unwrap();
 
-        // `new` arrives once, already edited; `a` once, latest version.
         assert_eq!(r.messages.len(), 1);
         assert_eq!(r.messages[0].content, b"new!");
         assert_eq!(r.edited.len(), 1);
         assert_eq!(r.edited[0].content, b"v3");
 
-        // Edited then deleted: only the delete.
-        t.svc.delete(ALICE, DM, a.id).await.unwrap(); // 6
+        t.svc.delete(ALICE, DM, a.id).await.unwrap();
         let r = t.svc.sync(BOB, DM, 2).await.unwrap();
         assert!(r.edited.iter().all(|m| m.id != a.id));
         assert_eq!(r.deleted_ids, [a.id]);
@@ -716,7 +669,6 @@ mod tests {
             .unwrap();
         t.svc.delete(ALICE, DM, m.id).await.unwrap();
 
-        // The ack was lost, so the app retries with the same nonce.
         let err = t
             .svc
             .send(ALICE, DM, "oops".into(), "retry-me")
@@ -740,13 +692,11 @@ mod tests {
     #[tokio::test]
     async fn sync_never_skips_a_seq_still_being_written() {
         let t = setup();
-        t.send(ALICE, "one").await; // 1
-        // An edit/send reserved seq 2 but hasn't saved yet.
+        t.send(ALICE, "one").await;
         t.conversations.next_seq(DM).await.unwrap();
 
         let r = t.svc.sync(BOB, DM, 0).await.unwrap();
 
-        // Only up to what we saw, so the next sync still asks for seq 2.
         assert_eq!(r.last_seq, 1);
         let r = t.svc.sync(BOB, DM, 1).await.unwrap();
         assert_eq!(r.last_seq, 1);
@@ -758,7 +708,6 @@ mod tests {
         let t = setup();
         let m = t.send(ALICE, "hi").await;
         t.svc.delete(ALICE, DM, m.id).await.unwrap();
-        // Simulate the race at the repo: the row is gone when the edit lands.
         let stale = Message {
             content: b"late".to_vec(),
             ..m

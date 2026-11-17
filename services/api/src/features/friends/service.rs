@@ -13,12 +13,10 @@ use crate::features::users::models::User;
 use crate::features::users::repository::UserRepo;
 use crate::features::users::service::normalize_username;
 
-/// One person in my friends screen, with where we stand.
 #[derive(Debug, Clone)]
 pub struct FriendEntry {
     pub user: User,
     pub state: FriendState,
-    /// When the request was sent, or when it was accepted for friends.
     pub since: DateTime<Utc>,
 }
 
@@ -41,12 +39,10 @@ impl FriendService {
         }
     }
 
-    /// Friends and pending requests both ways, newest first.
     #[tracing::instrument(name = "friends.list", skip_all, fields(user.id = me))]
     pub async fn list(&self, me: i64) -> Result<Vec<FriendEntry>, ApiError> {
         let rows = self.repo.list_for_user(me).await?;
         let other_ids: Vec<i64> = rows.iter().map(|row| row.other(me)).collect();
-        // One query for every profile instead of one per row.
         let profiles: HashMap<i64, User> = self
             .users
             .find_by_ids(&other_ids)
@@ -64,7 +60,6 @@ impl FriendService {
             .collect())
     }
 
-    /// Sends a request by username. If they already asked me, this accepts it.
     #[tracing::instrument(name = "friends.send_request", skip_all, fields(user.id = me))]
     pub async fn send_request(&self, me: i64, username: &str) -> Result<FriendEntry, ApiError> {
         let target = self.find_user(username).await?;
@@ -91,8 +86,6 @@ impl FriendService {
                 self.announce(&row, me, target.id).await;
                 Ok(entry(&row, me, target))
             }
-            // Someone wrote this pair in the meantime (e.g. they asked me at the
-            // same moment). Read their row and answer it like above.
             Err(RepoError::Conflict) => match self.repo.find(me, target.id).await? {
                 Some(existing) => self.answer_existing(me, target, existing).await,
                 None => Err(ApiError::conflict("try_again", "please try again")),
@@ -101,7 +94,6 @@ impl FriendService {
         }
     }
 
-    /// Accepts the request `requester_id` sent me.
     #[tracing::instrument(name = "friends.accept", skip_all, fields(user.id = me))]
     pub async fn accept(&self, me: i64, requester_id: i64) -> Result<FriendEntry, ApiError> {
         let row = self
@@ -118,22 +110,18 @@ impl FriendService {
         Ok(entry(&row, me, requester))
     }
 
-    /// Declines a request they sent me, or cancels one I sent.
     #[tracing::instrument(name = "friends.delete_request", skip_all, fields(user.id = me))]
     pub async fn delete_request(&self, me: i64, other_id: i64) -> Result<(), ApiError> {
         self.delete_if(me, other_id, FriendshipStatus::Pending)
             .await
     }
 
-    /// Unfriends someone.
     #[tracing::instrument(name = "friends.remove", skip_all, fields(user.id = me))]
     pub async fn remove_friend(&self, me: i64, other_id: i64) -> Result<(), ApiError> {
         self.delete_if(me, other_id, FriendshipStatus::Accepted)
             .await
     }
 
-    /// Deletes the pair's row, but only if it has `status`: "remove friend"
-    /// must not silently cancel a request, and the other way round.
     async fn delete_if(
         &self,
         me: i64,
@@ -144,14 +132,12 @@ impl FriendService {
             Some(row) if row.status == status => {}
             _ => return Err(ApiError::NotFound),
         }
-        // Gone already (the other side acted first)? Nothing to announce.
         if self.repo.delete(me, other_id).await?.is_some() {
             self.announce_gone(me, other_id).await;
         }
         Ok(())
     }
 
-    /// The pair already has a row when I send a request.
     async fn answer_existing(
         &self,
         me: i64,
@@ -167,7 +153,6 @@ impl FriendService {
                 "request_already_sent",
                 "request already sent",
             )),
-            // They asked me first: sending one back means yes.
             FriendState::Incoming | FriendState::None => {
                 self.accept(me, target.id).await.map(|mut accepted| {
                     accepted.user = target;
@@ -186,8 +171,6 @@ impl FriendService {
             .ok_or_else(not_found)
     }
 
-    /// Pushes the new state to both people (each sees it from their side).
-    /// Saved first, so a failed push is only logged: the client reloads on reconnect.
     async fn announce(&self, row: &Friendship, me: i64, other_id: i64) {
         let Ok(profiles) = self.users.find_by_ids(&[me, other_id]).await else {
             tracing::warn!("friend push skipped: profile lookup failed");
@@ -201,7 +184,6 @@ impl FriendService {
         }
     }
 
-    /// Like `announce`, for a deleted row: both sides get state NONE.
     async fn announce_gone(&self, me: i64, other_id: i64) {
         let Ok(profiles) = self.users.find_by_ids(&[me, other_id]).await else {
             tracing::warn!("friend push skipped: profile lookup failed");
@@ -262,8 +244,6 @@ mod tests {
 
     use super::*;
     use crate::features::friends::models::ordered_pair;
-
-    // --- in-memory fakes: no Postgres or NATS needed ---
 
     #[derive(Default)]
     struct FakeFriendRepo {
@@ -376,7 +356,6 @@ mod tests {
         }
     }
 
-    /// Remembers every push as (receiver, decoded FriendUpdated).
     #[derive(Default)]
     struct FakeEvents {
         sent: Mutex<Vec<(i64, v1::FriendUpdated)>>,
@@ -435,7 +414,6 @@ mod tests {
         assert_eq!(bob_view[0].state, FriendState::Incoming);
         assert_eq!(bob_view[0].user.id, ANA);
 
-        // Ana can't accept her own request.
         assert!(service.accept(ANA, ANA).await.is_err());
         assert!(service.accept(ANA, BOB).await.is_err());
 
@@ -446,7 +424,6 @@ mod tests {
             FriendState::Friend
         );
 
-        // Each side got pushes about the other person, from their own side.
         let sent = events.sent.lock().unwrap();
         let to_bob: Vec<_> = sent.iter().filter(|(to, _)| *to == BOB).collect();
         assert_eq!(to_bob[0].1.state, v1::FriendState::Incoming as i32);
@@ -495,21 +472,17 @@ mod tests {
     async fn decline_cancel_and_remove() {
         let (service, events) = setup();
 
-        // Bob declines.
         service.send_request(ANA, "bob").await.unwrap();
         service.delete_request(BOB, ANA).await.unwrap();
         assert!(service.list(ANA).await.unwrap().is_empty());
 
-        // Ana cancels.
         service.send_request(ANA, "bob").await.unwrap();
         service.delete_request(ANA, BOB).await.unwrap();
         assert!(service.list(BOB).await.unwrap().is_empty());
 
-        // "Remove friend" doesn't touch a pending request.
         service.send_request(ANA, "bob").await.unwrap();
         assert!(service.remove_friend(ANA, BOB).await.is_err());
 
-        // Friends, then removed.
         service.accept(BOB, ANA).await.unwrap();
         assert!(service.delete_request(ANA, BOB).await.is_err());
         service.remove_friend(BOB, ANA).await.unwrap();

@@ -1,6 +1,3 @@
-//! `StartTyping` → check membership, throttle, push `TypingStarted` to the
-//! other members of the conversation.
-
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -13,22 +10,15 @@ use crate::common::error::ApiError;
 use crate::common::events::EventBus;
 use crate::features::conversations::repository::ConversationRepo;
 
-/// At most one typing event per user per conversation in this window.
 pub const THROTTLE: Duration = Duration::from_secs(3);
 
-/// Cap on incoming `start_typing` per user (any conversation), checked
-/// before the membership lookup so spam can't turn into database reads.
-/// A real client sends ~1 per 3s per conversation, far below this.
 pub const INGRESS_LIMIT: u32 = 10;
 pub const INGRESS_WINDOW: Duration = Duration::from_secs(10);
 
 pub struct TypingService {
     conversations: Arc<dyn ConversationRepo>,
     events: Arc<dyn EventBus>,
-    /// (user, conversation) → when we last fanned out. In memory, per api
-    /// instance: good enough while typing is purely cosmetic.
     last_sent: Mutex<HashMap<(i64, i64), Instant>>,
-    /// user → (window start, requests in it).
     ingress: Mutex<HashMap<i64, (Instant, u32)>>,
 }
 
@@ -47,11 +37,7 @@ impl TypingService {
         self.start_at(me, conversation_id, Instant::now()).await
     }
 
-    /// `start` with an explicit clock, for tests.
-    /// Returns `Ok` when throttled too: the event is just dropped.
     async fn start_at(&self, me: i64, conversation_id: i64, now: Instant) -> Result<(), ApiError> {
-        // 1. Spam guard (no I/O). 2. Membership. 3. Per-conversation throttle.
-        // Nothing is ever sent before the membership check passes.
         if !self.ingress_allowed(me, now) {
             return Ok(());
         }
@@ -93,7 +79,6 @@ impl TypingService {
         Ok(())
     }
 
-    /// Fixed window per user: at most `INGRESS_LIMIT` per `INGRESS_WINDOW`.
     fn ingress_allowed(&self, me: i64, now: Instant) -> bool {
         let mut ingress = self.ingress.lock().expect("typing mutex poisoned");
         if ingress.len() > 10_000 {
@@ -107,10 +92,8 @@ impl TypingService {
         entry.1 <= INGRESS_LIMIT
     }
 
-    /// True (and records `now`) if the last event is older than `THROTTLE`.
     fn allow(&self, me: i64, conversation_id: i64, now: Instant) -> bool {
         let mut last = self.last_sent.lock().expect("typing mutex poisoned");
-        // Drop stale entries now and then so the map doesn't grow forever.
         if last.len() > 10_000 {
             last.retain(|_, at| now.saturating_duration_since(*at) < THROTTLE);
         }
@@ -186,7 +169,6 @@ mod tests {
         }
     }
 
-    /// Records every push as (recipient, conversation, typing user).
     #[derive(Default)]
     struct FakeEvents {
         sent: Mutex<Vec<(i64, u64, u64)>>,
@@ -249,7 +231,6 @@ mod tests {
         let (svc, events) = setup();
         let err = svc.start_at(MALLORY, DM, Instant::now()).await.unwrap_err();
         assert_eq!(err.describe().1, "conversation_not_found");
-        // Unknown conversation looks the same.
         let err = svc.start_at(ALICE, 999, Instant::now()).await.unwrap_err();
         assert_eq!(err.describe().1, "conversation_not_found");
         assert!(sent(&events).is_empty());
@@ -277,8 +258,8 @@ mod tests {
         let (svc, events) = setup();
         let t0 = Instant::now();
         svc.start_at(ALICE, DM, t0).await.unwrap();
-        svc.start_at(ALICE, GROUP, t0).await.unwrap(); // other conversation
-        svc.start_at(BOB, DM, t0).await.unwrap(); // other user
+        svc.start_at(ALICE, GROUP, t0).await.unwrap();
+        svc.start_at(BOB, DM, t0).await.unwrap();
         let typers: Vec<(u64, u64)> = sent(&events).iter().map(|s| (s.1, s.2)).collect();
         assert!(typers.contains(&(DM as u64, ALICE as u64)));
         assert!(typers.contains(&(GROUP as u64, ALICE as u64)));
@@ -289,14 +270,12 @@ mod tests {
     async fn flood_is_cut_off_before_the_database() {
         let (svc, events, repo) = setup_with_repo();
         let t0 = Instant::now();
-        // Made-up conversation ids: each would be a fresh lookup.
         for i in 0..100 {
             let _ = svc.start_at(MALLORY, 10_000 + i, t0).await;
         }
         assert_eq!(gets(&repo), INGRESS_LIMIT as usize);
         assert!(sent(&events).is_empty());
 
-        // Next window: allowed again.
         let _ = svc.start_at(MALLORY, 10_000, t0 + INGRESS_WINDOW).await;
         assert_eq!(gets(&repo), INGRESS_LIMIT as usize + 1);
     }

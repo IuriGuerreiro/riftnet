@@ -1,6 +1,3 @@
-//! The `MessageRepo` trait (what the service needs from storage) and its
-//! implementation for Scylla. The Scylla struct is in `scylla_message_repo.rs`.
-
 use anyhow::Context;
 use async_trait::async_trait;
 use scylla::statement::Consistency;
@@ -11,14 +8,10 @@ use crate::common::error::RepoError;
 use crate::common::scylla::lwt_applied;
 use crate::features::messages::models::{ChangeKind, Message, MessageChange, bucket_at, bucket_of};
 
-/// How far (in id time) sync keeps looking past the first message the client
-/// already has. A send takes its seq right after its id, well within this.
 const SEQ_GRACE_MS: u64 = 10_000;
 
 #[async_trait]
 pub trait MessageRepo: Send + Sync {
-    /// Ties a client nonce to `new_id`. Returns `(id, true)` the first time,
-    /// or `(the id from the first time, false)` for a retry.
     async fn claim_nonce(
         &self,
         conversation_id: i64,
@@ -28,8 +21,6 @@ pub trait MessageRepo: Send + Sync {
     ) -> Result<(i64, bool), RepoError>;
     async fn get(&self, conversation_id: i64, id: i64) -> Result<Option<Message>, RepoError>;
     async fn insert(&self, message: &Message) -> Result<(), RepoError>;
-    /// Up to `limit` messages older than `before_id` (None = newest), newest first.
-    /// Doesn't look before `oldest_id` (the conversation's creation).
     async fn history(
         &self,
         conversation_id: i64,
@@ -37,9 +28,6 @@ pub trait MessageRepo: Send + Sync {
         limit: usize,
         oldest_id: i64,
     ) -> Result<Vec<Message>, RepoError>;
-    /// Messages with `seq > after_seq`, newest first (by id), at most `limit`.
-    /// Walks back from now and stops a little past the first message the
-    /// client already has (see `SEQ_GRACE_MS`).
     async fn since_seq(
         &self,
         conversation_id: i64,
@@ -47,17 +35,10 @@ pub trait MessageRepo: Send + Sync {
         limit: usize,
         oldest_id: i64,
     ) -> Result<Vec<Message>, RepoError>;
-    /// Logs the edit as change `change_seq`, then saves the new content and
-    /// `edited_at`. Returns false if the message no longer exists.
     async fn edit(&self, message: &Message, change_seq: i64) -> Result<bool, RepoError>;
-    /// Removes the message for good, logs it as change `change_seq`, and
-    /// remembers the id for a day (all or nothing). See `was_deleted`.
     async fn delete(&self, conversation_id: i64, id: i64, change_seq: i64)
     -> Result<(), RepoError>;
-    /// Was this message deleted in the last day? (A send retry must not
-    /// bring it back. Same lifetime as nonces.)
     async fn was_deleted(&self, conversation_id: i64, id: i64) -> Result<bool, RepoError>;
-    /// Edits/deletes with `seq > after_seq`, oldest first, at most `limit`.
     async fn changes_since(
         &self,
         conversation_id: i64,
@@ -76,7 +57,6 @@ impl MessageRepo for ScyllaMessageRepo {
         nonce: &str,
         new_id: i64,
     ) -> Result<(i64, bool), RepoError> {
-        // Same pattern as dm_keys: only goes in if this nonce is new (IF NOT EXISTS).
         let insert_reply = self
             .session
             .execute_unpaged(
@@ -92,9 +72,8 @@ impl MessageRepo for ScyllaMessageRepo {
             return Ok((new_id, true));
         }
 
-        // A retry: read the message id the first send used.
         let mut read_nonce = self.get_nonce.clone();
-        read_nonce.set_consistency(Consistency::Serial); // see the LWT's result for sure
+        read_nonce.set_consistency(Consistency::Serial);
         let (id,) = self
             .session
             .execute_unpaged(&read_nonce, (conversation_id, author_id, nonce))
@@ -149,8 +128,6 @@ impl MessageRepo for ScyllaMessageRepo {
         limit: usize,
         oldest_id: i64,
     ) -> Result<Vec<Message>, RepoError> {
-        // Walk buckets from newest to oldest until we have `limit` messages.
-        // Each bucket is one partition = one fast read.
         let before = before_id.unwrap_or(i64::MAX);
         let newest_bucket = match before_id {
             Some(id) => bucket_of(id),
@@ -186,11 +163,6 @@ impl MessageRepo for ScyllaMessageRepo {
         limit: usize,
         oldest_id: i64,
     ) -> Result<Vec<Message>, RepoError> {
-        // Same walk as history (newest bucket first), but instead of counting
-        // to a limit we stop once we're past what the client already has.
-        // The id is made before the seq is taken, so parallel sends can have
-        // id order != seq order: seq 11 can sit just below seq 10. So after
-        // the first known message, keep going for SEQ_GRACE_MS more of ids.
         let newest_bucket = bucket_at(chrono::Utc::now().timestamp_millis() as u64);
         let oldest_bucket = bucket_of(oldest_id);
 
@@ -198,8 +170,6 @@ impl MessageRepo for ScyllaMessageRepo {
         let mut stop_below: Option<u64> = None;
 
         for bucket in (oldest_bucket..=newest_bucket).rev() {
-            // Page through the bucket: skipped rows don't count toward `limit`,
-            // so one page may not be enough.
             let mut before = i64::MAX;
             loop {
                 let want = (limit - out.len()) as i32;
@@ -217,7 +187,6 @@ impl MessageRepo for ScyllaMessageRepo {
                     before = message.id;
                     let ms = common::snowflake::timestamp_ms(message.id as u64);
                     if message.seq <= after_seq {
-                        // Reached what the client has; look a bit further.
                         stop_below.get_or_insert(ms.saturating_sub(SEQ_GRACE_MS));
                     } else {
                         out.push(message);
@@ -227,7 +196,7 @@ impl MessageRepo for ScyllaMessageRepo {
                     }
                 }
                 if got < want {
-                    break; // bucket done
+                    break;
                 }
             }
         }
@@ -237,9 +206,6 @@ impl MessageRepo for ScyllaMessageRepo {
 
     #[tracing::instrument(name = "db UPDATE messages", skip_all, err(Display), fields(otel.kind = "client", db.system = "scylladb", db.operation = "UPDATE", db.collection.name = "messages"))]
     async fn edit(&self, m: &Message, change_seq: i64) -> Result<bool, RepoError> {
-        // Save first, then log (an LWT can't share a batch with other
-        // partitions). So sync never sees a log row whose edit isn't saved yet.
-        // A crash in between skips this seq: offline clients miss the edit.
         let reply = self
             .session
             .execute_unpaged(
@@ -257,7 +223,7 @@ impl MessageRepo for ScyllaMessageRepo {
             .into_rows_result()
             .context("edit message")?;
         if !lwt_applied(&reply).context("edit message")? {
-            return Ok(false); // deleted meanwhile: nothing to log
+            return Ok(false);
         }
         self.session
             .execute_unpaged(
@@ -276,8 +242,6 @@ impl MessageRepo for ScyllaMessageRepo {
         id: i64,
         change_seq: i64,
     ) -> Result<(), RepoError> {
-        // Logged batch: the delete and its log row go in together, so an
-        // offline client always hears about it on sync.
         let mut batch = Batch::new(BatchType::Logged);
         batch.append_statement(self.delete_message.clone());
         batch.append_statement(self.insert_change.clone());

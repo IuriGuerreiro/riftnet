@@ -1,23 +1,14 @@
-//! The forwarding loop. One thread, one UDP socket, one str0m `Rtc` per device.
-//!
-//! Each device offers one two-way ("sendrecv") audio track. Every Opus packet
-//! from one device is written into the track of every other device in the same
-//! room. Nothing is decoded.
-//!
-//! Limit: rooms of 2 (1:1 calls). 3+ people need renegotiation: the SFU must
-//! add a track per other person. See docs/architecture/calls.md.
-
+// WARN: rooms of 2 only; 3+ people need renegotiation (see docs/architecture/calls.md).
 use std::net::{SocketAddr, UdpSocket};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::{Duration, Instant};
 
 use str0m::change::SdpOffer;
-use str0m::media::{MediaData, Mid};
+use str0m::media::{KeyframeRequestKind, MediaData, MediaKind, Mid};
 use str0m::net::{Protocol, Receive};
 use str0m::{Candidate, Event, IceConnectionState, Input, Output, Rtc};
 
-/// Handle to the loop thread. Cheap to share.
 #[derive(Clone)]
 pub struct Sfu {
     addr: SocketAddr,
@@ -39,8 +30,8 @@ struct Peer {
     id: u64,
     room: u64,
     rtc: Rtc,
-    /// The audio track. The same mid sends and receives.
-    mid: Option<Mid>,
+    audio: Option<Mid>,
+    video: Option<Mid>,
 }
 
 static NEXT_PEER: AtomicU64 = AtomicU64::new(1);
@@ -55,11 +46,8 @@ pub fn start(socket: UdpSocket) -> anyhow::Result<Sfu> {
 }
 
 impl Sfu {
-    /// Adds a device to `room`. Returns its peer id and the SDP answer.
     pub fn add(&self, room: u64, sdp_offer: &str) -> anyhow::Result<(u64, String)> {
         let offer = SdpOffer::from_sdp_string(sdp_offer)?;
-        // Full ICE, not ICE-lite: lite picked the wrong path on machines with
-        // several network interfaces (see docs/architecture/calls.md, section 3).
         let mut rtc = Rtc::builder().build(Instant::now());
         rtc.add_local_candidate(Candidate::host(self.addr, "udp")?);
         let answer = rtc.sdp_api().accept_offer(offer)?;
@@ -84,7 +72,6 @@ fn run(socket: UdpSocket, cmds: Receiver<Cmd>) {
     let mut buf = vec![0u8; 2000];
 
     loop {
-        // 1. Joins and leaves from the control plane.
         while let Ok(cmd) = cmds.try_recv() {
             match cmd {
                 Cmd::Add { peer_id, room, rtc } => {
@@ -93,7 +80,8 @@ fn run(socket: UdpSocket, cmds: Receiver<Cmd>) {
                         id: peer_id,
                         room,
                         rtc: *rtc,
-                        mid: None,
+                        audio: None,
+                        video: None,
                     });
                 }
                 Cmd::Remove { peer_id } => {
@@ -104,8 +92,8 @@ fn run(socket: UdpSocket, cmds: Receiver<Cmd>) {
             }
         }
 
-        // 2. Drain each peer: send its packets, collect audio to forward.
-        let mut forward: Vec<(u64, u64, MediaData)> = Vec::new();
+        let mut forward: Vec<(u64, u64, MediaKind, MediaData)> = Vec::new();
+        let mut keyframes: Vec<(u64, u64, KeyframeRequestKind)> = Vec::new();
         let mut next_timeout = Instant::now() + Duration::from_millis(100);
         for p in &mut peers {
             while p.rtc.is_alive() {
@@ -114,12 +102,30 @@ fn run(socket: UdpSocket, cmds: Receiver<Cmd>) {
                         let _ = socket.send_to(&t.contents, t.destination);
                     }
                     Ok(Output::Timeout(t)) => {
+                        let now = Instant::now();
+                        if t <= now {
+                            if p.rtc.handle_input(Input::Timeout(now)).is_err() {
+                                p.rtc.disconnect();
+                            }
+                            continue;
+                        }
                         next_timeout = next_timeout.min(t);
                         break;
                     }
                     Ok(Output::Event(e)) => match e {
-                        Event::MediaAdded(m) => p.mid = Some(m.mid),
-                        Event::MediaData(d) => forward.push((p.id, p.room, d)),
+                        Event::MediaAdded(m) => match m.kind {
+                            MediaKind::Audio => p.audio = Some(m.mid),
+                            MediaKind::Video => p.video = Some(m.mid),
+                        },
+                        Event::MediaData(d) => {
+                            let kind = if Some(d.mid) == p.video {
+                                MediaKind::Video
+                            } else {
+                                MediaKind::Audio
+                            };
+                            forward.push((p.id, p.room, kind, d));
+                        }
+                        Event::KeyframeRequest(r) => keyframes.push((p.id, p.room, r.kind)),
                         Event::Connected => tracing::info!(peer.id = p.id, "peer connected"),
                         Event::IceConnectionStateChange(IceConnectionState::Disconnected) => {
                             p.rtc.disconnect()
@@ -134,13 +140,16 @@ fn run(socket: UdpSocket, cmds: Receiver<Cmd>) {
             }
         }
 
-        // 3. Forward each packet to everyone else in the same room.
-        for (from, room, data) in &forward {
+        for (from, room, kind, data) in &forward {
             for p in peers
                 .iter_mut()
                 .filter(|p| p.id != *from && p.room == *room)
             {
-                let Some(mid) = p.mid else { continue };
+                let mid = match kind {
+                    MediaKind::Audio => p.audio,
+                    MediaKind::Video => p.video,
+                };
+                let Some(mid) = mid else { continue };
                 let Some(writer) = p.rtc.writer(mid) else {
                     continue;
                 };
@@ -152,11 +161,22 @@ fn run(socket: UdpSocket, cmds: Receiver<Cmd>) {
                 }
             }
         }
+        for (from, room, kind) in &keyframes {
+            for p in peers
+                .iter_mut()
+                .filter(|p| p.id != *from && p.room == *room)
+            {
+                let Some(mid) = p.video else { continue };
+                let Some(mut writer) = p.rtc.writer(mid) else {
+                    continue;
+                };
+                let _ = writer.request_keyframe(None, *kind);
+            }
+        }
         if !forward.is_empty() {
             metrics::counter!("media_packets_forwarded_total").increment(forward.len() as u64);
         }
 
-        // 4. Drop dead peers.
         let before = peers.len();
         peers.retain(|p| {
             if !p.rtc.is_alive() {
@@ -167,11 +187,10 @@ fn run(socket: UdpSocket, cmds: Receiver<Cmd>) {
         if peers.len() != before || !forward.is_empty() {
             metrics::gauge!("media_peers").set(peers.len() as f64);
         }
-        if !forward.is_empty() {
-            continue; // send what we just wrote right away
+        if !forward.is_empty() || !keyframes.is_empty() {
+            continue;
         }
 
-        // 5. Wait for one UDP packet (or the next timer).
         let wait = next_timeout
             .saturating_duration_since(Instant::now())
             .clamp(Duration::from_millis(1), Duration::from_millis(100));
@@ -190,7 +209,6 @@ fn run(socket: UdpSocket, cmds: Receiver<Cmd>) {
                     contents,
                 },
             );
-            // `accepts` finds which peer this packet belongs to.
             if let Some(p) = peers.iter_mut().find(|p| p.rtc.accepts(&input))
                 && p.rtc.handle_input(input).is_err()
             {
@@ -198,7 +216,6 @@ fn run(socket: UdpSocket, cmds: Receiver<Cmd>) {
             }
         }
 
-        // 6. Tick every peer's clock (keepalives, retransmits...).
         let now = Instant::now();
         for p in peers.iter_mut().filter(|p| p.rtc.is_alive()) {
             if p.rtc.handle_input(Input::Timeout(now)).is_err() {

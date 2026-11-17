@@ -7,7 +7,6 @@ pub enum Status {
     Idle,
 }
 
-/// What one store operation did to a user's status.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Change {
     pub before: Status,
@@ -20,16 +19,12 @@ impl Change {
     }
 }
 
-/// One live socket, as the store keeps it.
 #[derive(Debug, Clone, Copy)]
 pub struct Conn {
-    /// Unix ms after which this socket counts as gone (no heartbeat).
     pub expires_at: i64,
     pub idle: bool,
 }
 
-/// Status from a user's sockets: any active one → online, all idle → idle,
-/// none alive → offline.
 pub fn status_of(conns: impl IntoIterator<Item = Conn>, now: i64) -> Status {
     let mut any = false;
     for conn in conns {
@@ -65,7 +60,7 @@ mod tests {
     #[test]
     fn status_rules() {
         assert_eq!(status_of([], 10), Status::Offline);
-        assert_eq!(status_of([conn(5, false)], 10), Status::Offline); // expired
+        assert_eq!(status_of([conn(5, false)], 10), Status::Offline);
         assert_eq!(status_of([conn(20, true)], 10), Status::Idle);
         assert_eq!(
             status_of([conn(20, true), conn(20, false)], 10),

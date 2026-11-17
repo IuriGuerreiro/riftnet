@@ -1,14 +1,3 @@
-//! Where live sockets are kept, per user: `connection_id → (expires_at, idle)`.
-//!
-//! Redis in real use, so every api server sees the same thing. One hash per
-//! user (`presence:<user_id>`). Each socket's entry must be refreshed by a
-//! heartbeat before `ttl`, or it counts as gone: a crashed api server can't
-//! leave people "online" forever.
-//!
-//! Every write returns the status before and after, computed in the same
-//! atomic step, so two devices connecting at once can't both miss (or both
-//! send) the "came online" push.
-
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicI64, Ordering};
@@ -20,18 +9,15 @@ use super::models::{Change, Conn, Status, status_of};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Op {
-    /// New socket, or heartbeat of an existing one (keeps its idle flag).
     Touch,
     Idle,
     Active,
-    /// Socket closed.
     Drop,
 }
 
 #[async_trait]
 pub trait PresenceStore: Send + Sync {
     async fn apply(&self, user_id: i64, connection_id: u64, op: Op) -> anyhow::Result<Change>;
-    /// Current status of each user, same order as `user_ids`.
     async fn statuses(&self, user_ids: &[i64]) -> anyhow::Result<Vec<Status>>;
 }
 
@@ -39,16 +25,12 @@ fn now_ms() -> i64 {
     chrono::Utc::now().timestamp_millis()
 }
 
-// --- Redis ---
-
 pub struct RedisPresenceStore {
     redis: redis::aio::ConnectionManager,
     ttl: Duration,
     script: redis::Script,
 }
 
-/// KEYS[1] = presence:<user>. ARGV = now_ms, op, connection_id, ttl_ms.
-/// Returns {before, after}: 0 offline, 1 online, 2 idle.
 const APPLY_LUA: &str = r#"
 local key, now, op, conn, ttl = KEYS[1], tonumber(ARGV[1]), ARGV[2], ARGV[3], tonumber(ARGV[4])
 local function status()
@@ -85,7 +67,6 @@ return {before, status()}
 "#;
 
 impl RedisPresenceStore {
-    /// `redis` comes from `common::redis::connect`.
     pub fn new(redis: redis::aio::ConnectionManager, ttl: Duration) -> Self {
         Self {
             redis,
@@ -107,7 +88,6 @@ fn from_code(code: i64) -> Status {
     }
 }
 
-/// Parses a stored `"<expires_at>:<idle 0|1>"`.
 fn parse_conn(value: &str) -> Option<Conn> {
     let (exp, idle) = value.split_once(':')?;
     Some(Conn {
@@ -163,13 +143,10 @@ impl PresenceStore for RedisPresenceStore {
     }
 }
 
-// --- in memory (tests) ---
-
 #[cfg_attr(not(test), allow(dead_code))]
 pub struct MemoryPresenceStore {
     users: Mutex<HashMap<i64, HashMap<u64, Conn>>>,
     ttl_ms: i64,
-    /// Fake clock for tests (ms). 0 = real time.
     clock: AtomicI64,
 }
 
@@ -242,7 +219,6 @@ impl PresenceStore for MemoryPresenceStore {
     }
 }
 
-/// Needs a running Redis: `cargo test -p api presence -- --ignored`.
 #[cfg(test)]
 mod redis_tests {
     use super::*;
@@ -253,7 +229,7 @@ mod redis_tests {
         let url = std::env::var("REDIS_URL").unwrap_or("redis://127.0.0.1:6379".into());
         let redis = crate::common::redis::connect(&url).await.unwrap();
         let store = RedisPresenceStore::new(redis, Duration::from_millis(500));
-        let user: i64 = -(rand::random::<u32>() as i64) - 1; // never a real id
+        let user: i64 = -(rand::random::<u32>() as i64) - 1;
         let change = |before, after| Change { before, after };
         use Status::*;
 
@@ -294,7 +270,6 @@ mod redis_tests {
             change(Idle, Offline)
         );
 
-        // No heartbeat for longer than the TTL → offline.
         store.apply(user, 3, Op::Touch).await.unwrap();
         tokio::time::sleep(Duration::from_millis(700)).await;
         assert_eq!(store.statuses(&[user]).await.unwrap(), vec![Offline]);

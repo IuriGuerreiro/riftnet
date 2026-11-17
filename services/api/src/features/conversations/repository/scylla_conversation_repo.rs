@@ -1,6 +1,3 @@
-//! `ScyllaConversationRepo`: the struct, its prepared statements and helpers.
-//! Its `ConversationRepo` methods are in `conversation_repo.rs`. CQL is in `queries.rs`.
-
 use std::sync::Arc;
 
 use anyhow::Context;
@@ -13,8 +10,6 @@ use super::queries as q;
 use crate::common::error::RepoError;
 use crate::features::conversations::models::{ConversationRecord, Kind};
 
-/// Statements are "prepared" once at startup: Scylla parses them a single
-/// time, then each call only sends the values. Faster, and no CQL injection.
 pub struct ScyllaConversationRepo {
     pub(super) session: Arc<Session>,
     pub(super) claim_dm_key: PreparedStatement,
@@ -29,7 +24,6 @@ pub struct ScyllaConversationRepo {
     pub(super) rename: PreparedStatement,
 }
 
-/// Columns of `GET_CONVERSATION`, in order.
 type Row = (i64, i8, Option<i64>, Option<Vec<i64>>, Option<String>);
 
 impl ScyllaConversationRepo {
@@ -66,12 +60,6 @@ impl ScyllaConversationRepo {
         Ok(row.map(to_record))
     }
 
-    /// Writes a new conversation: its row + one `conversations_by_user` row per
-    /// member (so it shows up in each member's list).
-    ///
-    /// All in one LOGGED batch: Scylla first records "about to do these", then
-    /// does them, and finishes the rest itself if anything dies midway.
-    /// `values[i]` fills the `?`s of the i-th statement added to the batch.
     pub(super) async fn write_conversation(
         &self,
         id: i64,
