@@ -9,3 +9,4 @@ client/src-tauri/gen/
 
 # local secrets
 infra/.secrets/
+infra/prod/backups/

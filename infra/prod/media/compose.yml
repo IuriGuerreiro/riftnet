@@ -1,0 +1,18 @@
+# Prod prototype, media server. Host networking: the SFU binds the public IP
+# and advertises it to browsers, so no Docker NAT in the way.
+# Start (from repo root): docker compose -f infra/prod/media/compose.yml --env-file infra/prod/media/.env up -d --build
+name: discord2-media
+
+services:
+  media:
+    restart: unless-stopped
+    build:
+      context: ../../..
+      dockerfile: infra/prod/rust.Dockerfile
+      args: { BIN: media }
+    network_mode: host
+    environment:
+      MEDIA_IP: ${MEDIA_IP}
+      MEDIA_PORT: ${MEDIA_PORT:-7110}
+      NATS_URL: nats://app:${NATS_PASSWORD}@${MAIN_TAILSCALE_IP}:4222
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
