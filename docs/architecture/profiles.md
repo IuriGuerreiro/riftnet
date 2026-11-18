@@ -18,7 +18,7 @@ Backend: `services/api/src/features/users/`. Contract: `proto/v1/users.proto`.
 | `PUT /me/avatar`                           | Raw image body, max 8 MB. 10 per hour per user       |
 | `DELETE /me/avatar`                        | Remove the avatar                                    |
 | `GET /users/{id}`                          | A user's profile                                     |
-| `GET /users/{id}/avatar/{hash}?size=128\|512` | 302 to a 5-minute signed link (WebP)              |
+| `GET /users/{id}/avatar/{hash}?size=128\|512` | `{ url }`: a 5-minute signed link (WebP)          |
 
 All need a login. **Visibility:** user search already shows any user to any
 logged-in user, so profiles and avatars are readable by any logged-in user.

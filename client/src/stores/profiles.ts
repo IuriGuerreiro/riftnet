@@ -1,0 +1,93 @@
+import { create } from "zustand";
+
+import type { User as JsonUser } from "../api/types";
+import type { WsClient } from "../api/ws";
+import type { User as ProtoUser } from "../gen/v1/users_pb";
+import { useAuth } from "./auth";
+
+export interface Profile {
+  id: string;
+  username: string | null;
+  displayName: string | null;
+  bio: string | null;
+  avatarHash: string | null;
+}
+
+export function fromJson(u: JsonUser): Profile {
+  return {
+    id: u.id,
+    username: u.username,
+    displayName: u.display_name,
+    bio: u.bio ?? null,
+    avatarHash: u.avatar_hash ?? null,
+  };
+}
+
+export function fromProto(u: ProtoUser): Profile {
+  return {
+    id: u.id.toString(),
+    username: u.username || null,
+    displayName: u.displayName || null,
+    bio: u.bio || null,
+    avatarHash: u.avatarHash || null,
+  };
+}
+
+export function nameOf(p: Pick<Profile, "displayName" | "username" | "id"> | undefined): string {
+  if (!p) return "someone";
+  return p.displayName ?? (p.username ? `@${p.username}` : p.id);
+}
+
+interface ProfilesStore {
+  byId: Record<string, Profile>;
+  put: (profiles: Profile[]) => void;
+  attach: (ws: WsClient) => void;
+}
+
+let stopListening: (() => void) | undefined;
+
+export const useProfiles = create<ProfilesStore>()((set, get) => ({
+  byId: {},
+
+  put: (profiles) => {
+    const byId = get().byId;
+    const changed = profiles.filter((p) => !same(byId[p.id], p));
+    if (changed.length === 0) return;
+    const next = { ...byId };
+    for (const p of changed) next[p.id] = p;
+    set({ byId: next });
+  },
+
+  attach: (ws) => {
+    stopListening?.();
+    stopListening = ws.addPushListener((payload) => {
+      if (payload.case !== "userUpdated" || !payload.value.user) return;
+      const p = fromProto(payload.value.user);
+      get().put([p]);
+      const auth = useAuth.getState();
+      if (auth.user?.id === p.id) {
+        auth.setUser({
+          ...auth.user,
+          username: p.username,
+          display_name: p.displayName,
+          bio: p.bio,
+          avatar_hash: p.avatarHash,
+        });
+      }
+    });
+  },
+}));
+
+function same(a: Profile | undefined, b: Profile): boolean {
+  return (
+    !!a &&
+    a.username === b.username &&
+    a.displayName === b.displayName &&
+    a.bio === b.bio &&
+    a.avatarHash === b.avatarHash
+  );
+}
+
+export function useProfile(id: string | bigint | undefined): Profile | undefined {
+  return useProfiles((s) => (id === undefined ? undefined : s.byId[id.toString()]));
+}

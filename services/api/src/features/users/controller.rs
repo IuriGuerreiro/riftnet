@@ -3,11 +3,9 @@ use std::time::Duration;
 use axum::Json;
 use axum::body::Bytes;
 use axum::extract::{Path, Query, State};
-use axum::http::header;
-use axum::response::{IntoResponse, Redirect, Response};
 
 use super::dto::{
-    AvatarQuery, SearchUsersQuery, SetUsernameRequest, UpdateProfileRequest, UserDto,
+    AvatarQuery, AvatarUrlDto, SearchUsersQuery, SetUsernameRequest, UpdateProfileRequest, UserDto,
 };
 use super::service::ProfileChanges;
 use crate::app::AppState;
@@ -107,17 +105,13 @@ pub async fn get_user(
     Ok(Json(state.users.get(id).await?.into()))
 }
 
-/// 302 to a short-lived signed link. Cached a bit less than the link lives.
+/// A short-lived (5 min) signed link to the image, like attachment downloads.
 pub async fn get_avatar(
     _auth: AuthUser,
     State(state): State<AppState>,
     Path((id, hash)): Path<(i64, String)>,
     Query(query): Query<AvatarQuery>,
-) -> Result<Response, ApiError> {
+) -> Result<Json<AvatarUrlDto>, ApiError> {
     let url = state.users.avatar_url(id, &hash, query.size).await?;
-    Ok((
-        [(header::CACHE_CONTROL, "private, max-age=240")],
-        Redirect::to(&url),
-    )
-        .into_response())
+    Ok(Json(AvatarUrlDto { url }))
 }

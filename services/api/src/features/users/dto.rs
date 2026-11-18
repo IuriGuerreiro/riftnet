@@ -60,3 +60,8 @@ pub struct UpdateProfileRequest {
 pub struct AvatarQuery {
     pub size: Option<u32>,
 }
+
+#[derive(Debug, Serialize)]
+pub struct AvatarUrlDto {
+    pub url: String,
+}

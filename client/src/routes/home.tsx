@@ -5,6 +5,8 @@ import { downloadFile, formatSize, uploadFile } from "../api/attachments";
 import { useLogout } from "../api/auth";
 import type { Friend } from "../api/types";
 import { CallBar, IncomingCall, RemoteScreen } from "../call/CallBar";
+import { Avatar } from "../components/Avatar";
+import { ProfilePanel } from "../components/ProfilePanel";
 import { StatusDot } from "../components/StatusDot";
 import type { Conversation } from "../gen/v1/conversations_pb";
 import type { Attachment } from "../gen/v1/messages_pb";
@@ -13,6 +15,7 @@ import { type ChatMessage, isGroup, useChat } from "../stores/chat";
 import { useConnection } from "../stores/connection";
 import { useFriends } from "../stores/friends";
 import { usePresence } from "../stores/presence";
+import { fromJson, fromProto, nameOf, useProfiles } from "../stores/profiles";
 import { typingText, useTyping } from "../stores/typing";
 
 const dot = { online: "bg-green-500", connecting: "bg-yellow-500", offline: "bg-red-500" };
@@ -38,9 +41,29 @@ export function HomePage() {
     void useFriends.getState().attach(ws);
     if (me) useTyping.getState().attach(ws, me.id);
     usePresence.getState().attach(ws);
+    useProfiles.getState().attach(ws);
   }, [ws, me]);
 
-  const friends = useFriends((s) => s.list.friends);
+  const friendList = useFriends((s) => s.list);
+  const friends = friendList.friends;
+  const profiles = useProfiles((s) => s.byId);
+  const [editingProfile, setEditingProfile] = useState(false);
+  useEffect(() => {
+    const { put } = useProfiles.getState();
+    const known = useProfiles.getState().byId;
+    const fresh = (p: { id: string }) => !known[p.id];
+    put(
+      [
+        ...(me ? [fromProto(me)] : []),
+        ...chat.conversations.flatMap((c) => c.members.map(fromProto)),
+        ...[...friendList.friends, ...friendList.incoming, ...friendList.outgoing].map((f) =>
+          fromJson(f.user),
+        ),
+      ].filter(fresh),
+    );
+  }, [me, chat.conversations, friendList]);
+  const nameFor = (id: bigint | string | undefined) =>
+    id === undefined ? "someone" : nameOf(profiles[id.toString()]);
   const watchedIds = [
     ...friends.map((f) => f.user.id),
     ...chat.conversations.flatMap((c) => c.members.map((m) => m.id.toString())),
@@ -54,24 +77,27 @@ export function HomePage() {
 
   const selected = chat.conversations.find((c) => c.id === chat.selected);
   const other = (c: Conversation) => c.members.find((m) => m.id !== me?.id) ?? c.members[0];
-  const title = (c: Conversation) => (isGroup(c) ? `# ${c.name}` : `@${other(c)?.username}`);
+  const title = (c: Conversation) => (isGroup(c) ? `# ${c.name}` : nameFor(other(c)?.id));
 
   return (
     <div className="flex h-full w-full max-w-5xl overflow-hidden rounded-xl bg-zinc-900 shadow-lg">
       <RemoteScreen />
-      <IncomingCall
-        ws={ws}
-        callerName={(id) =>
-          chat.conversations.flatMap((c) => c.members).find((m) => m.id === id)?.username ??
-          "someone"
-        }
-      />
+      <IncomingCall ws={ws} callerName={(id) => nameFor(id)} />
       {}
+      {editingProfile && me && (
+        <ProfilePanel myId={me.id.toString()} onClose={() => setEditingProfile(false)} />
+      )}
       <aside className="flex w-64 shrink-0 flex-col border-r border-zinc-800">
         <header className="space-y-1 border-b border-zinc-800 p-4">
-          <p className="font-bold">
-            <span className="text-brand">{me?.username ?? "…"}</span>
-          </p>
+          <button
+            className="flex w-full items-center gap-2 rounded-lg text-left font-bold hover:bg-zinc-800"
+            title="Edit profile"
+            disabled={!me}
+            onClick={() => setEditingProfile(true)}
+          >
+            <Avatar userId={me?.id} />
+            <span className="truncate text-brand">{me ? nameFor(me.id) : "…"}</span>
+          </button>
           <p className="flex items-center gap-2 text-xs text-zinc-400">
             <span className={`size-2 rounded-full ${dot[status]}`} />
             {status}
@@ -93,6 +119,7 @@ export function HomePage() {
               onClick={() => ws && chat.select(ws, c.id)}
               className={`flex w-full items-center gap-2 px-4 py-2 text-left text-sm hover:bg-zinc-800 ${c.id === chat.selected ? "bg-zinc-800 text-brand" : ""}`}
             >
+              {!isGroup(c) && <Avatar userId={other(c)?.id} size="xs" />}
               {!isGroup(c) && <StatusDot userId={other(c)?.id} />}
               <span className="truncate">{title(c)}</span>
             </button>
@@ -127,6 +154,7 @@ export function HomePage() {
             ) : (
               <header className="flex items-center justify-between border-b border-zinc-800 p-4 font-semibold">
                 <span className="flex items-center gap-2">
+                  <Avatar userId={other(selected)?.id} />
                   <StatusDot userId={other(selected)?.id} />
                   {title(selected)}
                 </span>
@@ -213,6 +241,7 @@ function GroupHeader({
   onLeave: () => void;
 }) {
   const [username, setUsername] = useState("");
+  const profiles = useProfiles((s) => s.byId);
   return (
     <header className="space-y-2 border-b border-zinc-800 p-4">
       <div className="flex items-center gap-3">
@@ -232,7 +261,7 @@ function GroupHeader({
         </button>
       </div>
       <p className="text-xs text-zinc-400">
-        {group.members.map((m) => `@${m.username}`).join(", ")}
+        {group.members.map((m) => nameOf(profiles[m.id.toString()])).join(", ")}
       </p>
       {group.members.length < 5 && (
         <form
@@ -261,7 +290,8 @@ function FriendsPanel({ onDm }: { onDm: (username: string) => void }) {
   const { list, error, sendRequest, accept, deleteRequest, removeFriend } = useFriends();
   const [open, setOpen] = useState(true);
   const [username, setUsername] = useState("");
-  const name = (f: Friend) => `@${f.user.username ?? f.user.id}`;
+  const profiles = useProfiles((s) => s.byId);
+  const name = (f: Friend) => nameOf(profiles[f.user.id] ?? fromJson(f.user));
   const pendingCount = list.incoming.length;
 
   return (
@@ -300,7 +330,12 @@ function FriendsPanel({ onDm }: { onDm: (username: string) => void }) {
           {error && <p className="text-xs text-red-400">{error}</p>}
 
           {list.incoming.map((f) => (
-            <FriendRow key={f.user.id} label={name(f)} hint="wants to be friends">
+            <FriendRow
+              key={f.user.id}
+              label={name(f)}
+              avatarId={f.user.id}
+              hint="wants to be friends"
+            >
               <RowButton onClick={() => accept(f.user.id)} className="text-green-400">
                 Accept
               </RowButton>
@@ -310,14 +345,14 @@ function FriendsPanel({ onDm }: { onDm: (username: string) => void }) {
             </FriendRow>
           ))}
           {list.outgoing.map((f) => (
-            <FriendRow key={f.user.id} label={name(f)} hint="request sent">
+            <FriendRow key={f.user.id} label={name(f)} avatarId={f.user.id} hint="request sent">
               <RowButton onClick={() => deleteRequest(f.user.id)} className="text-zinc-400">
                 Cancel
               </RowButton>
             </FriendRow>
           ))}
           {list.friends.map((f) => (
-            <FriendRow key={f.user.id} label={name(f)} userId={f.user.id}>
+            <FriendRow key={f.user.id} label={name(f)} avatarId={f.user.id} userId={f.user.id}>
               <RowButton
                 onClick={() => f.user.username && onDm(f.user.username)}
                 className="text-brand"
@@ -353,15 +388,18 @@ function FriendRow({
   label,
   hint,
   userId,
+  avatarId,
   children,
 }: {
   label: string;
   hint?: string;
   userId?: string;
+  avatarId: string;
   children: React.ReactNode;
 }) {
   return (
     <div className="flex items-center gap-2 text-sm">
+      <Avatar userId={avatarId} size="xs" />
       {userId && <StatusDot userId={userId} />}
       <div className="min-w-0 flex-1">
         <p className="truncate">{label}</p>
@@ -480,6 +518,7 @@ function MessageRow({ m, mine }: { m: ChatMessage; mine: boolean }) {
 
   return (
     <div className={`group flex items-center gap-2 ${mine ? "justify-end" : ""}`}>
+      {!mine && <Avatar userId={m.authorId} size="xs" />}
       {canChange && (
         <div className="hidden gap-1 text-xs text-zinc-400 group-hover:flex">
           <button
@@ -526,9 +565,8 @@ function MessageRow({ m, mine }: { m: ChatMessage; mine: boolean }) {
 
 function TypingIndicator({ conversation }: { conversation: Conversation }) {
   const typing = useTyping((s) => s.typing[conversation.id.toString()]);
-  const names = Object.keys(typing ?? {}).map(
-    (id) => conversation.members.find((m) => m.id.toString() === id)?.username ?? "someone",
-  );
+  const profiles = useProfiles((s) => s.byId);
+  const names = Object.keys(typing ?? {}).map((id) => nameOf(profiles[id]));
   return <p className="h-5 truncate px-4 text-xs italic text-zinc-400">{typingText(names)}</p>;
 }
 

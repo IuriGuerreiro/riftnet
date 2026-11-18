@@ -13,7 +13,7 @@ export class ApiError extends Error {
 }
 
 interface Options {
-  method?: "GET" | "POST" | "PUT" | "DELETE";
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
   raw?: Blob;
   headers?: Record<string, string>;
