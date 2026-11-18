@@ -109,7 +109,15 @@ The app refreshes automatically shortly before the access token expires.
 
 ## Logout
 
-`POST /auth/logout` revokes the current device and all its refresh tokens. Access tokens die on their own within 15 min.
+`POST /auth/logout` revokes the current device and all its refresh tokens. HTTP access tokens still work until they expire (max 15 min).
+
+Open sockets are closed right away:
+
+1. Revoking a device (logout or refresh-token reuse) sets `devices.revoked_at`, then publishes an empty NATS message on `device.<device_id>.revoked`.
+2. Every socket of that device listens on that subject and closes with **4003 `session_revoked`**.
+3. The app clears its session and goes to `/login`.
+
+The DB is the source of truth. If the NATS publish fails, the socket still closes when its token expires (**4002**). See [protocol.md](protocol.md#connecting).
 
 ## Endpoints (HTTP)
 

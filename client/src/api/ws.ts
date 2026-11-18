@@ -58,6 +58,15 @@ export class WsClient {
     return { ws, user: reply.value.user };
   }
 
+  async reauthenticate(accessToken: string): Promise<void> {
+    const reply = await this.request({
+      case: "authenticate",
+      value: create(AuthenticateSchema, { accessToken }),
+    });
+    if (reply.case !== "authOk")
+      throw new WsError("bad_reply", `expected authOk, got ${reply.case}`);
+  }
+
   request(payload: Payload): Promise<Payload> {
     const id = this.nextId++;
     this.ws.send(toBinary(EnvelopeSchema, create(EnvelopeSchema, { id, payload })));
