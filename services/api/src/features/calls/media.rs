@@ -22,7 +22,7 @@ pub struct NatsMediaClient {
 impl NatsMediaClient {
     pub async fn connect(url: &str) -> anyhow::Result<Self> {
         Ok(Self {
-            client: async_nats::connect(url).await?,
+            client: common::nats::connect(url).await?,
         })
     }
 }

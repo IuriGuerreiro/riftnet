@@ -67,6 +67,7 @@ services:
       ZITADEL_EXTERNALDOMAIN: zitadel
       ZITADEL_EXTERNALPORT: 8080
       ZITADEL_EXTERNALSECURE: "false"
+      ZITADEL_TLS_ENABLED: "false" # so the `ready` healthcheck uses plain HTTP too
       ZITADEL_DATABASE_POSTGRES_HOST: postgres
       ZITADEL_DATABASE_POSTGRES_PORT: 5432
       ZITADEL_DATABASE_POSTGRES_DATABASE: zitadel
@@ -89,8 +90,24 @@ services:
       retries: 60
       start_period: 60s
     depends_on:
+      secrets-init: { condition: service_completed_successfully }
       postgres: { condition: service_healthy }
     networks: [data]
+
+  # Zitadel runs as uid 1000 and writes the api's PAT into the shared volume.
+  # Also creates the api's token signing key once (32 random bytes, base64url).
+  # Losing it logs everyone out, so it lives in the volume and is never replaced.
+  secrets-init:
+    image: alpine:3.20
+    command:
+      - sh
+      - -c
+      - |
+        chown 1000:1000 /secrets
+        k=/secrets/api_signing_key
+        [ -s $$k ] || { umask 077; head -c 32 /dev/urandom | base64 | tr '+/' '-_' | tr -d '=\n' > $$k; }
+    volumes: [secrets:/secrets]
+    network_mode: none
 
   postgres:
     <<: *restart
