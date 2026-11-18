@@ -1,15 +1,18 @@
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 
 import { downloadFile, formatSize, uploadFile } from "../api/attachments";
 import { useLogout } from "../api/auth";
-import type { Friend } from "../api/types";
+import { http } from "../api/http";
+import type { Friend, User } from "../api/types";
 import { CallBar, IncomingCall, RemoteScreen } from "../call/CallBar";
 import { Avatar } from "../components/Avatar";
 import { ProfilePanel } from "../components/ProfilePanel";
 import { StatusDot } from "../components/StatusDot";
 import type { Conversation } from "../gen/v1/conversations_pb";
 import type { Attachment } from "../gen/v1/messages_pb";
+import { useAuth } from "../stores/auth";
 import { useCalls } from "../stores/calls";
 import { type ChatMessage, isGroup, useChat } from "../stores/chat";
 import { useConnection } from "../stores/connection";
@@ -287,6 +290,30 @@ function FriendsPanel({ onDm }: { onDm: (username: string) => void }) {
   const { list, error, sendRequest, accept, deleteRequest, removeFriend } = useFriends();
   const [open, setOpen] = useState(true);
   const [username, setUsername] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const userId = useAuth((s) => s.user?.id);
+  const query = username.trim().toLowerCase();
+  const validQuery = /^[a-z0-9_.]{1,32}$/.test(query);
+  const searchReady = open && !!userId && validQuery && query === debouncedQuery;
+  const search = useQuery({
+    queryKey: ["users", "search", userId, debouncedQuery],
+    enabled: searchReady,
+    queryFn: () => http<User[]>(`/users/search?${new URLSearchParams({ q: debouncedQuery })}`),
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+  const addFriend = useMutation({
+    mutationFn: ({ target }: { target: string; input: string }) => sendRequest(target),
+    onSuccess: (sent, { input }) => {
+      if (sent) setUsername((current) => (current === input ? "" : current));
+    },
+  });
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedQuery(query), 250);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+
   const profiles = useProfiles((s) => s.byId);
   const name = (f: Friend) => nameOf(profiles[f.user.id] ?? fromJson(f.user));
   const pendingCount = list.incoming.length;
@@ -310,21 +337,79 @@ function FriendsPanel({ onDm }: { onDm: (username: string) => void }) {
         <div className="max-h-72 space-y-2 overflow-y-auto px-3 pb-3">
           <form
             className="flex gap-2"
-            onSubmit={async (e) => {
+            onSubmit={(e) => {
               e.preventDefault();
-              if (!username.trim()) return;
-              if (await sendRequest(username.trim())) setUsername("");
+              if (validQuery && !addFriend.isPending) {
+                addFriend.mutate({ target: query, input: username });
+              }
             }}
           >
             <input
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="add friend"
+              aria-label="Search by username"
+              placeholder="Search by username"
               className={field}
             />
-            <button className="rounded-md bg-zinc-700 px-2 text-sm hover:bg-zinc-600">Add</button>
+            <button
+              disabled={!validQuery || addFriend.isPending}
+              className="rounded-md bg-zinc-700 px-2 text-sm hover:bg-zinc-600 disabled:opacity-50"
+            >
+              Add
+            </button>
           </form>
           {error && <p className="text-xs text-red-400">{error}</p>}
+          {query && !validQuery && (
+            <p className="text-xs text-zinc-400">Use 1–32 letters, numbers, underscores or dots.</p>
+          )}
+          {validQuery && (!searchReady || search.isPending) && (
+            <p role="status" className="text-xs text-zinc-400">
+              Searching…
+            </p>
+          )}
+          {searchReady && search.isError && (
+            <p role="alert" className="text-xs text-red-400">
+              {search.error.message}
+            </p>
+          )}
+          {searchReady && search.isSuccess && search.data.length === 0 && (
+            <p role="status" className="text-xs text-zinc-400">
+              No matching usernames.
+            </p>
+          )}
+          {searchReady &&
+            search.data?.map((user) => {
+              const target = user.username;
+              if (!target) return null;
+              const isFriend = list.friends.some((friend) => friend.user.id === user.id);
+              const sent = list.outgoing.some((friend) => friend.user.id === user.id);
+              const incoming = list.incoming.some((friend) => friend.user.id === user.id);
+              return (
+                <div key={user.id} className="flex items-center justify-between gap-2 text-sm">
+                  <div className="min-w-0">
+                    <p className="truncate">{user.display_name ?? target}</p>
+                    {user.display_name && (
+                      <p className="truncate text-xs text-zinc-400">@{target}</p>
+                    )}
+                  </div>
+                  {isFriend || sent ? (
+                    <span className="shrink-0 text-xs text-zinc-400">
+                      {isFriend ? "Friend" : "Request sent"}
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      aria-label={`${incoming ? "Accept request from" : "Add"} @${target}`}
+                      disabled={addFriend.isPending}
+                      className="shrink-0 text-xs text-brand hover:underline disabled:opacity-50"
+                      onClick={() => addFriend.mutate({ target, input: username })}
+                    >
+                      {incoming ? "Accept" : "Add"}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
 
           {list.incoming.map((f) => (
             <FriendRow
