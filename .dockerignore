@@ -1,0 +1,9 @@
+target
+**/node_modules
+**/dist
+client/src/gen
+client/src-tauri/gen
+infra/.secrets
+infra/prod/.env
+infra/prod/media/.env
+.git

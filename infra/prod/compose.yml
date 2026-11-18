@@ -1,0 +1,173 @@
+# Prod prototype, main box. Nothing publishes a host port: the public way in
+# is Cloudflare Tunnel, and media (on another server) reaches NATS over Tailscale.
+# Start: docker compose -f infra/prod/compose.yml --env-file infra/prod/.env up -d --build
+name: discord2-prod
+
+x-restart: &restart
+  restart: unless-stopped
+
+services:
+  cloudflared:
+    <<: *restart
+    image: cloudflare/cloudflared:2025.11.1
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN}
+    networks: [edge]
+
+  web:
+    <<: *restart
+    build:
+      context: ../..
+      dockerfile: infra/prod/web.Dockerfile
+      args:
+        VITE_API_HTTP: https://api.${DOMAIN}
+        VITE_API_WS: wss://api.${DOMAIN}/ws
+    networks: [edge]
+
+  api:
+    <<: *restart
+    build:
+      context: ../..
+      dockerfile: infra/prod/rust.Dockerfile
+      args: { BIN: api }
+    environment:
+      API_ADDR: 0.0.0.0:7100
+      DATABASE_URL: postgres://app:${POSTGRES_PASSWORD}@postgres:5432/app
+      NATS_URL: nats://app:${NATS_PASSWORD}@nats:4222
+      REDIS_URL: redis://redis:6379
+      SCYLLA_NODES: scylla:9042
+      ZITADEL_URL: http://zitadel:8080
+      ZITADEL_PAT_FILE: /secrets/api.pat
+      API_SIGNING_KEY_FILE: /secrets/api_signing_key
+      S3_ENDPOINT: http://minio:9000
+      S3_PUBLIC_ENDPOINT: https://files.${DOMAIN}
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      CORS_ORIGINS: https://app.${DOMAIN},tauri://localhost,http://tauri.localhost
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+    volumes: [secrets:/secrets]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:7100/health"]
+      interval: 10s
+      retries: 30
+    depends_on:
+      postgres: { condition: service_healthy }
+      zitadel: { condition: service_healthy }
+      scylla: { condition: service_started }
+    networks: [edge, data, storage]
+
+  # Internal only: the api talks to it, browsers never do.
+  zitadel:
+    <<: *restart
+    image: ghcr.io/zitadel/zitadel:v4.6.2
+    command: start-from-init --masterkeyFromEnv --tlsMode disabled
+    environment:
+      ZITADEL_MASTERKEY: ${ZITADEL_MASTERKEY}
+      ZITADEL_EXTERNALDOMAIN: zitadel
+      ZITADEL_EXTERNALPORT: 8080
+      ZITADEL_EXTERNALSECURE: "false"
+      ZITADEL_TLS_ENABLED: "false" # so the `ready` healthcheck uses plain HTTP too
+      ZITADEL_DATABASE_POSTGRES_HOST: postgres
+      ZITADEL_DATABASE_POSTGRES_PORT: 5432
+      ZITADEL_DATABASE_POSTGRES_DATABASE: zitadel
+      ZITADEL_DATABASE_POSTGRES_USER_USERNAME: zitadel
+      ZITADEL_DATABASE_POSTGRES_USER_PASSWORD: ${ZITADEL_DB_PASSWORD}
+      ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE: disable
+      ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: app
+      ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD: ${POSTGRES_PASSWORD}
+      ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: disable
+      ZITADEL_SYSTEMDEFAULTS_PASSWORDHASHER_HASHER_ALGORITHM: bcrypt
+      ZITADEL_SYSTEMDEFAULTS_PASSWORDHASHER_HASHER_COST: 12
+      ZITADEL_FIRSTINSTANCE_PATPATH: /secrets/api.pat
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME: api-service
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME: api
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE: "2099-01-01T00:00:00Z"
+    volumes: [secrets:/secrets]
+    healthcheck:
+      test: ["CMD", "/app/zitadel", "ready"]
+      interval: 10s
+      retries: 60
+      start_period: 60s
+    depends_on:
+      secrets-init: { condition: service_completed_successfully }
+      postgres: { condition: service_healthy }
+    networks: [data]
+
+  # Zitadel runs as uid 1000 and writes the api's PAT into the shared volume.
+  # Also creates the api's token signing key once (32 random bytes, base64url).
+  # Losing it logs everyone out, so it lives in the volume and is never replaced.
+  secrets-init:
+    image: alpine:3.20
+    command:
+      - sh
+      - -c
+      - |
+        chown 1000:1000 /secrets
+        k=/secrets/api_signing_key
+        [ -s $$k ] || { umask 077; head -c 32 /dev/urandom | base64 | tr '+/' '-_' | tr -d '=\n' > $$k; }
+    volumes: [secrets:/secrets]
+    network_mode: none
+
+  postgres:
+    <<: *restart
+    image: postgres:17
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: app
+    volumes:
+      - postgres:/var/lib/postgresql/data
+      - ../postgres-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app"]
+      interval: 5s
+      retries: 30
+    networks: [data]
+
+  scylla:
+    <<: *restart
+    image: scylladb/scylla:2025.1
+    command: --smp 1 --memory 1G --overprovisioned 1 --developer-mode 1
+    volumes: [scylla:/var/lib/scylla]
+    networks: [data]
+
+  redis:
+    <<: *restart
+    image: redis:8
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes: [redis:/data]
+    networks: [data]
+
+  # The only port on the host: bound to the Tailscale IP so just the media
+  # server can reach it.
+  nats:
+    <<: *restart
+    image: nats:2.11
+    command: ["--user", "app", "--pass", "${NATS_PASSWORD}"]
+    ports: ["${TAILSCALE_IP}:4222:4222"]
+    networks: [data, nats]
+
+  # Browsers download files via presigned URLs on files.<domain>.
+  minio:
+    <<: *restart
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes: [minio:/data]
+    networks: [storage, edge]
+
+networks:
+  edge:
+  data: { internal: true }
+  storage: { internal: true }
+  nats: # not internal, so the Tailscale port can be published
+
+volumes:
+  postgres:
+  scylla:
+  redis:
+  minio:
+  secrets:

@@ -19,8 +19,8 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!(addr = %socket.local_addr()?, "media UDP listening");
 
     let sfu = sfu::start(socket)?;
-    let nats = async_nats::connect(&nats_url).await?;
-    tracing::info!(nats_url, "media ready");
+    let nats = common::nats::connect(&nats_url).await?;
+    tracing::info!("media ready");
     control::serve(nats, sfu).await
 }
 
