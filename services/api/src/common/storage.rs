@@ -269,7 +269,7 @@ impl FileStore for S3FileStore {
 
     async fn view_url(&self, key: &str, ttl: Duration) -> anyhow::Result<String> {
         let req = self
-            .client
+            .presigner
             .get_object()
             .bucket(&self.bucket)
             .key(key)
