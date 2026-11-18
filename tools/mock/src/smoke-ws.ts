@@ -118,11 +118,12 @@ check(
   e?.case === "error" && e.value.code === "invalid_token" && r.closeCode === 4001,
 );
 
-r = await talk([auth(access_token), auth(access_token)], 2);
-const e2 = r.replies[1]?.payload;
+r = await talk([auth(access_token), auth(access_token), auth(bob.token)], 3);
+check("re-authenticate same session → authOk", r.replies[1]?.payload.case === "authOk");
+const e2 = r.replies[2]?.payload;
 check(
-  "second authenticate → already_authenticated",
-  e2?.case === "error" && e2.value.code === "already_authenticated",
+  "re-authenticate as someone else → wrong_session",
+  e2?.case === "error" && e2.value.code === "wrong_session",
 );
 
 const openDm = (username: string) => ({
@@ -285,7 +286,11 @@ check(
   "alice's other device gets it too",
   alicePhone.pushes.some((e) => created(e)?.id === sent?.id),
 );
-check("non-member gets nothing", carolLive.pushes.length === 0);
+check(
+  "non-member gets no message",
+  !carolLive.pushes.some((e) => e.payload.case === "messageCreated"),
+  carolLive.pushes.map((e) => e.payload.case).join(","),
+);
 for (const l of [bobLive, alicePhone, carolLive]) l.stop();
 
 const sync = (conversationId: bigint, afterSeq: bigint) => ({

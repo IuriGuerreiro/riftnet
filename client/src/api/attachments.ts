@@ -85,6 +85,11 @@ export async function downloadFile(id: bigint, filename: string, expected: Uint8
   setTimeout(() => URL.revokeObjectURL(href), 10_000);
 }
 
+export async function previewUrl(id: bigint): Promise<string> {
+  const { url } = await http<DownloadDto>(`/attachments/${id}/preview`);
+  return url;
+}
+
 export function formatSize(bytes: bigint | number): string {
   const n = Number(bytes);
   if (n < 1024) return `${n} B`;

@@ -69,7 +69,9 @@ impl MessageService {
             .claim_nonce(conversation_id, me, nonce, self.ids.next_id() as i64)
             .await?;
         if !is_first_send {
-            if let Some(existing) = self.repo.get(conversation_id, id).await? {
+            if let Some(mut existing) = self.repo.get(conversation_id, id).await? {
+                self.sign_previews(std::slice::from_mut(&mut existing))
+                    .await;
                 return Ok(existing);
             }
             if self.repo.was_deleted(conversation_id, id).await? {
@@ -84,7 +86,7 @@ impl MessageService {
             .attach(me, conversation_id, id, attachment_ids)
             .await?;
         let seq = self.conversations.next_seq(conversation_id).await?;
-        let message = Message {
+        let mut message = Message {
             id,
             conversation_id,
             author_id: me,
@@ -95,6 +97,8 @@ impl MessageService {
             attachments,
         };
         self.repo.insert(&message).await?;
+        // WARN: sign after the insert so the link is never stored, and before the push so all members get it.
+        self.sign_previews(std::slice::from_mut(&mut message)).await;
 
         let push = Payload::MessageCreated(MessageCreated {
             message: Some((&message).into()),
@@ -113,10 +117,12 @@ impl MessageService {
     ) -> Result<Vec<Message>, ApiError> {
         let conversation = self.member_conversation(me, conversation_id).await?;
         let limit = if limit == 0 { 50 } else { limit.min(100) } as usize;
-        Ok(self
+        let mut messages = self
             .repo
             .history(conversation_id, before_id, limit, conversation.id)
-            .await?)
+            .await?;
+        self.sign_previews(&mut messages).await;
+        Ok(messages)
     }
 
     #[tracing::instrument(name = "messages.sync", skip_all, fields(user.id = me, conversation.id = conversation_id))]
@@ -145,6 +151,7 @@ impl MessageService {
         if messages.len() > MAX_SYNC || changes.len() > MAX_SYNC {
             messages.truncate(MAX_SYNC);
             messages.sort_by_key(|m| m.seq);
+            self.sign_previews(&mut messages).await;
             return Ok(SyncResult {
                 messages,
                 complete: false,
@@ -180,6 +187,8 @@ impl MessageService {
         if let Some(last) = changes.last() {
             result.last_seq = result.last_seq.max(last.seq);
         }
+        self.sign_previews(&mut messages).await;
+        self.sign_previews(&mut result.edited).await;
         result.messages = messages;
         Ok(result)
     }
@@ -209,6 +218,7 @@ impl MessageService {
         if !self.repo.edit(&message, seq).await? {
             return Err(message_not_found());
         }
+        self.sign_previews(std::slice::from_mut(&mut message)).await;
 
         let push = Payload::MessageUpdated(MessageUpdated {
             message: Some((&message).into()),
@@ -250,6 +260,18 @@ impl MessageService {
         });
         self.push(&conversation.member_ids, push).await;
         Ok(Some(seq))
+    }
+
+    /// Adds inline preview links to images/videos. Encrypted messages are
+    /// skipped: their files are ciphertext a browser can't show.
+    async fn sign_previews(&self, messages: &mut [Message]) {
+        for m in messages.iter_mut().filter(|m| m.encryption == 0) {
+            if m.attachments.iter().any(|a| a.is_media()) {
+                self.attachments
+                    .sign_previews(m.conversation_id, &mut m.attachments)
+                    .await;
+            }
+        }
     }
 
     async fn push(&self, member_ids: &[i64], payload: Payload) {

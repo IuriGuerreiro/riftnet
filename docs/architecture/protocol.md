@@ -73,15 +73,24 @@ sequenceDiagram
 ```
 
 - **The first frame must be `authenticate`.** Browsers can't set headers on a WebSocket, so the token goes in a frame.
-- Close code **4001** = not authenticated. The client does not retry it; any other close → reconnect after 1s, 2s, 4s… (max 30s).
+- Close codes. Before each close the server sends `{id: 0, error {code}}` with the same reason.
+
+  | Code | Reason            | When                                 | Client does                          |
+  | ---- | ----------------- | ------------------------------------ | ------------------------------------ |
+  | 4001 | `invalid_token` … | bad, missing or late `authenticate`  | stops, shows the error               |
+  | 4002 | `token_expired`   | access token ran out, no re-auth     | refreshes the token, reconnects now  |
+  | 4003 | `session_revoked` | device logged out or revoked         | clears the session, goes to `/login` |
+  | 1011 | `unavailable` | server couldn't check revocation (DB down) | reconnects with backoff |
+  | else | —                 | network drop, server restart         | reconnects after 1s, 2s, 4s… (max 30s) |
 - After auth, the socket remembers `(user_id, device_id)`; later frames don't carry the token.
-- Known gap: an open socket stays logged in after its token expires or the device is revoked. Later: kick it on revoke.
+- **Re-auth:** send `authenticate {access_token}` again on the open socket to move its expiry. The token must be for the same user and device, or the reply is `error {wrong_session}` and the old expiry still applies. The app does this about 25s before expiry.
+- **Revoke:** the socket listens on NATS `device.<device_id>.revoked` and closes with 4003 when a message arrives. It also checks `devices.revoked_at` once at connect, after the NATS subscribe is confirmed. Revoke and expiry win over a pending request. See [identity-auth.md](identity-auth.md#logout).
 
 ### Requests
 
 | Client sends                                      | Reply                          | Notes                        |
 | ------------------------------------------------- | ------------------------------ | ---------------------------- |
-| `authenticate {access_token}`                     | `auth_ok {user}`               | first frame only             |
+| `authenticate {access_token}`                     | `auth_ok {user}`               | first frame; again to re-auth |
 | `ping`                                            | `pong`                         |                              |
 | `open_dm {username}`                              | `conversation`                 | creates it the first time    |
 | `list_conversations`                              | `conversations`                |                              |

@@ -3,6 +3,8 @@ export interface User {
   id: string;
   username: string | null;
   display_name: string | null;
+  bio?: string | null;
+  avatar_hash?: string | null;
 }
 
 export interface Session {

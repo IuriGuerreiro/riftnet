@@ -6,8 +6,15 @@ message User {
   uint64 id = 1;
   string username = 2;
   string display_name = 3;
+  // Hex BLAKE3 of the current avatar; empty = no avatar.
+  // Image link: GET /users/{id}/avatar/{avatar_hash}?size=128|512 -> { url } (WebP).
+  // A new hash means a new image, so clients can cache by hash forever.
+  string avatar_hash = 4;
+  string bio = 5; // empty = not set
 }
 
+// Pushed to the user, their friends and their DM/group members
+// when username, display name, bio or avatar changes.
 message UserUpdated {
   User user = 1;
 }

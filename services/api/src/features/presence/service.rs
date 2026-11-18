@@ -9,7 +9,7 @@ use super::store::{Op, PresenceStore};
 use crate::common::error::ApiError;
 use crate::common::events::EventBus;
 use crate::features::conversations::repository::ConversationRepo;
-use crate::features::friends::models::FriendshipStatus;
+use crate::features::friends::audience::audience;
 use crate::features::friends::repository::FriendRepo;
 
 pub const MAX_PRESENCE_IDS: usize = 200;
@@ -115,19 +115,7 @@ impl PresenceService {
     }
 
     async fn audience(&self, user_id: i64) -> Result<HashSet<i64>, ApiError> {
-        let mut ids: HashSet<i64> = self
-            .friends
-            .list_for_user(user_id)
-            .await?
-            .iter()
-            .filter(|row| row.status == FriendshipStatus::Accepted)
-            .map(|row| row.other(user_id))
-            .collect();
-        for conv in self.conversations.list_for_user(user_id).await? {
-            ids.extend(conv.member_ids);
-        }
-        ids.remove(&user_id);
-        Ok(ids)
+        audience(&*self.friends, &*self.conversations, user_id).await
     }
 }
 
@@ -151,7 +139,7 @@ mod tests {
     use super::*;
     use crate::common::error::RepoError;
     use crate::features::conversations::models::{ConversationRecord, Kind};
-    use crate::features::friends::models::{Friendship, ordered_pair};
+    use crate::features::friends::models::{Friendship, FriendshipStatus, ordered_pair};
     use crate::features::presence::store::MemoryPresenceStore;
 
     const ANA: i64 = 10;

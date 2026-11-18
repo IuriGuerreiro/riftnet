@@ -95,7 +95,12 @@ pub(super) fn attachment_blobs(m: &Message) -> Option<Vec<Vec<u8>>> {
     (!m.attachments.is_empty()).then(|| {
         m.attachments
             .iter()
-            .map(|a| v1::Attachment::from(a).encode_to_vec())
+            .map(|a| {
+                // WARN: preview links expire, so they are signed per response and never stored.
+                let mut a = v1::Attachment::from(a);
+                a.preview_url.clear();
+                a.encode_to_vec()
+            })
             .collect()
     })
 }
