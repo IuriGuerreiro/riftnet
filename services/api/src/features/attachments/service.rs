@@ -14,7 +14,7 @@ use super::repository::AttachmentRepo;
 use crate::common::error::ApiError;
 use crate::common::storage::FileStore;
 use crate::features::conversations::repository::ConversationRepo;
-use crate::features::messages::models::{MAX_ATTACHMENTS, MessageAttachment};
+use crate::features::messages::models::{MAX_ATTACHMENTS, MessageAttachment, is_media_type};
 
 /// What messages need from attachments: tie files to a message at send,
 /// let them go when it's deleted.
@@ -32,10 +32,15 @@ pub trait AttachmentLinker: Send + Sync {
     /// The message is being deleted: expire its files so the cleanup removes them.
     async fn release(&self, me: i64, conversation_id: i64, message_id: i64)
     -> Result<(), ApiError>;
+    /// Fills `preview_url` on images and videos. A file that can't be signed
+    /// just gets no preview; the message still goes out.
+    async fn sign_previews(&self, _conversation_id: i64, _attachments: &mut [MessageAttachment]) {}
 }
 
 /// How long a download link works once handed out.
 const DOWNLOAD_URL_TTL: Duration = Duration::from_secs(5 * 60);
+/// How long an inline preview link works (never past the file's own expiry).
+const PREVIEW_URL_TTL: Duration = Duration::from_secs(60 * 60);
 /// Uploads not finished after this long are thrown away.
 const STALE_UPLOAD: Duration = Duration::from_secs(24 * 60 * 60);
 const CLEANUP_BATCH: i64 = 100;
@@ -97,7 +102,7 @@ impl AttachmentService {
         self.check_member(me, new.conversation_id).await?;
 
         let id = self.ids.next_id() as i64;
-        let object_key = format!("attachments/{}/{id}", new.conversation_id);
+        let object_key = object_key(new.conversation_id, id);
         let upload_id = self.store.start_upload(&object_key, &content_type).await?;
         let upload_id_for_abort = upload_id.clone();
         let now = Utc::now();
@@ -263,6 +268,28 @@ impl AttachmentService {
         Ok((a, url))
     }
 
+    /// A fresh inline preview link, for when the one on the message ran out.
+    #[tracing::instrument(name = "attachments.preview", skip_all, fields(user.id = me, attachment.id = id))]
+    pub async fn preview(&self, me: i64, id: i64) -> Result<(Attachment, String), ApiError> {
+        let a = self
+            .repo
+            .get(id)
+            .await?
+            .filter(|a| a.is_ready() && a.message_id.is_some() && is_media_type(&a.content_type))
+            .ok_or(ApiError::NotFound)?;
+        let ttl = preview_ttl(
+            a.expires_at.timestamp_millis(),
+            Utc::now().timestamp_millis(),
+        )
+        .ok_or(ApiError::NotFound)?;
+        self.check_member(me, a.conversation_id).await?;
+        let url = self
+            .store
+            .preview_url(&a.object_key, &a.content_type, ttl)
+            .await?;
+        Ok((a, url))
+    }
+
     /// Deletes expired files and abandoned uploads. Returns how many went.
     #[tracing::instrument(name = "attachments.cleanup", skip_all)]
     pub async fn cleanup(&self, now: DateTime<Utc>) -> Result<usize, ApiError> {
@@ -338,6 +365,18 @@ impl AttachmentService {
     }
 }
 
+fn object_key(conversation_id: i64, id: i64) -> String {
+    format!("attachments/{conversation_id}/{id}")
+}
+
+/// 1h, cut short so the link dies with the file. None once it's expired.
+fn preview_ttl(expires_at_ms: i64, now_ms: i64) -> Option<Duration> {
+    let left = u64::try_from(expires_at_ms - now_ms)
+        .ok()
+        .filter(|ms| *ms > 0)?;
+    Some(PREVIEW_URL_TTL.min(Duration::from_millis(left)))
+}
+
 #[async_trait]
 impl AttachmentLinker for AttachmentService {
     #[tracing::instrument(name = "attachments.attach", skip_all, fields(user.id = me, message.id = message_id))]
@@ -383,6 +422,7 @@ impl AttachmentLinker for AttachmentService {
                 size: a.size,
                 blake3: a.blake3,
                 expires_at_ms: a.expires_at.timestamp_millis(),
+                preview_url: String::new(),
             })
             .collect())
     }
@@ -397,6 +437,25 @@ impl AttachmentLinker for AttachmentService {
             .repo
             .expire_for_message(message_id, me, conversation_id)
             .await?)
+    }
+
+    async fn sign_previews(&self, conversation_id: i64, attachments: &mut [MessageAttachment]) {
+        let now = Utc::now().timestamp_millis();
+        for a in attachments.iter_mut().filter(|a| a.is_media()) {
+            let Some(ttl) = preview_ttl(a.expires_at_ms, now) else {
+                continue;
+            };
+            match self
+                .store
+                .preview_url(&object_key(conversation_id, a.id), &a.content_type, ttl)
+                .await
+            {
+                Ok(url) => a.preview_url = url,
+                Err(err) => {
+                    tracing::warn!(error = %err, attachment.id = a.id, "preview sign failed")
+                }
+            }
+        }
     }
 }
 
@@ -680,6 +739,12 @@ mod tests {
         }
         async fn download_url(&self, key: &str, _: &str, _: Duration) -> anyhow::Result<String> {
             Ok(format!("https://files.test/{key}"))
+        }
+        async fn preview_url(&self, key: &str, _: &str, ttl: Duration) -> anyhow::Result<String> {
+            Ok(format!(
+                "https://files.test/{key}?inline&ttl={}",
+                ttl.as_secs()
+            ))
         }
     }
 
@@ -1001,5 +1066,45 @@ mod tests {
             clean_content_type("text/html\r\nX: y"),
             "application/octet-stream"
         );
+    }
+
+    fn file(id: i64, content_type: &str, expires_in_ms: i64) -> MessageAttachment {
+        MessageAttachment {
+            id,
+            filename: "f".into(),
+            content_type: content_type.into(),
+            size: 1,
+            blake3: vec![0; 32],
+            expires_at_ms: Utc::now().timestamp_millis() + expires_in_ms,
+            preview_url: String::new(),
+        }
+    }
+
+    #[tokio::test]
+    async fn previews_only_for_live_images_and_videos() {
+        let (svc, _, _) = service(100 << 20);
+        let day = 24 * 60 * 60 * 1000;
+        let mut files = vec![
+            file(1, "image/png", day),
+            file(2, "video/mp4", day),
+            file(3, "application/pdf", day),
+            file(4, "image/svg+xml", day),
+            file(5, "image/jpeg", -1),
+        ];
+        svc.sign_previews(DM, &mut files).await;
+        assert_eq!(
+            files[0].preview_url,
+            format!("https://files.test/attachments/{DM}/1?inline&ttl=3600")
+        );
+        assert!(!files[1].preview_url.is_empty());
+        assert!(files[2..].iter().all(|f| f.preview_url.is_empty()));
+    }
+
+    #[test]
+    fn preview_ttl_never_outlives_the_file() {
+        assert_eq!(preview_ttl(10_000_000, 0), Some(PREVIEW_URL_TTL));
+        assert_eq!(preview_ttl(5_000, 0), Some(Duration::from_secs(5)));
+        assert_eq!(preview_ttl(0, 0), None);
+        assert_eq!(preview_ttl(0, 1), None);
     }
 }

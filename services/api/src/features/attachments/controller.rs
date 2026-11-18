@@ -107,6 +107,21 @@ pub async fn download(
     }))
 }
 
+pub async fn preview(
+    auth: AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<DownloadDto>, ApiError> {
+    let (a, url) = state
+        .attachments
+        .preview(auth.user_id, parse_id(&id)?)
+        .await?;
+    Ok(Json(DownloadDto {
+        attachment: a.into(),
+        url,
+    }))
+}
+
 fn parse_id(s: &str) -> Result<i64, ApiError> {
     s.parse().map_err(|_| ApiError::NotFound)
 }

@@ -30,6 +30,7 @@ pub fn routes() -> Router<AppState> {
         )
         .route("/attachments/{id}/complete", post(controller::complete))
         .route("/attachments/{id}", get(controller::download))
+        .route("/attachments/{id}/preview", get(controller::preview))
 }
 
 /// Runs the cleanup every `every` until the process exits.

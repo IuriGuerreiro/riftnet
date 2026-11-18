@@ -26,6 +26,7 @@ impl From<&MessageAttachment> for v1::Attachment {
             size: a.size as u64,
             blake3: a.blake3.clone(),
             expires_at: a.expires_at_ms as u64,
+            preview_url: a.preview_url.clone(),
         }
     }
 }
@@ -39,6 +40,7 @@ impl From<v1::Attachment> for MessageAttachment {
             size: a.size as i64,
             blake3: a.blake3,
             expires_at_ms: a.expires_at as i64,
+            preview_url: a.preview_url,
         }
     }
 }

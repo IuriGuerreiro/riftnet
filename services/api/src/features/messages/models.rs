@@ -20,6 +20,21 @@ pub struct MessageAttachment {
     pub size: i64,
     pub blake3: Vec<u8>,
     pub expires_at_ms: i64,
+    /// Inline link for images/videos, signed per response. Never stored.
+    pub preview_url: String,
+}
+
+impl MessageAttachment {
+    /// Images and videos get an inline preview link.
+    pub fn is_media(&self) -> bool {
+        is_media_type(&self.content_type)
+    }
+}
+
+// WARN: no SVG. It can carry scripts, and the uploader picks the content type.
+pub fn is_media_type(content_type: &str) -> bool {
+    let t = content_type.to_ascii_lowercase();
+    (t.starts_with("image/") && !t.starts_with("image/svg")) || t.starts_with("video/")
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
