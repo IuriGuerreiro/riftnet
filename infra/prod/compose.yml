@@ -41,6 +41,7 @@ services:
       ZITADEL_PAT_FILE: /secrets/api.pat
       API_SIGNING_KEY_FILE: /secrets/api_signing_key
       S3_ENDPOINT: http://minio:9000
+      S3_BUCKET: ${S3_BUCKET:-attachments}
       S3_PUBLIC_ENDPOINT: https://files.${DOMAIN}
       S3_ACCESS_KEY: ${MINIO_ROOT_USER}
       S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
@@ -55,6 +56,7 @@ services:
       postgres: { condition: service_healthy }
       zitadel: { condition: service_healthy }
       scylla: { condition: service_started }
+      minio-init: { condition: service_completed_successfully }
     networks: [edge, data, storage]
 
   # Internal only: the api talks to it, browsers never do.
@@ -151,13 +153,34 @@ services:
   # Browsers download files via presigned URLs on files.<domain>.
   minio:
     <<: *restart
-    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+    image: &minio-image pgsty/minio:RELEASE.2026-08-04T00-00-00Z
     command: server /data
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     volumes: [minio:/data]
     networks: [storage, edge]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9000/minio/health/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  minio-init:
+    image: *minio-image
+    depends_on:
+      minio: { condition: service_healthy }
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      S3_BUCKET: ${S3_BUCKET:-attachments}
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        mc alias set storage http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" >/dev/null
+        mc mb --ignore-existing "storage/$$S3_BUCKET"
+    networks: [storage]
 
 networks:
   edge:
