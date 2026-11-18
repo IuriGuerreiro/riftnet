@@ -89,7 +89,10 @@ async function doRefresh(startedWith: string | null): Promise<boolean> {
       { method: "POST", body: { refresh_token: refreshToken } },
       false,
     );
-    useAuth.getState().setSession(await parse<Session>(res));
+    const session = await parse<Session>(res);
+    // INVARIANT: if the session was cleared or replaced mid-refresh (e.g. a 4003 logout), drop this result.
+    if (useAuth.getState().refreshToken !== refreshToken) return false;
+    useAuth.getState().setSession(session);
     return true;
   } catch (err) {
     if (err instanceof ApiError && err.code === "refresh_superseded") {
