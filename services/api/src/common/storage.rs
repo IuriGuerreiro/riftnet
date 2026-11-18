@@ -48,6 +48,13 @@ pub trait FileStore: Send + Sync {
         filename: &str,
         ttl: Duration,
     ) -> anyhow::Result<String>;
+    /// A short-lived link the browser shows inline (for <img>/<video>).
+    async fn preview_url(
+        &self,
+        key: &str,
+        content_type: &str,
+        ttl: Duration,
+    ) -> anyhow::Result<String>;
 }
 
 pub struct S3Config<'a> {
@@ -265,6 +272,25 @@ impl FileStore for S3FileStore {
             .presigned(PresigningConfig::expires_in(ttl)?)
             .await
             .context("s3 presign get")?;
+        Ok(req.uri().to_string())
+    }
+
+    async fn preview_url(
+        &self,
+        key: &str,
+        content_type: &str,
+        ttl: Duration,
+    ) -> anyhow::Result<String> {
+        let req = self
+            .presigner
+            .get_object()
+            .bucket(&self.bucket)
+            .key(key)
+            .response_content_type(content_type)
+            .response_content_disposition("inline")
+            .presigned(PresigningConfig::expires_in(ttl)?)
+            .await
+            .context("s3 presign preview")?;
         Ok(req.uri().to_string())
     }
 }

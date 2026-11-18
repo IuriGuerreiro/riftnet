@@ -16,6 +16,10 @@ message Message {
 // A file on a message. Upload it first over HTTP (POST /attachments, chunks,
 // complete), then put its id in SendMessage.attachment_ids. To download, call
 // GET /attachments/{id} for a short-lived link, then check the file's BLAKE3.
+// Images and videos in unencrypted chats also carry preview_url: a link the
+// browser can show inline (<img>/<video>). It is signed when the message is sent
+// to you, never stored, and lasts up to 1h. When it stops working, get a fresh
+// one from GET /attachments/{id}/preview.
 message Attachment {
   uint64 id = 1;
   string filename = 2;
@@ -23,6 +27,7 @@ message Attachment {
   uint64 size = 4; // bytes
   bytes blake3 = 5; // 32-byte BLAKE3 of the whole file
   uint64 expires_at = 6; // unix ms; after this the file is gone, show "expired"
+  string preview_url = 7; // empty unless image/* or video/* in an unencrypted chat
 }
 
 enum Encryption {
