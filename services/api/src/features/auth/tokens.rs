@@ -37,7 +37,6 @@ struct Claims {
 pub struct AccessClaims {
     pub user_id: i64,
     pub device_id: i64,
-    #[allow(dead_code)]
     pub expires_at: i64,
 }
 

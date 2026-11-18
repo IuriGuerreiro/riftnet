@@ -33,6 +33,7 @@ pub trait AuthRepo: Send + Sync {
         expires_at: DateTime<Utc>,
     ) -> Result<bool, RepoError>;
     async fn revoke_device(&self, device_id: i64) -> Result<(), RepoError>;
+    async fn is_device_revoked(&self, device_id: i64) -> Result<bool, RepoError>;
 }
 
 pub struct PgAuthRepo {
@@ -143,5 +144,15 @@ impl AuthRepo for PgAuthRepo {
             .execute(&self.pool)
             .await?;
         Ok(())
+    }
+
+    #[tracing::instrument(name = "db SELECT devices", skip_all, err(Display), fields(otel.kind = "client", db.system = "postgresql", db.operation = "SELECT", db.collection.name = "devices"))]
+    async fn is_device_revoked(&self, device_id: i64) -> Result<bool, RepoError> {
+        let revoked: Option<bool> =
+            sqlx::query_scalar("SELECT revoked_at IS NOT NULL FROM devices WHERE id = $1")
+                .bind(device_id)
+                .fetch_optional(&self.pool)
+                .await?;
+        Ok(revoked.unwrap_or(true))
     }
 }

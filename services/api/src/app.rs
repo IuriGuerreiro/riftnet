@@ -113,6 +113,7 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
             auth_repo,
             tokens.clone(),
             ids.clone(),
+            events.clone(),
         )),
         messages: Arc::new(MessageService::new(
             message_repo,
