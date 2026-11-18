@@ -1,0 +1,9 @@
+# TLS ends at Cloudflare; the tunnel talks plain HTTP to us.
+:80 {
+	root * /srv
+	encode zstd gzip
+	try_files {path} /index.html
+	file_server
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+}
