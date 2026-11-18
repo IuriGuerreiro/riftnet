@@ -79,7 +79,7 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
         crate::features::gateway::PRESENCE_TTL,
     ));
 
-    let file_store = Arc::new(S3FileStore::new(&S3Config {
+    let file_store: Arc<S3FileStore> = Arc::new(S3FileStore::new(&S3Config {
         endpoint: &config.s3_endpoint,
         public_endpoint: config.s3_public_endpoint.as_deref(),
         region: &config.s3_region,
@@ -93,7 +93,7 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
     let attachment_service = Arc::new(AttachmentService::new(
         Arc::new(PgAttachmentRepo::new(pool.clone())),
         conversation_repo.clone(),
-        file_store,
+        file_store.clone(),
         ids.clone(),
         Limits {
             max_bytes: config.attachment_max_bytes,
@@ -145,12 +145,18 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
             conversation_repo.clone(),
             events.clone(),
         )),
+        users: Arc::new(UserService::new(
+            user_repo.clone(),
+            file_store,
+            friend_repo.clone(),
+            conversation_repo.clone(),
+            events.clone(),
+        )),
         friends: Arc::new(FriendService::new(
             friend_repo,
             user_repo.clone(),
             events.clone(),
         )),
-        users: Arc::new(UserService::new(user_repo)),
         tokens,
         limiter: Arc::new(RateLimiter::default()),
         events,
@@ -163,7 +169,13 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
         .collect();
     let cors = CorsLayer::new()
         .allow_origin(origins)
-        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE])
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::PATCH,
+            Method::DELETE,
+        ])
         .allow_headers([
             header::AUTHORIZATION,
             header::CONTENT_TYPE,

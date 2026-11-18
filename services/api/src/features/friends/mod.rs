@@ -1,3 +1,4 @@
+pub mod audience;
 mod controller;
 pub mod dto;
 pub mod models;

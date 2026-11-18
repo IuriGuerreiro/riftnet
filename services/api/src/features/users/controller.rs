@@ -1,9 +1,14 @@
 use std::time::Duration;
 
 use axum::Json;
-use axum::extract::{Query, State};
+use axum::body::Body;
+use axum::extract::{Path, Query, State};
 
-use super::dto::{SearchUsersQuery, SetUsernameRequest, UserDto};
+use super::avatar::MAX_AVATAR_BYTES;
+use super::dto::{
+    AvatarQuery, AvatarUrlDto, SearchUsersQuery, SetUsernameRequest, UpdateProfileRequest, UserDto,
+};
+use super::service::ProfileChanges;
 use crate::app::AppState;
 use crate::common::error::ApiError;
 use crate::common::middleware::auth::AuthUser;
@@ -47,4 +52,76 @@ pub async fn search_users(
         .search(auth.user_id, &query.q, query.limit)
         .await?;
     Ok(Json(users.into_iter().map(UserDto::from).collect()))
+}
+
+pub async fn update_me(
+    auth: AuthUser,
+    State(state): State<AppState>,
+    Json(req): Json<UpdateProfileRequest>,
+) -> Result<Json<UserDto>, ApiError> {
+    let changes = ProfileChanges {
+        display_name: req.display_name,
+        bio: req.bio,
+    };
+    Ok(Json(
+        state
+            .users
+            .update_profile(auth.user_id, changes)
+            .await?
+            .into(),
+    ))
+}
+
+const AVATAR_LIMIT_PER_USER: u32 = 10;
+const AVATAR_WINDOW: Duration = Duration::from_secs(60 * 60);
+
+/// Body is the raw image; its type is read from the bytes, not the header.
+pub async fn put_avatar(
+    auth: AuthUser,
+    State(state): State<AppState>,
+    body: Body,
+) -> Result<Json<UserDto>, ApiError> {
+    state.limiter.check(
+        &format!("avatar:user:{}", auth.user_id),
+        AVATAR_LIMIT_PER_USER,
+        AVATAR_WINDOW,
+    )?;
+    // Slot first, body second: a busy server never buffers the upload.
+    let slot = state.users.avatar_slot()?;
+    let data = axum::body::to_bytes(body, MAX_AVATAR_BYTES)
+        .await
+        .map_err(|_| ApiError::bad_request("file_too_large", "avatar must be 8 MB or less"))?;
+    Ok(Json(
+        state
+            .users
+            .set_avatar(auth.user_id, data, slot)
+            .await?
+            .into(),
+    ))
+}
+
+pub async fn delete_avatar(
+    auth: AuthUser,
+    State(state): State<AppState>,
+) -> Result<Json<UserDto>, ApiError> {
+    Ok(Json(state.users.remove_avatar(auth.user_id).await?.into()))
+}
+
+pub async fn get_user(
+    _auth: AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+) -> Result<Json<UserDto>, ApiError> {
+    Ok(Json(state.users.get(id).await?.into()))
+}
+
+/// A short-lived (5 min) signed link to the image, like attachment downloads.
+pub async fn get_avatar(
+    _auth: AuthUser,
+    State(state): State<AppState>,
+    Path((id, hash)): Path<(i64, String)>,
+    Query(query): Query<AvatarQuery>,
+) -> Result<Json<AvatarUrlDto>, ApiError> {
+    let url = state.users.avatar_url(id, &hash, query.size).await?;
+    Ok(Json(AvatarUrlDto { url }))
 }

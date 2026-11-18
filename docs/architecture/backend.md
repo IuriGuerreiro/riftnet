@@ -17,7 +17,7 @@ services/api/src/
 │       └── rate_limit.rs
 └── features/
     ├── auth/            register, login, refresh, logout
-    ├── users/           /me, /me/username, /users/search
+    ├── users/           /me, profile + avatar, /users/{id}, /users/search (see profiles.md)
     ├── friends/         /friends: requests, accept, remove (see friends.md)
     ├── presence/        online / idle / offline, Redis (see presence.md)
     ├── health/          /health, /metrics

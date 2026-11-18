@@ -354,6 +354,21 @@ mod tests {
         async fn set_username(&self, _: i64, _: &str) -> Result<Option<User>, RepoError> {
             unimplemented!()
         }
+        async fn set_profile(
+            &self,
+            _: i64,
+            _: Option<Option<&str>>,
+            _: Option<Option<&str>>,
+        ) -> Result<Option<User>, RepoError> {
+            unimplemented!()
+        }
+        async fn set_avatar(
+            &self,
+            _: i64,
+            _: Option<&[u8]>,
+        ) -> Result<Option<(User, Option<Vec<u8>>)>, RepoError> {
+            unimplemented!()
+        }
     }
 
     #[derive(Default)]
@@ -386,6 +401,8 @@ mod tests {
             zitadel_id: format!("z{id}"),
             username: Some(name.into()),
             display_name: None,
+            bio: None,
+            avatar_hash: None,
             created_at: Utc::now(),
         }
     }
