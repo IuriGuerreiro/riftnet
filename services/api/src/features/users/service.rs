@@ -479,6 +479,9 @@ mod tests {
         async fn download_url(&self, _: &str, _: &str, _: Duration) -> anyhow::Result<String> {
             unimplemented!()
         }
+        async fn preview_url(&self, _: &str, _: &str, _: Duration) -> anyhow::Result<String> {
+            unimplemented!()
+        }
     }
 
     struct FakeFriends(Vec<Friendship>);
