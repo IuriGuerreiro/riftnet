@@ -49,18 +49,15 @@ export function HomePage() {
   const profiles = useProfiles((s) => s.byId);
   const [editingProfile, setEditingProfile] = useState(false);
   useEffect(() => {
-    const { put } = useProfiles.getState();
-    const known = useProfiles.getState().byId;
-    const fresh = (p: { id: string }) => !known[p.id];
-    put(
-      [
+    useProfiles
+      .getState()
+      .put([
         ...(me ? [fromProto(me)] : []),
         ...chat.conversations.flatMap((c) => c.members.map(fromProto)),
         ...[...friendList.friends, ...friendList.incoming, ...friendList.outgoing].map((f) =>
           fromJson(f.user),
         ),
-      ].filter(fresh),
-    );
+      ]);
   }, [me, chat.conversations, friendList]);
   const nameFor = (id: bigint | string | undefined) =>
     id === undefined ? "someone" : nameOf(profiles[id.toString()]);

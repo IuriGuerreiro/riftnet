@@ -1,9 +1,10 @@
 use std::time::Duration;
 
 use axum::Json;
-use axum::body::Bytes;
+use axum::body::Body;
 use axum::extract::{Path, Query, State};
 
+use super::avatar::MAX_AVATAR_BYTES;
 use super::dto::{
     AvatarQuery, AvatarUrlDto, SearchUsersQuery, SetUsernameRequest, UpdateProfileRequest, UserDto,
 };
@@ -78,15 +79,24 @@ const AVATAR_WINDOW: Duration = Duration::from_secs(60 * 60);
 pub async fn put_avatar(
     auth: AuthUser,
     State(state): State<AppState>,
-    body: Bytes,
+    body: Body,
 ) -> Result<Json<UserDto>, ApiError> {
     state.limiter.check(
         &format!("avatar:user:{}", auth.user_id),
         AVATAR_LIMIT_PER_USER,
         AVATAR_WINDOW,
     )?;
+    // Slot first, body second: a busy server never buffers the upload.
+    let slot = state.users.avatar_slot()?;
+    let data = axum::body::to_bytes(body, MAX_AVATAR_BYTES)
+        .await
+        .map_err(|_| ApiError::bad_request("file_too_large", "avatar must be 8 MB or less"))?;
     Ok(Json(
-        state.users.set_avatar(auth.user_id, body).await?.into(),
+        state
+            .users
+            .set_avatar(auth.user_id, data, slot)
+            .await?
+            .into(),
     ))
 }
 

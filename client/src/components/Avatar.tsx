@@ -17,8 +17,17 @@ export function Avatar({
   const profile = useProfile(id);
   const hash = profile?.avatarHash ?? null;
   const fetchSize: AvatarSize = size === "lg" ? 512 : 128;
-  const { data: url } = useAvatarUrl(id, hash, fetchSize);
+  const { data: url, refetch } = useAvatarUrl(id, hash, fetchSize);
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const [retriedHash, setRetriedHash] = useState<string | null>(null);
+
+  function onImageError(bad: string) {
+    setFailedUrl(bad);
+    if (hash && retriedHash !== hash) {
+      setRetriedHash(hash);
+      void refetch();
+    }
+  }
 
   const label = nameOf(profile);
   const base = `${px[size]} shrink-0 rounded-full`;
@@ -28,7 +37,7 @@ export function Avatar({
         src={url}
         alt={label}
         title={label}
-        onError={() => setFailedUrl(url)}
+        onError={() => onImageError(url)}
         className={`${base} bg-zinc-800 object-cover`}
       />
     );

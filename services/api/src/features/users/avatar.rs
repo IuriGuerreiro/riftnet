@@ -14,10 +14,11 @@ pub const MAX_AVATAR_BYTES: usize = 8 * 1024 * 1024;
 /// Sizes stored, in px (square). The last one is hashed for the avatar id.
 pub const AVATAR_SIZES: [u32; 2] = [128, 512];
 pub const AVATAR_CONTENT_TYPE: &str = "image/webp";
-/// Biggest source image accepted, per side.
-const MAX_SIDE: u32 = 8192;
-/// Memory the decoder may use: 8192 x 8192 RGBA plus some slack.
-const MAX_DECODE_ALLOC: u64 = 300 * 1024 * 1024;
+/// Biggest source image accepted, per side (phone photos are ~4032).
+const MAX_SIDE: u32 = 4096;
+/// Decoder memory cap: 4096 x 4096 RGBA (64 MiB) plus slack. The square
+/// crop copies at most that again, so one avatar peaks around 150 MiB.
+const MAX_DECODE_ALLOC: u64 = 80 * 1024 * 1024;
 
 #[derive(Debug)]
 pub struct ProcessedAvatar {
@@ -153,8 +154,8 @@ pub mod tests {
         let src = png(1, 1);
         let mut bomb = src.clone();
         // IHDR width/height live at bytes 16..24; fix the CRC after.
-        bomb[16..20].copy_from_slice(&100_000u32.to_be_bytes());
-        bomb[20..24].copy_from_slice(&100_000u32.to_be_bytes());
+        bomb[16..20].copy_from_slice(&5_000u32.to_be_bytes());
+        bomb[20..24].copy_from_slice(&5_000u32.to_be_bytes());
         let crc = crc32(&bomb[12..29]);
         bomb[29..33].copy_from_slice(&crc.to_be_bytes());
         assert!(process(&bomb).is_err());

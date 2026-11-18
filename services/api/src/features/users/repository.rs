@@ -21,11 +21,13 @@ pub trait UserRepo: Send + Sync {
     async fn create(&self, id: i64, zitadel_id: &str) -> Result<User, RepoError>;
     async fn set_username(&self, id: i64, username: &str) -> Result<Option<User>, RepoError>;
     /// Writes both fields as given (None clears). None if the user is gone.
+    /// Outer None = leave the field alone; Some(None) = clear it.
+    /// One statement, so two partial updates never undo each other.
     async fn set_profile(
         &self,
         id: i64,
-        display_name: Option<&str>,
-        bio: Option<&str>,
+        display_name: Option<Option<&str>>,
+        bio: Option<Option<&str>>,
     ) -> Result<Option<User>, RepoError>;
     /// Swaps the avatar hash. Returns the user and the hash it replaced,
     /// so the caller can delete the old files. None if the user is gone.
@@ -128,19 +130,22 @@ impl UserRepo for PgUserRepo {
     async fn set_profile(
         &self,
         id: i64,
-        display_name: Option<&str>,
-        bio: Option<&str>,
+        display_name: Option<Option<&str>>,
+        bio: Option<Option<&str>>,
     ) -> Result<Option<User>, RepoError> {
-        Ok(
-            sqlx::query_as(
-                "UPDATE users SET display_name = $2, bio = $3 WHERE id = $1 RETURNING *",
-            )
-            .bind(id)
-            .bind(display_name)
-            .bind(bio)
-            .fetch_optional(&self.pool)
-            .await?,
+        Ok(sqlx::query_as(
+            "UPDATE users SET \
+               display_name = CASE WHEN $2 THEN $3 ELSE display_name END, \
+               bio = CASE WHEN $4 THEN $5 ELSE bio END \
+             WHERE id = $1 RETURNING *",
         )
+        .bind(id)
+        .bind(display_name.is_some())
+        .bind(display_name.flatten())
+        .bind(bio.is_some())
+        .bind(bio.flatten())
+        .fetch_optional(&self.pool)
+        .await?)
     }
 
     #[tracing::instrument(name = "db UPDATE users", skip_all, err(Display), fields(otel.kind = "client", db.system = "postgresql", db.operation = "UPDATE", db.collection.name = "users"))]

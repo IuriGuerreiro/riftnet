@@ -357,8 +357,8 @@ mod tests {
         async fn set_profile(
             &self,
             _: i64,
-            _: Option<&str>,
-            _: Option<&str>,
+            _: Option<Option<&str>>,
+            _: Option<Option<&str>>,
         ) -> Result<Option<User>, RepoError> {
             unimplemented!()
         }

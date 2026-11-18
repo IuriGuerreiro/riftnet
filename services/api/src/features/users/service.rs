@@ -4,7 +4,7 @@ use std::time::Duration;
 use bytes::Bytes;
 use protocol::Message as _;
 use protocol::v1::{Envelope, UserUpdated, envelope::Payload};
-use tokio::sync::Semaphore;
+use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
 use super::avatar::{self, AVATAR_CONTENT_TYPE, AVATAR_SIZES};
 use super::models::{User, hex};
@@ -20,7 +20,8 @@ pub const MAX_DISPLAY_NAME_CHARS: usize = 32;
 pub const MAX_BIO_CHARS: usize = 190;
 /// How long an avatar link works once handed out.
 const AVATAR_URL_TTL: Duration = Duration::from_secs(5 * 60);
-/// Avatars resized at once, across all users (CPU + up to ~300 MB each).
+/// Avatars processed at once, across all users (CPU + ~150 MiB each).
+/// Extra uploads are turned away, not queued, before their body is read.
 const AVATARS_IN_FLIGHT: usize = 2;
 
 /// PATCH /me input. None = leave alone, Some("") = clear.
@@ -36,7 +37,7 @@ pub struct UserService {
     friends: Arc<dyn FriendRepo>,
     conversations: Arc<dyn ConversationRepo>,
     events: Arc<dyn EventBus>,
-    avatar_slots: Semaphore,
+    avatar_slots: Arc<Semaphore>,
 }
 
 impl UserService {
@@ -53,7 +54,7 @@ impl UserService {
             friends,
             conversations,
             events,
-            avatar_slots: Semaphore::new(AVATARS_IN_FLIGHT),
+            avatar_slots: Arc::new(Semaphore::new(AVATARS_IN_FLIGHT)),
         }
     }
 
@@ -94,52 +95,74 @@ impl UserService {
             .map(|raw| clean_text(raw, MAX_BIO_CHARS, true, "invalid_bio"))
             .transpose()?;
 
-        let current = self.get(me).await?;
-        let display_name = display_name.unwrap_or(current.display_name);
-        let bio = bio.unwrap_or(current.bio);
         let user = self
             .repo
-            .set_profile(me, display_name.as_deref(), bio.as_deref())
+            .set_profile(
+                me,
+                display_name.as_ref().map(Option::as_deref),
+                bio.as_ref().map(Option::as_deref),
+            )
             .await?
             .ok_or(ApiError::NotFound)?;
         self.announce(&user).await;
         Ok(user)
     }
 
+    /// A free avatar slot, or "busy" right away. Take it before reading the
+    /// upload body so waiting uploads never pile up in memory.
+    pub fn avatar_slot(&self) -> Result<OwnedSemaphorePermit, ApiError> {
+        self.avatar_slots
+            .clone()
+            .try_acquire_owned()
+            .map_err(|_| ApiError::TooManyRequests)
+    }
+
     /// Checks and re-encodes the image, stores every size, then swaps it in
     /// and deletes the old files.
     #[tracing::instrument(name = "users.set_avatar", skip_all, fields(user.id = me, bytes = data.len()))]
-    pub async fn set_avatar(&self, me: i64, data: Bytes) -> Result<User, ApiError> {
-        let processed = {
-            let _slot = self
-                .avatar_slots
-                .acquire()
-                .await
-                .expect("avatar semaphore is never closed");
-            tokio::task::spawn_blocking(move || avatar::process(&data))
-                .await
-                .map_err(anyhow::Error::from)??
-        };
-        let hash_hex = hex(&processed.hash);
+    pub async fn set_avatar(
+        &self,
+        me: i64,
+        data: Bytes,
+        slot: OwnedSemaphorePermit,
+    ) -> Result<User, ApiError> {
+        // The slot moves into the job: a cancelled request can't free it
+        // while the decode is still running.
+        let processed = tokio::task::spawn_blocking(move || {
+            let _slot = slot;
+            avatar::process(&data)
+        })
+        .await
+        .map_err(anyhow::Error::from)??;
+
+        // Every upload gets its own id, so its files are never shared with
+        // another upload. Cleanup of an old avatar can't hit the live one,
+        // even when the same image is uploaded twice at once.
+        let hash = upload_id(&processed.hash);
+        let hash_hex = hex(&hash);
         for (size, bytes) in processed.files {
-            self.store
+            if let Err(err) = self
+                .store
                 .put_object(&avatar_key(me, &hash_hex, size), AVATAR_CONTENT_TYPE, bytes)
-                .await?;
+                .await
+            {
+                self.delete_files(me, &hash).await;
+                return Err(err.into());
+            }
         }
 
-        let (user, old) = match self.repo.set_avatar(me, Some(&processed.hash)).await {
+        let (user, old) = match self.repo.set_avatar(me, Some(&hash)).await {
             Ok(Some(swap)) => swap,
             Ok(None) => {
-                self.delete_files(me, &processed.hash).await;
+                self.delete_files(me, &hash).await;
                 return Err(ApiError::NotFound);
             }
             Err(err) => {
-                // Can't tell whether the old row pointed here already; the
-                // same image re-uploaded has the same hash, so keep it.
+                self.delete_files(me, &hash).await;
                 return Err(err.into());
             }
         };
-        if let Some(old) = old.filter(|old| old[..] != processed.hash[..]) {
+        if let Some(old) = old {
             self.delete_files(me, &old).await;
         }
         self.announce(&user).await;
@@ -275,6 +298,15 @@ fn prefix_upper_bound(prefix: &str) -> String {
     String::from_utf8(bytes).expect("ascii stays ascii")
 }
 
+/// BLAKE3 of the image plus a random nonce: unique per upload.
+fn upload_id(content_hash: &[u8; 32]) -> [u8; 32] {
+    let nonce: [u8; 16] = rand::random();
+    let mut h = blake3::Hasher::new();
+    h.update(content_hash);
+    h.update(&nonce);
+    *h.finalize().as_bytes()
+}
+
 pub fn avatar_key(user_id: i64, hash_hex: &str, size: u32) -> String {
     format!("avatars/{user_id}/{hash_hex}/{size}.webp")
 }
@@ -375,13 +407,17 @@ mod tests {
         async fn set_profile(
             &self,
             id: i64,
-            display_name: Option<&str>,
-            bio: Option<&str>,
+            display_name: Option<Option<&str>>,
+            bio: Option<Option<&str>>,
         ) -> Result<Option<User>, RepoError> {
             let mut users = self.0.lock().unwrap();
             Ok(users.get_mut(&id).map(|u| {
-                u.display_name = display_name.map(String::from);
-                u.bio = bio.map(String::from);
+                if let Some(v) = display_name {
+                    u.display_name = v.map(String::from);
+                }
+                if let Some(v) = bio {
+                    u.bio = v.map(String::from);
+                }
                 u.clone()
             }))
         }
@@ -593,6 +629,47 @@ mod tests {
         Setup { svc, store, events }
     }
 
+    impl UserService {
+        async fn set_avatar_t(&self, me: i64, data: Bytes) -> Result<User, ApiError> {
+            let slot = self.avatar_slot()?;
+            self.set_avatar(me, data, slot).await
+        }
+    }
+
+    #[tokio::test]
+    async fn busy_avatar_slots_turn_uploads_away() {
+        let t = setup();
+        let held: Vec<_> = (0..AVATARS_IN_FLIGHT)
+            .map(|_| t.svc.avatar_slot().unwrap())
+            .collect();
+        assert!(matches!(
+            t.svc.avatar_slot(),
+            Err(ApiError::TooManyRequests)
+        ));
+        drop(held);
+        assert!(t.svc.avatar_slot().is_ok());
+    }
+
+    #[tokio::test]
+    async fn partial_updates_keep_the_other_field() {
+        let t = setup();
+        let changes = |name: Option<&str>, bio: Option<&str>| ProfileChanges {
+            display_name: name.map(String::from),
+            bio: bio.map(String::from),
+        };
+        t.svc
+            .update_profile(ANA, changes(Some("Ana"), None))
+            .await
+            .unwrap();
+        let u = t
+            .svc
+            .update_profile(ANA, changes(None, Some("bio")))
+            .await
+            .unwrap();
+        assert_eq!(u.display_name.as_deref(), Some("Ana"));
+        assert_eq!(u.bio.as_deref(), Some("bio"));
+    }
+
     fn png(w: u32, h: u32) -> Bytes {
         super::avatar::tests::png(w, h).into()
     }
@@ -675,7 +752,7 @@ mod tests {
     #[tokio::test]
     async fn avatar_upload_replace_and_remove() {
         let t = setup();
-        let first = t.svc.set_avatar(ANA, png(40, 30)).await.unwrap();
+        let first = t.svc.set_avatar_t(ANA, png(40, 30)).await.unwrap();
         let h1 = first.avatar_hex().unwrap();
         assert_eq!(
             t.store.keys(),
@@ -685,12 +762,17 @@ mod tests {
         assert_eq!(pushes[0].0, vec![ANA, BOB, CAT]);
         assert_eq!(pushes[0].1.avatar_hash, h1);
 
-        // Same image again: same files, nothing deleted.
-        t.svc.set_avatar(ANA, png(40, 30)).await.unwrap();
-        assert_eq!(t.store.keys().len(), 2);
+        // Same image again: its own new files, the old ones go.
+        let again = t.svc.set_avatar_t(ANA, png(40, 30)).await.unwrap();
+        let h1b = again.avatar_hex().unwrap();
+        assert_ne!(h1, h1b, "every upload gets its own id");
+        assert_eq!(
+            t.store.keys(),
+            vec![avatar_key(ANA, &h1b, 128), avatar_key(ANA, &h1b, 512)]
+        );
 
         // New image: old files gone.
-        let second = t.svc.set_avatar(ANA, png(50, 50)).await.unwrap();
+        let second = t.svc.set_avatar_t(ANA, png(50, 50)).await.unwrap();
         let h2 = second.avatar_hex().unwrap();
         assert_ne!(h1, h2);
         assert_eq!(
@@ -714,7 +796,7 @@ mod tests {
         let t = setup();
         assert!(
             t.svc
-                .set_avatar(ANA, Bytes::from_static(b"not an image"))
+                .set_avatar_t(ANA, Bytes::from_static(b"not an image"))
                 .await
                 .is_err()
         );
@@ -727,7 +809,7 @@ mod tests {
         let t = setup();
         let h = t
             .svc
-            .set_avatar(ANA, png(20, 20))
+            .set_avatar_t(ANA, png(20, 20))
             .await
             .unwrap()
             .avatar_hex()
