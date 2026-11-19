@@ -116,6 +116,17 @@ Media `.env`: `MEDIA_IP` = VPS public IP, `MEDIA_PORT` = the UDP port,
 
 ## 5. Desktop app (Windows)
 
+In **Settings → Secrets and variables → Actions → Variables**, set `PROD_API_HTTP`
+to the production HTTPS API URL and `PROD_API_WS` to the production WSS URL ending
+in `/ws`. GitHub Actions embeds these URLs in the executable.
+
+Merge `main` into `prod` to start **Release Windows app**. After CI passes, the
+workflow builds `discord2-windows-x64.exe` and attaches it to a draft GitHub Release
+tagged `windows-<commit SHA>`. Download the executable from the draft and verify
+sign-in on Windows. Then publish the release.
+
+### Build manually on the server
+
 Built on the server (cross-compiled, no Windows needed):
 ```sh
 cd client
