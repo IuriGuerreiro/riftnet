@@ -14,14 +14,18 @@ import {
 } from "../gen/v1/conversations_pb";
 import type { Envelope } from "../gen/v1/envelope_pb";
 import {
+  AddReactionSchema,
   type Attachment,
   DeleteMessageSchema,
   EditMessageSchema,
   GetHistorySchema,
+  GetReactorsSchema,
   type Message,
+  RemoveReactionSchema,
   SendMessageSchema,
   SyncSchema,
 } from "../gen/v1/messages_pb";
+import { applyReaction, fromProto as reactionsFromProto, type ReactionChip } from "./reactions";
 
 type Key = string;
 
@@ -33,6 +37,7 @@ export interface ChatMessage {
   text: string;
   editedAt?: bigint;
   attachments?: Attachment[];
+  reactions?: ReactionChip[];
   pending?: boolean;
   failed?: boolean;
 }
@@ -54,18 +59,22 @@ interface ChatState {
   send: (ws: WsClient, myId: bigint, text: string, attachmentIds?: bigint[]) => Promise<void>;
   edit: (ws: WsClient, messageId: bigint, text: string) => Promise<boolean>;
   remove: (ws: WsClient, messageId: bigint) => Promise<boolean>;
+  toggleReaction: (ws: WsClient, messageId: bigint, emoji: string) => Promise<void>;
+  reactors: (ws: WsClient, messageId: bigint, emoji: string) => Promise<bigint[]>;
 }
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 const key = (id: bigint): Key => id.toString();
-const toChat = (m: Message): ChatMessage => ({
+// WARN: only History/Sync carry reactions. Pushes must leave the key out, or addMessages wipes ours.
+const toChat = (m: Message, withReactions = false): ChatMessage => ({
   id: m.id,
   seq: m.seq,
   authorId: m.authorId,
   text: dec.decode(m.content),
   editedAt: m.editedAt || undefined,
   attachments: m.attachments.length ? m.attachments : undefined,
+  ...(withReactions ? { reactions: reactionsFromProto(m.reactions) } : {}),
 });
 
 export const isGroup = (c: Conversation) => c.kind === ConversationKind.GROUP;
@@ -88,6 +97,22 @@ export const useChat = create<ChatState>()((set, get) => {
       .filter((m) => !m.pending)
       .reduce((max, m) => (m.seq > max ? m.seq : max), get().lastSeq[k] ?? 0n);
     set((s) => ({ messages: { ...s.messages, [k]: list }, lastSeq: { ...s.lastSeq, [k]: seen } }));
+  }
+
+  function setReactions(
+    conversationId: bigint,
+    messageId: bigint,
+    f: (r?: ReactionChip[]) => ReactionChip[],
+  ) {
+    const k = key(conversationId);
+    set((s) => ({
+      messages: {
+        ...s.messages,
+        [k]: (s.messages[k] ?? []).map((m) =>
+          m.id === messageId ? { ...m, reactions: f(m.reactions) } : m,
+        ),
+      },
+    }));
   }
 
   function removeMessages(conversationId: bigint, ids: bigint[]) {
@@ -116,7 +141,10 @@ export const useChat = create<ChatState>()((set, get) => {
       set((s) => ({ messages: { ...s.messages, [key(conversationId)]: [] } }));
     }
     const r = reply.value;
-    addMessages(conversationId, [...r.messages, ...r.edited].map(toChat));
+    addMessages(
+      conversationId,
+      [...r.messages, ...r.edited].map((m) => toChat(m, true)),
+    );
     removeMessages(conversationId, r.deletedIds);
     const k = key(conversationId);
     set((s) => ({
@@ -169,6 +197,12 @@ export const useChat = create<ChatState>()((set, get) => {
       if (get().messages[key(m.conversationId)]?.some((x) => x.id === m.id))
         addMessages(m.conversationId, [toChat(m)]);
       noteSeq(ws, m.conversationId, payload.value.seq);
+      return;
+    }
+    if (payload.case === "reactionUpdated") {
+      const ev = payload.value;
+      setReactions(ev.conversationId, ev.messageId, (r) => applyReaction(r, ev, myId));
+      noteSeq(ws, ev.conversationId, ev.seq);
       return;
     }
     if (payload.case === "messageDeleted") {
@@ -267,7 +301,11 @@ export const useChat = create<ChatState>()((set, get) => {
         case: "getHistory",
         value: createProto(GetHistorySchema, { conversationId, limit: 50 }),
       });
-      if (reply.case === "history") addMessages(conversationId, reply.value.messages.map(toChat));
+      if (reply.case === "history")
+        addMessages(
+          conversationId,
+          reply.value.messages.map((m) => toChat(m, true)),
+        );
       set((s) => ({
         lastSeq: { ...s.lastSeq, [key(conversationId)]: s.lastSeq[key(conversationId)] ?? 0n },
       }));
@@ -342,6 +380,39 @@ export const useChat = create<ChatState>()((set, get) => {
         set({ error: (e as Error).message });
         return false;
       }
+    },
+
+    toggleReaction: async (ws, messageId, emoji) => {
+      const conversationId = get().selected;
+      if (!conversationId) return;
+      const message = get().messages[key(conversationId)]?.find((m) => m.id === messageId);
+      const mine = message?.reactions?.some((r) => r.emoji === emoji && r.me);
+      try {
+        const value = { conversationId, messageId, emoji };
+        const reply = await ws.request(
+          mine
+            ? { case: "removeReaction", value: createProto(RemoveReactionSchema, value) }
+            : { case: "addReaction", value: createProto(AddReactionSchema, value) },
+        );
+        if (reply.case === "reactionAck") {
+          const chips = reactionsFromProto(reply.value.reactions);
+          setReactions(conversationId, messageId, () => chips);
+          if (reply.value.seq) noteSeq(ws, conversationId, reply.value.seq);
+        }
+        set({ error: null });
+      } catch (e) {
+        set({ error: (e as Error).message });
+      }
+    },
+
+    reactors: async (ws, messageId, emoji) => {
+      const conversationId = get().selected;
+      if (!conversationId) return [];
+      const reply = await ws.request({
+        case: "getReactors",
+        value: createProto(GetReactorsSchema, { conversationId, messageId, emoji }),
+      });
+      return reply.case === "reactors" ? reply.value.userIds : [];
     },
   };
 });

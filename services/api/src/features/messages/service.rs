@@ -1,11 +1,18 @@
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use common::snowflake::Snowflake;
 use protocol::Message as _;
-use protocol::v1::{Envelope, MessageCreated, MessageDeleted, MessageUpdated, envelope::Payload};
+use protocol::v1::{
+    Envelope, MessageCreated, MessageDeleted, MessageUpdated, ReactionUpdated, envelope::Payload,
+};
 
-use super::models::{ChangeKind, MAX_CONTENT_BYTES, MAX_NONCE_LEN, MAX_SYNC, Message};
-use super::repository::MessageRepo;
+use super::models::{
+    ChangeKind, MAX_CONTENT_BYTES, MAX_DISTINCT_REACTIONS, MAX_NONCE_LEN, MAX_REACTORS, MAX_SYNC,
+    Message, ReactionCount, count_reactions, is_valid_emoji,
+};
+use super::repository::{MessageRepo, ReactionRepo};
 use crate::common::error::ApiError;
 use crate::common::events::EventBus;
 use crate::features::attachments::service::AttachmentLinker;
@@ -21,8 +28,14 @@ pub struct SyncResult {
     pub last_seq: i64,
 }
 
+pub const REACTION_LIMIT: u32 = 10;
+pub const REACTION_WINDOW: Duration = Duration::from_secs(10);
+
 pub struct MessageService {
     repo: Arc<dyn MessageRepo>,
+    reactions: Arc<dyn ReactionRepo>,
+    /// user id -> (window start, changes in window)
+    reaction_rate: Mutex<HashMap<i64, (Instant, u32)>>,
     conversations: Arc<dyn ConversationRepo>,
     events: Arc<dyn EventBus>,
     ids: Arc<Snowflake>,
@@ -32,6 +45,7 @@ pub struct MessageService {
 impl MessageService {
     pub fn new(
         repo: Arc<dyn MessageRepo>,
+        reactions: Arc<dyn ReactionRepo>,
         conversations: Arc<dyn ConversationRepo>,
         events: Arc<dyn EventBus>,
         ids: Arc<Snowflake>,
@@ -39,6 +53,8 @@ impl MessageService {
     ) -> Self {
         Self {
             repo,
+            reactions,
+            reaction_rate: Mutex::new(HashMap::new()),
             conversations,
             events,
             ids,
@@ -95,6 +111,7 @@ impl MessageService {
             encryption: 0,
             edited_at: 0,
             attachments,
+            reactions: Vec::new(),
         };
         self.repo.insert(&message).await?;
         // WARN: sign after the insert so the link is never stored, and before the push so all members get it.
@@ -122,6 +139,8 @@ impl MessageService {
             .history(conversation_id, before_id, limit, conversation.id)
             .await?;
         self.sign_previews(&mut messages).await;
+        self.fill_reactions(me, conversation_id, &mut messages)
+            .await?;
         Ok(messages)
     }
 
@@ -152,6 +171,8 @@ impl MessageService {
             messages.truncate(MAX_SYNC);
             messages.sort_by_key(|m| m.seq);
             self.sign_previews(&mut messages).await;
+            self.fill_reactions(me, conversation_id, &mut messages)
+                .await?;
             return Ok(SyncResult {
                 messages,
                 complete: false,
@@ -173,8 +194,9 @@ impl MessageService {
             }
             match change.kind {
                 ChangeKind::Delete => result.deleted_ids.push(change.message_id),
-                ChangeKind::Edit if messages.iter().any(|m| m.id == change.message_id) => {}
-                ChangeKind::Edit => {
+                ChangeKind::Edit | ChangeKind::Reaction
+                    if messages.iter().any(|m| m.id == change.message_id) => {}
+                ChangeKind::Edit | ChangeKind::Reaction => {
                     if let Some(m) = self.repo.get(conversation_id, change.message_id).await? {
                         result.edited.push(m);
                     }
@@ -189,6 +211,10 @@ impl MessageService {
         }
         self.sign_previews(&mut messages).await;
         self.sign_previews(&mut result.edited).await;
+        self.fill_reactions(me, conversation_id, &mut messages)
+            .await?;
+        self.fill_reactions(me, conversation_id, &mut result.edited)
+            .await?;
         result.messages = messages;
         Ok(result)
     }
@@ -260,6 +286,142 @@ impl MessageService {
         });
         self.push(&conversation.member_ids, push).await;
         Ok(Some(seq))
+    }
+
+    /// Adds or removes my reaction. Returns the message's reactions now and
+    /// the change's seq (0 = nothing changed).
+    #[tracing::instrument(name = "messages.react", skip_all, fields(user.id = me, conversation.id = conversation_id, added = add))]
+    pub async fn react(
+        &self,
+        me: i64,
+        conversation_id: i64,
+        message_id: i64,
+        emoji: &str,
+        add: bool,
+    ) -> Result<(Vec<ReactionCount>, i64), ApiError> {
+        self.react_at(me, conversation_id, message_id, emoji, add, Instant::now())
+            .await
+    }
+
+    async fn react_at(
+        &self,
+        me: i64,
+        conversation_id: i64,
+        message_id: i64,
+        emoji: &str,
+        add: bool,
+        now: Instant,
+    ) -> Result<(Vec<ReactionCount>, i64), ApiError> {
+        if !is_valid_emoji(emoji) {
+            return Err(ApiError::bad_request("bad_emoji", "not an emoji"));
+        }
+        let conversation = self.member_conversation(me, conversation_id).await?;
+        if !self.reaction_allowed(me, now) {
+            return Err(ApiError::TooManyRequests);
+        }
+        if self.repo.get(conversation_id, message_id).await?.is_none() {
+            return Err(message_not_found());
+        }
+        let before = self
+            .reactions
+            .for_messages(conversation_id, &[message_id])
+            .await?;
+        if add
+            && !before.iter().any(|r| r.emoji == emoji)
+            && count_reactions(&before, me).len() >= MAX_DISTINCT_REACTIONS
+        {
+            return Err(ApiError::bad_request(
+                "too_many_reactions",
+                "this message has too many different reactions",
+            ));
+        }
+
+        let changed = if add {
+            self.reactions
+                .add(conversation_id, message_id, emoji, me)
+                .await?
+        } else {
+            self.reactions
+                .remove(conversation_id, message_id, emoji, me)
+                .await?
+        };
+        let rows = self
+            .reactions
+            .for_messages(conversation_id, &[message_id])
+            .await?;
+        let now_counts = count_reactions(&rows, me);
+        if !changed {
+            return Ok((now_counts, 0));
+        }
+
+        let seq = self.conversations.next_seq(conversation_id).await?;
+        self.repo
+            .log_reaction(conversation_id, message_id, seq)
+            .await?;
+        let count = now_counts
+            .iter()
+            .find(|c| c.emoji == emoji)
+            .map_or(0, |c| c.count);
+        let push = Payload::ReactionUpdated(ReactionUpdated {
+            conversation_id: conversation_id as u64,
+            message_id: message_id as u64,
+            emoji: emoji.to_string(),
+            user_id: me as u64,
+            added: add,
+            count,
+            seq: seq as u64,
+        });
+        self.push(&conversation.member_ids, push).await;
+        Ok((now_counts, seq))
+    }
+
+    /// Who reacted with `emoji`, oldest row order, max 100.
+    #[tracing::instrument(name = "messages.reactors", skip_all, fields(user.id = me, conversation.id = conversation_id))]
+    pub async fn reactors(
+        &self,
+        me: i64,
+        conversation_id: i64,
+        message_id: i64,
+        emoji: &str,
+    ) -> Result<Vec<i64>, ApiError> {
+        self.member_conversation(me, conversation_id).await?;
+        let rows = self
+            .reactions
+            .for_messages(conversation_id, &[message_id])
+            .await?;
+        Ok(rows
+            .into_iter()
+            .filter(|r| r.emoji == emoji)
+            .map(|r| r.user_id)
+            .take(MAX_REACTORS)
+            .collect())
+    }
+
+    async fn fill_reactions(
+        &self,
+        me: i64,
+        conversation_id: i64,
+        messages: &mut [Message],
+    ) -> Result<(), ApiError> {
+        let ids: Vec<i64> = messages.iter().map(|m| m.id).collect();
+        let rows = self.reactions.for_messages(conversation_id, &ids).await?;
+        for m in messages.iter_mut() {
+            m.reactions = count_reactions(rows.iter().filter(|r| r.message_id == m.id), me);
+        }
+        Ok(())
+    }
+
+    fn reaction_allowed(&self, me: i64, now: Instant) -> bool {
+        let mut rate = self.reaction_rate.lock().expect("reaction mutex poisoned");
+        if rate.len() > 10_000 {
+            rate.retain(|_, (start, _)| now.saturating_duration_since(*start) < REACTION_WINDOW);
+        }
+        let entry = rate.entry(me).or_insert((now, 0));
+        if now.saturating_duration_since(entry.0) >= REACTION_WINDOW {
+            *entry = (now, 0);
+        }
+        entry.1 += 1;
+        entry.1 <= REACTION_LIMIT
     }
 
     /// Adds inline preview links to images/videos. Encrypted messages are
@@ -337,7 +499,7 @@ mod tests {
     use super::*;
     use crate::common::error::RepoError;
     use crate::features::conversations::models::Kind;
-    use crate::features::messages::models::MessageChange;
+    use crate::features::messages::models::{MessageChange, ReactionRow};
 
     const ALICE: i64 = 1;
     const BOB: i64 = 2;
@@ -503,6 +665,14 @@ mod tests {
             });
             Ok(())
         }
+        async fn log_reaction(&self, _: i64, id: i64, change_seq: i64) -> Result<(), RepoError> {
+            self.changes.lock().unwrap().push(MessageChange {
+                seq: change_seq,
+                message_id: id,
+                kind: ChangeKind::Reaction,
+            });
+            Ok(())
+        }
         async fn changes_since(
             &self,
             _: i64,
@@ -523,6 +693,57 @@ mod tests {
     }
 
     #[derive(Default)]
+    struct FakeReactions {
+        rows: Mutex<Vec<ReactionRow>>,
+    }
+    #[async_trait]
+    impl ReactionRepo for FakeReactions {
+        async fn add(
+            &self,
+            _: i64,
+            message_id: i64,
+            emoji: &str,
+            user_id: i64,
+        ) -> Result<bool, RepoError> {
+            let row = ReactionRow {
+                message_id,
+                emoji: emoji.into(),
+                user_id,
+            };
+            let mut rows = self.rows.lock().unwrap();
+            if rows.contains(&row) {
+                return Ok(false);
+            }
+            rows.push(row);
+            Ok(true)
+        }
+        async fn remove(
+            &self,
+            _: i64,
+            message_id: i64,
+            emoji: &str,
+            user_id: i64,
+        ) -> Result<bool, RepoError> {
+            let mut rows = self.rows.lock().unwrap();
+            let before = rows.len();
+            rows.retain(|r| {
+                !(r.message_id == message_id && r.emoji == emoji && r.user_id == user_id)
+            });
+            Ok(rows.len() != before)
+        }
+        async fn for_messages(&self, _: i64, ids: &[i64]) -> Result<Vec<ReactionRow>, RepoError> {
+            Ok(self
+                .rows
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|r| ids.contains(&r.message_id))
+                .cloned()
+                .collect())
+        }
+    }
+
+    #[derive(Default)]
     struct FakeEvents {
         sent: Mutex<Vec<(i64, &'static str)>>,
     }
@@ -533,6 +754,7 @@ mod tests {
                 Some(Payload::MessageCreated(_)) => "created",
                 Some(Payload::MessageUpdated(_)) => "updated",
                 Some(Payload::MessageDeleted(_)) => "deleted",
+                Some(Payload::ReactionUpdated(_)) => "reaction",
                 _ => "other",
             };
             self.sent
@@ -559,6 +781,7 @@ mod tests {
         let conversations = Arc::new(FakeConversations::default());
         let svc = MessageService::new(
             repo.clone(),
+            Arc::new(FakeReactions::default()),
             conversations.clone(),
             events.clone(),
             Arc::new(Snowflake::new(1)),
@@ -789,5 +1012,170 @@ mod tests {
         };
         assert!(!t.repo.edit(&stale, 99).await.unwrap());
         assert!(t.repo.changes.lock().unwrap().iter().all(|c| c.seq != 99));
+    }
+
+    const THUMBS: &str = "👍";
+
+    #[tokio::test]
+    async fn reacting_counts_marks_me_and_pushes_to_everyone() {
+        let t = setup();
+        let m = t.send(ALICE, "hi").await;
+
+        let (counts, seq) = t.svc.react(BOB, DM, m.id, THUMBS, true).await.unwrap();
+        assert_eq!(seq, 2);
+        assert_eq!(
+            counts,
+            [ReactionCount {
+                emoji: THUMBS.into(),
+                count: 1,
+                me: true
+            }]
+        );
+        t.svc.react(ALICE, DM, m.id, THUMBS, true).await.unwrap();
+
+        let h = t.svc.history(ALICE, DM, None, 50).await.unwrap();
+        assert_eq!(
+            h[0].reactions,
+            [ReactionCount {
+                emoji: THUMBS.into(),
+                count: 2,
+                me: true
+            }]
+        );
+        assert_eq!(t.pushes(ALICE), ["created", "reaction", "reaction"]);
+        assert_eq!(t.pushes(BOB), ["created", "reaction", "reaction"]);
+        assert_eq!(
+            t.svc.reactors(ALICE, DM, m.id, THUMBS).await.unwrap(),
+            [BOB, ALICE]
+        );
+    }
+
+    #[tokio::test]
+    async fn reacting_twice_or_removing_nothing_is_a_no_op() {
+        let t = setup();
+        let m = t.send(ALICE, "hi").await;
+        t.svc.react(BOB, DM, m.id, THUMBS, true).await.unwrap();
+
+        let (counts, seq) = t.svc.react(BOB, DM, m.id, THUMBS, true).await.unwrap();
+        assert_eq!((counts[0].count, seq), (1, 0));
+        let (_, seq) = t.svc.react(ALICE, DM, m.id, THUMBS, false).await.unwrap();
+        assert_eq!(seq, 0);
+        let (counts, seq) = t.svc.react(BOB, DM, m.id, THUMBS, false).await.unwrap();
+        assert!(counts.is_empty() && seq > 0);
+        assert_eq!(t.pushes(ALICE), ["created", "reaction", "reaction"]);
+    }
+
+    #[tokio::test]
+    async fn reactions_check_membership_emoji_and_message() {
+        let t = setup();
+        let m = t.send(ALICE, "hi").await;
+        assert_eq!(
+            code(t.svc.react(EVE, DM, m.id, THUMBS, true).await.unwrap_err()),
+            "conversation_not_found"
+        );
+        assert_eq!(
+            code(t.svc.reactors(EVE, DM, m.id, THUMBS).await.unwrap_err()),
+            "conversation_not_found"
+        );
+        for bad in ["", "a", "lol", " 👍", "👍👍👍👍👍👍👍👍👍"] {
+            assert_eq!(
+                code(t.svc.react(BOB, DM, m.id, bad, true).await.unwrap_err()),
+                "bad_emoji",
+                "{bad:?}"
+            );
+        }
+        assert_eq!(
+            code(t.svc.react(BOB, DM, 999, THUMBS, true).await.unwrap_err()),
+            "message_not_found"
+        );
+    }
+
+    #[tokio::test]
+    async fn distinct_emojis_are_capped_but_joining_one_still_works() {
+        let t = setup();
+        let m = t.send(ALICE, "hi").await;
+        let emojis: Vec<String> = (0..MAX_DISTINCT_REACTIONS as u32)
+            .map(|i| char::from_u32(0x1F600 + i).unwrap().to_string())
+            .collect();
+        let start = Instant::now();
+        for (i, e) in emojis.iter().enumerate() {
+            let at = start + REACTION_WINDOW * i as u32;
+            t.svc.react_at(ALICE, DM, m.id, e, true, at).await.unwrap();
+        }
+        let later = start + REACTION_WINDOW * 100;
+        assert_eq!(
+            code(
+                t.svc
+                    .react_at(BOB, DM, m.id, "🦀", true, later)
+                    .await
+                    .unwrap_err()
+            ),
+            "too_many_reactions"
+        );
+        let (counts, _) = t
+            .svc
+            .react_at(BOB, DM, m.id, &emojis[0], true, later)
+            .await
+            .unwrap();
+        assert_eq!(counts[0].count, 2);
+    }
+
+    #[tokio::test]
+    async fn reactions_are_rate_limited_per_user() {
+        let t = setup();
+        let m = t.send(ALICE, "hi").await;
+        let now = Instant::now();
+        for i in 0..REACTION_LIMIT {
+            t.svc
+                .react_at(BOB, DM, m.id, THUMBS, i % 2 == 0, now)
+                .await
+                .unwrap();
+        }
+        let err = t
+            .svc
+            .react_at(BOB, DM, m.id, THUMBS, true, now)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, ApiError::TooManyRequests));
+        t.svc
+            .react_at(ALICE, DM, m.id, THUMBS, true, now)
+            .await
+            .unwrap();
+        t.svc
+            .react_at(BOB, DM, m.id, THUMBS, true, now + REACTION_WINDOW)
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn sync_reports_reaction_changes_on_older_messages() {
+        let t = setup();
+        let a = t.send(ALICE, "old").await;
+        t.svc.react(BOB, DM, a.id, THUMBS, true).await.unwrap();
+
+        let r = t.svc.sync(ALICE, DM, 1).await.unwrap();
+
+        assert!(r.messages.is_empty());
+        assert_eq!(r.edited.len(), 1);
+        assert_eq!(
+            r.edited[0].reactions,
+            [ReactionCount {
+                emoji: THUMBS.into(),
+                count: 1,
+                me: false
+            }]
+        );
+        assert_eq!(r.last_seq, 2);
+    }
+
+    #[tokio::test]
+    async fn deleting_a_message_blocks_new_reactions() {
+        let t = setup();
+        let m = t.send(ALICE, "bye").await;
+        t.svc.delete(ALICE, DM, m.id).await.unwrap();
+        assert_eq!(
+            code(t.svc.react(BOB, DM, m.id, THUMBS, true).await.unwrap_err()),
+            "message_not_found"
+        );
     }
 }

@@ -39,6 +39,13 @@ pub trait MessageRepo: Send + Sync {
     async fn delete(&self, conversation_id: i64, id: i64, change_seq: i64)
     -> Result<(), RepoError>;
     async fn was_deleted(&self, conversation_id: i64, id: i64) -> Result<bool, RepoError>;
+    /// Logs a reaction change so sync can report the message.
+    async fn log_reaction(
+        &self,
+        conversation_id: i64,
+        id: i64,
+        change_seq: i64,
+    ) -> Result<(), RepoError>;
     async fn changes_since(
         &self,
         conversation_id: i64,
@@ -247,6 +254,7 @@ impl MessageRepo for ScyllaMessageRepo {
         batch.append_statement(self.delete_message.clone());
         batch.append_statement(self.insert_change.clone());
         batch.append_statement(self.mark_deleted.clone());
+        batch.append_statement(self.delete_reactions.clone());
         self.session
             .batch(
                 &batch,
@@ -254,10 +262,28 @@ impl MessageRepo for ScyllaMessageRepo {
                     (conversation_id, bucket_of(id), id),
                     (conversation_id, change_seq, id, ChangeKind::Delete as i8),
                     (conversation_id, id),
+                    (conversation_id, id),
                 ),
             )
             .await
             .context("delete message")?;
+        Ok(())
+    }
+
+    #[tracing::instrument(name = "db INSERT message_changes", skip_all, err(Display), fields(otel.kind = "client", db.system = "scylladb", db.operation = "INSERT", db.collection.name = "message_changes"))]
+    async fn log_reaction(
+        &self,
+        conversation_id: i64,
+        id: i64,
+        change_seq: i64,
+    ) -> Result<(), RepoError> {
+        self.session
+            .execute_unpaged(
+                &self.insert_change,
+                (conversation_id, change_seq, id, ChangeKind::Reaction as i8),
+            )
+            .await
+            .context("log reaction")?;
         Ok(())
     }
 

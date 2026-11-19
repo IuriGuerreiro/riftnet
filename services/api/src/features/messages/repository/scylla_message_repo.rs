@@ -23,6 +23,7 @@ pub struct ScyllaMessageRepo {
     pub(super) changes_since: PreparedStatement,
     pub(super) mark_deleted: PreparedStatement,
     pub(super) was_deleted: PreparedStatement,
+    pub(super) delete_reactions: PreparedStatement,
 }
 
 pub(super) type Row = (
@@ -59,6 +60,7 @@ impl ScyllaMessageRepo {
             changes_since: prepare(q::CHANGES_SINCE).await?,
             mark_deleted: prepare(q::MARK_DELETED).await?,
             was_deleted: prepare(q::WAS_DELETED).await?,
+            delete_reactions: prepare(q::DELETE_REACTIONS).await?,
             session,
         })
     }
@@ -86,6 +88,7 @@ pub(super) fn to_message(
                 }
             })
             .collect(),
+        reactions: Vec::new(),
     }
 }
 
