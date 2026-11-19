@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use axum::Router;
+use axum::extract::DefaultBodyLimit;
 use axum::http::{HeaderValue, Method, header};
 use axum::middleware;
 use common::snowflake::Snowflake;
@@ -10,7 +11,9 @@ use tower_http::cors::CorsLayer;
 use crate::common::events::{EventBus, NatsEventBus};
 use crate::common::middleware::http_metrics;
 use crate::common::middleware::rate_limit::RateLimiter;
+use crate::common::shutdown::Shutdown;
 use crate::common::storage::{S3Config, S3FileStore};
+use crate::common::user_limits::{SocketSlots, UserLimiter};
 use crate::config::Config;
 use crate::features::attachments::repository::PgAttachmentRepo;
 use crate::features::attachments::service::{AttachmentService, Limits};
@@ -47,10 +50,19 @@ pub struct AppState {
     pub typing: Arc<TypingService>,
     pub tokens: Arc<TokenService>,
     pub limiter: Arc<RateLimiter>,
+    pub user_limits: UserLimiter,
+    pub socket_slots: SocketSlots,
+    pub shutdown: Arc<Shutdown>,
     pub events: Arc<dyn EventBus>,
 }
 
-pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Result<Router> {
+const MAX_BODY_BYTES: usize = 1024 * 1024;
+
+pub async fn build(
+    config: &Config,
+    prometheus: PrometheusHandle,
+    shutdown: Arc<Shutdown>,
+) -> anyhow::Result<Router> {
     let pool = crate::common::db::connect(&config.database_url).await?;
     let scylla = crate::common::scylla::connect(
         &config.scylla_nodes,
@@ -74,6 +86,8 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
         Arc::new(ScyllaConversationRepo::new(scylla.clone()).await?);
     let message_repo = Arc::new(ScyllaMessageRepo::new(scylla).await?);
     let friend_repo = Arc::new(PgFriendRepo::new(pool.clone()));
+    let user_limits = UserLimiter::new(redis.clone());
+    let socket_slots = SocketSlots::new(redis.clone(), crate::features::gateway::PRESENCE_TTL);
     let presence_store = Arc::new(RedisPresenceStore::new(
         redis,
         crate::features::gateway::PRESENCE_TTL,
@@ -162,6 +176,9 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
         )),
         tokens,
         limiter: Arc::new(RateLimiter::default()),
+        user_limits,
+        socket_slots,
+        shutdown,
         events,
     };
 
@@ -192,6 +209,7 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
         .merge(friends::routes())
         .merge(attachments::routes())
         .merge(gateway::routes())
+        .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
         .layer(middleware::from_fn(http_metrics::track))
         .layer(cors)
         .with_state(state))

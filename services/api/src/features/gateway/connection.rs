@@ -15,6 +15,8 @@ const CLOSE_UNAUTHORIZED: u16 = 4001;
 const CLOSE_TOKEN_EXPIRED: u16 = 4002;
 const CLOSE_SESSION_REVOKED: u16 = 4003;
 const CLOSE_SERVER_ERROR: u16 = 1011;
+const CLOSE_RESTARTING: u16 = 1012;
+const CLOSE_TOO_MANY_SOCKETS: u16 = 1008;
 const KICK_SEND_TIMEOUT: Duration = Duration::from_secs(5);
 const HEARTBEAT: Duration = Duration::from_secs(30);
 const DEAD_AFTER: Duration = Duration::from_secs(75);
@@ -32,6 +34,8 @@ enum Kick {
     Expired,
     Revoked,
     Unavailable,
+    Restarting,
+    TooManySockets,
 }
 
 impl Kick {
@@ -40,6 +44,8 @@ impl Kick {
             Kick::Expired => CLOSE_TOKEN_EXPIRED,
             Kick::Revoked => CLOSE_SESSION_REVOKED,
             Kick::Unavailable => CLOSE_SERVER_ERROR,
+            Kick::Restarting => CLOSE_RESTARTING,
+            Kick::TooManySockets => CLOSE_TOO_MANY_SOCKETS,
         }
     }
     fn reason(self) -> &'static str {
@@ -47,11 +53,15 @@ impl Kick {
             Kick::Expired => "token_expired",
             Kick::Revoked => "session_revoked",
             Kick::Unavailable => "unavailable",
+            Kick::Restarting => "server_restarting",
+            Kick::TooManySockets => "too_many_sockets",
         }
     }
 }
 
 pub async fn run(mut socket: WebSocket, state: AppState) {
+    let shutdown = state.shutdown.clone();
+    let _live = shutdown.track();
     let (session, expires_at) = match authenticate(&mut socket, &state).await {
         Ok(ok) => ok,
         Err(reason) => {
@@ -96,8 +106,22 @@ pub async fn run(mut socket: WebSocket, state: AppState) {
             Some(Kick::Unavailable)
         }
     };
+    let refused = match refused {
+        None if !state
+            .socket_slots
+            .acquire(session.user_id, session.connection_id)
+            .await =>
+        {
+            Some(Kick::TooManySockets)
+        }
+        other => other,
+    };
     if let Some(why) = refused {
         kick(&mut socket, why).await;
+        state
+            .socket_slots
+            .release(session.user_id, session.connection_id)
+            .await;
         metrics::gauge!("ws_connections").decrement(1.0);
         return;
     }
@@ -111,6 +135,8 @@ pub async fn run(mut socket: WebSocket, state: AppState) {
     let mut last_heard = Instant::now();
     let expiry = tokio::time::sleep_until(deadline(expires_at));
     tokio::pin!(expiry);
+    let stopping = shutdown.stopped();
+    tokio::pin!(stopping);
 
     let mut kicked = None;
     loop {
@@ -125,6 +151,10 @@ pub async fn run(mut socket: WebSocket, state: AppState) {
             }
             () = &mut expiry => {
                 kicked = Some(Kick::Expired);
+                break;
+            }
+            () = &mut stopping => {
+                kicked = Some(Kick::Restarting);
                 break;
             }
             frame = socket.recv() => {
@@ -165,7 +195,7 @@ pub async fn run(mut socket: WebSocket, state: AppState) {
                 }
             }
             _ = heartbeat.tick() => {
-                if last_heard.elapsed() > DEAD_AFTER {
+                if is_dead(last_heard.elapsed()) {
                     tracing::info!(user.id = session.user_id, "ws heartbeat timeout");
                     break;
                 }
@@ -173,6 +203,7 @@ pub async fn run(mut socket: WebSocket, state: AppState) {
                     break;
                 }
                 state.presence.heartbeat(session.user_id, session.connection_id).await;
+                state.socket_slots.acquire(session.user_id, session.connection_id).await;
             }
         }
     }
@@ -189,6 +220,10 @@ pub async fn run(mut socket: WebSocket, state: AppState) {
     }
 
     state.calls.connection_closed(session.connection_id).await;
+    state
+        .socket_slots
+        .release(session.user_id, session.connection_id)
+        .await;
 
     state
         .presence
@@ -277,6 +312,10 @@ fn same_session(session: &Session, user_id: i64, device_id: i64) -> Result<(), &
     }
 }
 
+fn is_dead(silent_for: Duration) -> bool {
+    silent_for > DEAD_AFTER
+}
+
 fn deadline(expires_at: i64) -> tokio::time::Instant {
     let left = expires_at - chrono::Utc::now().timestamp();
     tokio::time::Instant::now() + Duration::from_secs(left.max(0) as u64)
@@ -322,7 +361,12 @@ async fn handle(state: &AppState, session: &Session, req: Envelope) -> Envelope 
         },
         Err(err) => {
             let (_, code, message) = err.describe();
-            error(req.id, code, &message)
+            let mut env = error(req.id, code, &message);
+            if let (Some(wait), Some(Payload::Error(e))) = (err.retry_after(), env.payload.as_mut())
+            {
+                e.retry_after_ms = wait.as_millis() as u64;
+            }
+            env
         }
     }
 }
@@ -339,6 +383,7 @@ fn error(id: u64, code: &str, message: &str) -> Envelope {
         payload: Some(Payload::Error(Error {
             code: code.into(),
             message: message.into(),
+            retry_after_ms: 0,
         })),
     }
 }
@@ -346,6 +391,21 @@ fn error(id: u64, code: &str, message: &str) -> Envelope {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn heartbeat_drops_only_silent_sockets() {
+        assert!(!is_dead(HEARTBEAT));
+        assert!(!is_dead(DEAD_AFTER));
+        assert!(is_dead(DEAD_AFTER + Duration::from_millis(1)));
+        assert!(DEAD_AFTER > HEARTBEAT * 2);
+    }
+
+    #[test]
+    fn new_close_codes() {
+        assert_eq!(Kick::Restarting.code(), 1012);
+        assert_eq!(Kick::TooManySockets.code(), 1008);
+        assert_eq!(Kick::Restarting.reason(), "server_restarting");
+    }
 
     fn session() -> Session {
         Session {
