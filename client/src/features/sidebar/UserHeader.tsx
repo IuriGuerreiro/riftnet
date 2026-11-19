@@ -16,7 +16,7 @@ export function UserHeader({ onEditProfile }: { onEditProfile: () => void }) {
         onClick={onEditProfile}
       >
         <Avatar userId={me?.id} />
-        <span className="truncate text-brand">{me ? nameFor(me.id) : "…"}</span>
+        <span className="truncate text-brand">{me ? nameFor(me.id) : "Loading…"}</span>
       </button>
       <p className="flex items-center gap-2 text-xs text-fg-muted">
         <span className={`size-2 rounded-full ${dot[status]}`} />

@@ -27,10 +27,10 @@ export function CallBar({ ws, conversationId }: { ws: WsClient | null; conversat
 
   const status =
     current.state === CallState.RINGING
-      ? "ringing…"
+      ? "Ringing…"
       : joined
         ? `In call (${current.participantIds.length})`
-        : "connecting…";
+        : "Connecting…";
   return (
     <div className="flex items-center gap-2 text-xs font-normal text-fg-muted">
       {info && <span>{info}</span>}
@@ -68,7 +68,7 @@ export function IncomingCall({
   return (
     <div className="fixed left-1/2 top-4 z-50 flex -translate-x-1/2 items-center gap-3 rounded-panel bg-surface-2 px-4 py-3 shadow-pop ring-2 ring-success">
       <Phone size={18} className="text-success" />
-      <span className="text-sm">@{callerName(incoming.callerId)} is calling…</span>
+      <span className="text-sm">{callerName(incoming.callerId)} is calling…</span>
       <Button
         size="sm"
         className="bg-success text-white hover:bg-success"

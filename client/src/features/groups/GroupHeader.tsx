@@ -22,9 +22,9 @@ export function GroupHeader({
       <div className="flex items-center gap-3">
         <button
           className="font-semibold hover:text-brand"
-          title="Rename"
+          title="Rename group"
           onClick={() => {
-            const name = prompt("New group name", group.name);
+            const name = prompt("Enter a new group name", group.name);
             if (name?.trim()) onRename(name.trim());
           }}
         >
@@ -32,7 +32,7 @@ export function GroupHeader({
         </button>
         <span className="text-xs text-fg-subtle">{group.members.length}/5</span>
         <button className="ml-auto text-xs text-danger hover:text-danger" onClick={onLeave}>
-          Leave
+          Leave group
         </button>
       </div>
       <p className="text-xs text-fg-muted">
@@ -51,7 +51,7 @@ export function GroupHeader({
           <input
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            placeholder="add username"
+            placeholder="Add member by username"
             className={field}
           />
           <Button type="submit" size="sm" variant="secondary">

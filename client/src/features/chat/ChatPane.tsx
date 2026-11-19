@@ -37,7 +37,7 @@ export function ChatPane() {
         </>
       ) : (
         <p className="m-auto text-sm text-fg-subtle">
-          Pick a conversation, or start a DM or a group.
+          Select a conversation, or start a direct message or group.
         </p>
       )}
       {chat.error && <p className="px-4 pb-2 text-xs text-danger">{chat.error}</p>}

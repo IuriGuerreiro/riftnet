@@ -49,10 +49,14 @@ export function ProfilePanel({ myId, onClose }: { myId: string; onClose: () => v
   );
 
   return (
-    <Modal open title="Your profile" onClose={onClose}>
+    <Modal open title="Edit profile" onClose={onClose}>
       <section className="flex items-center gap-4">
         {preview ? (
-          <img src={preview.url} alt="preview" className="size-24 rounded-full object-cover" />
+          <img
+            src={preview.url}
+            alt="Avatar preview"
+            className="size-24 rounded-full object-cover"
+          />
         ) : (
           <Avatar userId={myId} size="lg" />
         )}
@@ -93,7 +97,7 @@ export function ProfilePanel({ myId, onClose }: { myId: string; onClose: () => v
                   disabled={remove.isPending}
                   onClick={() => remove.mutate()}
                 >
-                  Remove
+                  Remove avatar
                 </Button>
               )}
             </>
@@ -105,7 +109,7 @@ export function ProfilePanel({ myId, onClose }: { myId: string; onClose: () => v
       <form onSubmit={onSave} className="space-y-4">
         <Input
           label="Display name"
-          placeholder={me?.username ? `@${me.username}` : "display name"}
+          placeholder={me?.username ? `@${me.username}` : "Display name"}
           {...form.register("display_name")}
           error={form.formState.errors.display_name?.message}
         />
@@ -118,7 +122,7 @@ export function ProfilePanel({ myId, onClose }: { myId: string; onClose: () => v
         />
         <ErrorText error={update.error} />
         {update.isSuccess && !form.formState.isDirty && (
-          <p className="text-xs text-success">Saved</p>
+          <p className="text-xs text-success">Profile saved</p>
         )}
         <Button type="submit" block disabled={update.isPending}>
           Save profile

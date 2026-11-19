@@ -92,13 +92,13 @@ export function Composer({
           onKeyDown={(e) => {
             if (e.key === "Escape") useChat.getState().setReplyingTo(null);
           }}
-          placeholder="Message"
+          placeholder="Write a message…"
           maxLength={4000}
           className="min-w-0 flex-1 bg-transparent py-2.5 text-sm text-fg outline-none placeholder:text-fg-subtle"
         />
         <IconButton
           type="submit"
-          label="Send"
+          label="Send message"
           icon={<SendHorizontal size={20} />}
           disabled={disabled || busy}
           className="hover:text-brand"

@@ -25,7 +25,7 @@ export function ReplyQuote({
   const muted = mine ? "text-on-brand/70" : "text-fg-muted";
 
   if (target.state === "deleted")
-    return <span className={`mb-1 block text-xs italic ${muted}`}>↪ Original deleted</span>;
+    return <span className={`mb-1 block text-xs italic ${muted}`}>↪ Original message deleted</span>;
 
   return (
     <button
@@ -42,10 +42,10 @@ export function ReplyQuote({
           <span className="font-semibold">
             {nameOf(profiles[target.message.authorId.toString()])}
           </span>{" "}
-          {target.message.text || "📎 attachment"}
+          {target.message.text || "Attachment"}
         </>
       ) : (
-        "↪ Earlier message · click to load"
+        "↪ Earlier message · Click to load"
       )}
     </button>
   );

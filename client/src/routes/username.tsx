@@ -17,10 +17,10 @@ export function UsernamePage() {
 
   return (
     <Card>
-      <h1 className="text-2xl font-bold">Pick your username</h1>
+      <h1 className="text-2xl font-bold">Choose a username</h1>
       <form onSubmit={onSubmit} className="space-y-3">
         <Input
-          placeholder="username"
+          placeholder="Username"
           {...form.register("username")}
           error={form.formState.errors.username?.message}
         />

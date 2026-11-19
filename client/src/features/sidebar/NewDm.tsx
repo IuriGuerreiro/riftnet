@@ -23,11 +23,11 @@ export function NewDm({
       <input
         value={username}
         onChange={(e) => setUsername(e.target.value)}
-        placeholder="username"
+        placeholder="Username"
         className={fieldClass}
       />
       <Button type="submit" size="sm" disabled={disabled}>
-        DM
+        Message
       </Button>
     </form>
   );

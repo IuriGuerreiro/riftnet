@@ -103,7 +103,7 @@ export function MessageRow({
           className={`max-w-[75%] whitespace-pre-wrap break-words rounded-lg px-3 py-1.5 text-sm ${
             mine ? "bg-brand text-on-brand" : "bg-surface-2"
           } ${m.pending ? "opacity-50" : ""} ${m.failed ? "ring-2 ring-danger" : ""}`}
-          title={m.pending ? "sending…" : `seq ${m.seq}`}
+          title={m.pending ? "Sending…" : `Message #${m.seq}`}
         >
           {m.replyTo !== undefined && (
             <ReplyQuote conversationId={conversationId} replyTo={m.replyTo} mine={mine} />

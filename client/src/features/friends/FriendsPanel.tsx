@@ -63,7 +63,9 @@ export function FriendsPanel({ onDm }: { onDm: (username: string) => void }) {
           </form>
           {error && <p className="text-xs text-danger">{error}</p>}
           {query && !validQuery && (
-            <p className="text-xs text-fg-muted">Use 1–32 letters, numbers, underscores or dots.</p>
+            <p className="text-xs text-fg-muted">
+              Use 1 to 32 letters, numbers, underscores, or dots.
+            </p>
           )}
           {validQuery && (!searchReady || search.isPending) && (
             <p role="status" className="text-xs text-fg-muted">
@@ -77,7 +79,7 @@ export function FriendsPanel({ onDm }: { onDm: (username: string) => void }) {
           )}
           {searchReady && search.isSuccess && search.data.length === 0 && (
             <p role="status" className="text-xs text-fg-muted">
-              No matching usernames.
+              No matching users.
             </p>
           )}
           {searchReady &&
@@ -115,12 +117,7 @@ export function FriendsPanel({ onDm }: { onDm: (username: string) => void }) {
             })}
 
           {list.incoming.map((f) => (
-            <FriendRow
-              key={f.user.id}
-              label={name(f)}
-              avatarId={f.user.id}
-              hint="wants to be friends"
-            >
+            <FriendRow key={f.user.id} label={name(f)} avatarId={f.user.id} hint="Incoming request">
               <RowButton onClick={() => accept(f.user.id)} className="text-success">
                 Accept
               </RowButton>
@@ -130,7 +127,7 @@ export function FriendsPanel({ onDm }: { onDm: (username: string) => void }) {
             </FriendRow>
           ))}
           {list.outgoing.map((f) => (
-            <FriendRow key={f.user.id} label={name(f)} avatarId={f.user.id} hint="request sent">
+            <FriendRow key={f.user.id} label={name(f)} avatarId={f.user.id} hint="Request sent">
               <RowButton onClick={() => deleteRequest(f.user.id)} className="text-fg-muted">
                 Cancel
               </RowButton>
@@ -142,11 +139,11 @@ export function FriendsPanel({ onDm }: { onDm: (username: string) => void }) {
                 onClick={() => f.user.username && onDm(f.user.username)}
                 className="text-brand"
               >
-                DM
+                Message
               </RowButton>
               <RowButton
                 onClick={() =>
-                  confirm(`Remove ${name(f)} from friends?`) && removeFriend(f.user.id)
+                  confirm(`Remove ${name(f)} from your friends?`) && removeFriend(f.user.id)
                 }
                 className="text-danger"
               >
@@ -155,7 +152,9 @@ export function FriendsPanel({ onDm }: { onDm: (username: string) => void }) {
             </FriendRow>
           ))}
           {list.friends.length + list.incoming.length + list.outgoing.length === 0 && (
-            <p className="text-xs text-fg-subtle">No friends yet. Add someone by username.</p>
+            <p className="text-xs text-fg-subtle">
+              No friends yet. Search by username to add someone.
+            </p>
           )}
         </div>
       )}

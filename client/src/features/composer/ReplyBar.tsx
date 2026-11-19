@@ -19,7 +19,7 @@ export function ReplyBar({ conversationId }: { conversationId: bigint }) {
         <span className="font-semibold text-fg">
           {nameOf(profiles[message.authorId.toString()])}
         </span>
-        : {message.text || "📎 attachment"}
+        : {message.text || "Attachment"}
       </span>
       <IconButton
         label="Cancel reply (Esc)"

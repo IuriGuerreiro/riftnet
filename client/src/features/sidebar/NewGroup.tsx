@@ -29,18 +29,18 @@ export function NewGroup({
       <input
         value={name}
         onChange={(e) => setName(e.target.value)}
-        placeholder="group name"
+        placeholder="Group name"
         className={field}
       />
       <div className="flex gap-2">
         <input
           value={usernames}
           onChange={(e) => setUsernames(e.target.value)}
-          placeholder="ana, bob, carl"
+          placeholder="Members (ana, bob)"
           className={field}
         />
         <Button type="submit" size="sm" disabled={disabled}>
-          Group
+          Create
         </Button>
       </div>
     </form>
