@@ -25,9 +25,11 @@ async fn send_acks_and_pushes_to_both_members() {
     assert_eq!(sent.seq, 1);
     assert_eq!(sent.author_id, a.id as u64);
 
-    let got = bob.push(created(dm.id)).await;
-    assert_eq!(got.id, sent.id);
-    assert_eq!(got.content, b"hi bob");
+    for client in [&mut alice, &mut bob] {
+        let got = client.push(created(dm.id)).await;
+        assert_eq!(got.id, sent.id);
+        assert_eq!(got.content, b"hi bob");
+    }
 }
 
 #[tokio::test]
@@ -35,6 +37,7 @@ async fn send_acks_and_pushes_to_both_members() {
 async fn same_nonce_returns_the_same_message() {
     let (a, b) = (seed_user().await, seed_user().await);
     let mut alice = Client::connect(&a).await;
+    let mut bob = Client::connect(&b).await;
     let dm = open_dm(&mut alice, &b).await;
     let send = || {
         Payload::SendMessage(v1::SendMessage {
@@ -42,15 +45,39 @@ async fn same_nonce_returns_the_same_message() {
             content: b"once".to_vec(),
             nonce: "fixed-nonce".into(),
             attachment_ids: vec![],
+            reply_to: 0,
         })
     };
     let first = alice.request(send()).await;
     let second = alice.request(send()).await;
-    let id = |p: Payload| match p {
+    let id = id_of;
+    let id = id(first);
+    assert_eq!(id, id_of(second));
+
+    assert_eq!(bob.push(created(dm.id)).await.id, id);
+    bob.no_push(created(dm.id)).await;
+
+    let reply = alice
+        .request(Payload::GetHistory(v1::GetHistory {
+            conversation_id: dm.id,
+            before_id: 0,
+            limit: 10,
+        }))
+        .await;
+    let Payload::History(history) = reply else {
+        panic!("history failed: {reply:?}");
+    };
+    assert_eq!(
+        history.messages.iter().map(|m| m.id).collect::<Vec<_>>(),
+        [id]
+    );
+}
+
+fn id_of(p: Payload) -> u64 {
+    match p {
         Payload::MessageAck(ack) => ack.message.expect("message").id,
         other => panic!("send failed: {other:?}"),
-    };
-    assert_eq!(id(first), id(second));
+    }
 }
 
 #[tokio::test]
@@ -67,6 +94,7 @@ async fn outsider_cannot_send_or_read() {
             content: b"sneaky".to_vec(),
             nonce: "n1".into(),
             attachment_ids: vec![],
+            reply_to: 0,
         }))
         .await;
     assert_eq!(error_code(&reply), "conversation_not_found");
@@ -154,6 +182,7 @@ async fn sync_after_reconnect_returns_missed_changes() {
         [m3.id]
     );
     assert_eq!(sync.edited.len(), 1);
+    assert_eq!(sync.edited[0].id, m1.id);
     assert_eq!(sync.edited[0].content, b"one (edited)");
     assert_eq!(sync.deleted_ids, [m2.id]);
 
@@ -166,5 +195,9 @@ async fn sync_after_reconnect_returns_missed_changes() {
     let Payload::SyncResult(again) = again else {
         panic!("sync failed: {again:?}");
     };
-    assert!(again.complete && again.messages.is_empty());
+    assert!(again.complete);
+    assert!(again.messages.is_empty());
+    assert!(again.edited.is_empty());
+    assert!(again.deleted_ids.is_empty());
+    assert_eq!(again.last_seq, sync.last_seq);
 }

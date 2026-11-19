@@ -1,8 +1,10 @@
 use std::collections::VecDeque;
 use std::net::SocketAddr;
+use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
+use api::common::shutdown::Shutdown;
 use api::config::Config;
 use api::features::auth::tokens::TokenService;
 use futures::{SinkExt, StreamExt};
@@ -13,14 +15,16 @@ use tokio::net::TcpStream;
 use tokio_tungstenite::tungstenite::Message as WsMessage;
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 
-pub const TEST_DB: &str = "api_it";
-pub const TEST_KEYSPACE: &str = "api_it";
+const PREFIX: &str = "api_it_";
+const STALE_AFTER_SECS: i64 = 60 * 60;
 const WAIT: Duration = Duration::from_secs(5);
+const QUIET: Duration = Duration::from_millis(500);
 
 pub struct Server {
     pub addr: SocketAddr,
     pub tokens: Arc<TokenService>,
     pub database_url: String,
+    next_id: AtomicI64,
 }
 
 fn env_or(key: &str, default: &str) -> String {
@@ -31,10 +35,25 @@ fn admin_database_url() -> String {
     env_or("IT_DATABASE_URL", "postgres://app:app@127.0.0.1:55432/app")
 }
 
-fn test_database_url() -> String {
+fn database_url(name: &str) -> String {
     let admin = admin_database_url();
     let base = admin.rsplit_once('/').map_or(admin.as_str(), |(b, _)| b);
-    format!("{base}/{TEST_DB}")
+    format!("{base}/{name}")
+}
+
+fn run_name() -> String {
+    format!(
+        "{PREFIX}{}_{:08x}",
+        chrono::Utc::now().timestamp(),
+        rand::random::<u32>()
+    )
+}
+
+fn is_stale(name: &str, now: i64) -> bool {
+    name.strip_prefix(PREFIX)
+        .and_then(|rest| rest.split('_').next())
+        .and_then(|ts| ts.parse::<i64>().ok())
+        .is_some_and(|ts| now - ts > STALE_AFTER_SECS)
 }
 
 fn scylla_nodes() -> Vec<String> {
@@ -76,13 +95,13 @@ pub fn server() -> &'static Server {
 }
 
 async fn boot() -> anyhow::Result<(tokio::net::TcpListener, axum::Router, Server)> {
-    reset_postgres().await?;
-    reset_scylla().await?;
+    let name = run_name();
+    prepare_postgres(&name).await?;
+    drop_stale_keyspaces().await?;
 
-    let key_dir = std::env::temp_dir().join(format!("api-it-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&key_dir);
+    let key_dir = std::env::temp_dir().join(&name);
     let key_file = key_dir.join("signing_key");
-    let database_url = test_database_url();
+    let database_url = database_url(&name);
     let config = Config {
         env: "test".into(),
         addr: "127.0.0.1:0".parse()?,
@@ -90,7 +109,7 @@ async fn boot() -> anyhow::Result<(tokio::net::TcpListener, axum::Router, Server
         nats_url: env_or("NATS_URL", "nats://127.0.0.1:4222"),
         redis_url: env_or("REDIS_URL", "redis://127.0.0.1:6379"),
         scylla_nodes: scylla_nodes(),
-        scylla_keyspace: TEST_KEYSPACE.into(),
+        scylla_keyspace: name.clone(),
         scylla_replication: 1,
         zitadel_url: "http://127.0.0.1:9".into(),
         zitadel_pat: "unused".into(),
@@ -105,10 +124,13 @@ async fn boot() -> anyhow::Result<(tokio::net::TcpListener, axum::Router, Server
         s3_secret_key: env_or("S3_SECRET_KEY", "minio-dev-secret"),
         attachment_max_bytes: 1024 * 1024,
         attachment_ttl_hours: 1,
+        rate_limits: true,
     };
     let prometheus = PrometheusBuilder::new().build_recorder().handle();
-    let app = api::app::build(&config, prometheus).await?;
+    let shutdown = Arc::new(Shutdown::default());
+    let app = api::app::build(&config, prometheus, shutdown).await?;
     let tokens = Arc::new(TokenService::from_key_file(&key_file, false)?);
+    std::fs::remove_dir_all(&key_dir)?;
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let addr = listener.local_addr()?;
     Ok((
@@ -118,29 +140,47 @@ async fn boot() -> anyhow::Result<(tokio::net::TcpListener, axum::Router, Server
             addr,
             tokens,
             database_url,
+            next_id: AtomicI64::new(rand::random::<u32>() as i64 * 2),
         },
     ))
 }
 
-async fn reset_postgres() -> anyhow::Result<()> {
+async fn prepare_postgres(name: &str) -> anyhow::Result<()> {
     let admin = sqlx::PgPool::connect(&admin_database_url()).await?;
-    sqlx::query(&format!("DROP DATABASE IF EXISTS {TEST_DB} WITH (FORCE)"))
-        .execute(&admin)
-        .await?;
-    sqlx::query(&format!("CREATE DATABASE {TEST_DB}"))
+    let now = chrono::Utc::now().timestamp();
+    let existing: Vec<String> =
+        sqlx::query_scalar(r"SELECT datname FROM pg_database WHERE datname LIKE 'api\_it\_%'")
+            .fetch_all(&admin)
+            .await?;
+    for old in existing.iter().filter(|n| is_stale(n, now)) {
+        sqlx::query(&format!("DROP DATABASE IF EXISTS {old} WITH (FORCE)"))
+            .execute(&admin)
+            .await?;
+    }
+    sqlx::query(&format!("CREATE DATABASE {name}"))
         .execute(&admin)
         .await?;
     Ok(())
 }
 
-async fn reset_scylla() -> anyhow::Result<()> {
+async fn drop_stale_keyspaces() -> anyhow::Result<()> {
     let session = scylla::client::session_builder::SessionBuilder::new()
         .known_nodes(scylla_nodes())
         .build()
         .await?;
-    session
-        .query_unpaged(format!("DROP KEYSPACE IF EXISTS {TEST_KEYSPACE}"), ())
-        .await?;
+    let now = chrono::Utc::now().timestamp();
+    let rows = session
+        .query_unpaged("SELECT keyspace_name FROM system_schema.keyspaces", ())
+        .await?
+        .into_rows_result()?;
+    for row in rows.rows::<(String,)>()? {
+        let (keyspace,) = row?;
+        if is_stale(&keyspace, now) {
+            session
+                .query_unpaged(format!("DROP KEYSPACE IF EXISTS {keyspace}"), ())
+                .await?;
+        }
+    }
     Ok(())
 }
 
@@ -156,9 +196,9 @@ pub async fn seed_user() -> TestUser {
     let db = sqlx::PgPool::connect(&server.database_url)
         .await
         .expect("connect test db");
-    let id = (rand::random::<u32>() as i64) << 20 | rand::random::<u16>() as i64;
+    let id = server.next_id.fetch_add(2, Ordering::Relaxed);
     let device_id = id + 1;
-    let username = format!("it_{:x}", rand::random::<u64>());
+    let username = format!("it_{id:x}");
     sqlx::query("INSERT INTO users (id, zitadel_id, username) VALUES ($1, $2, $3)")
         .bind(id)
         .bind(format!("it-{id}"))
@@ -243,6 +283,8 @@ impl Client {
             matches!(reply, Payload::AuthOk(_)),
             "auth failed: {reply:?}"
         );
+        let pong = client.request(Payload::Ping(v1::Ping {})).await;
+        assert!(matches!(pong, Payload::Pong(_)), "not ready: {pong:?}");
         client
     }
 
@@ -250,7 +292,7 @@ impl Client {
         loop {
             match tokio::time::timeout(WAIT, self.ws.next()).await {
                 Err(_) => return None,
-                Ok(None) | Ok(Some(Err(_))) => return None,
+                Ok(None) | Ok(Some(Err(_))) | Ok(Some(Ok(WsMessage::Close(_)))) => return None,
                 Ok(Some(Ok(WsMessage::Binary(bytes)))) => {
                     return Some(Envelope::decode(bytes).expect("valid envelope"));
                 }
@@ -287,7 +329,7 @@ impl Client {
     }
 
     pub async fn no_push<T>(&mut self, mut pick: impl FnMut(&Payload) -> Option<T>) {
-        let got = self.try_push(&mut pick, Duration::from_millis(500)).await;
+        let got = self.try_push(&mut pick, QUIET).await;
         assert!(
             got.is_none(),
             "{}: got an unexpected push",
@@ -307,9 +349,17 @@ impl Client {
         let deadline = tokio::time::Instant::now() + wait;
         loop {
             let left = deadline.saturating_duration_since(tokio::time::Instant::now());
-            let frame = tokio::time::timeout(left, self.ws.next()).await.ok()??;
-            let Ok(WsMessage::Binary(bytes)) = frame else {
-                continue;
+            let Ok(frame) = tokio::time::timeout(left, self.ws.next()).await else {
+                return None;
+            };
+            let bytes = match frame {
+                Some(Ok(WsMessage::Binary(bytes))) => bytes,
+                Some(Ok(WsMessage::Close(close))) => {
+                    panic!("{}: socket closed by server: {close:?}", self.user.username)
+                }
+                Some(Ok(_)) => continue,
+                Some(Err(err)) => panic!("{}: socket error: {err}", self.user.username),
+                None => panic!("{}: socket closed", self.user.username),
             };
             let env = Envelope::decode(bytes).expect("valid envelope");
             if let Some(p) = env.payload {
@@ -374,6 +424,7 @@ pub async fn send_text(client: &mut Client, conversation_id: u64, text: &str) ->
             content: text.as_bytes().to_vec(),
             nonce: format!("n-{:x}", rand::random::<u64>()),
             attachment_ids: vec![],
+            reply_to: 0,
         }))
         .await;
     match reply {

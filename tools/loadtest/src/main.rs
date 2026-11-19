@@ -1,6 +1,7 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::path::PathBuf;
 use std::sync::atomic::Ordering::Relaxed;
+use std::sync::atomic::{AtomicBool, AtomicUsize};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -19,6 +20,8 @@ type Ws = WebSocketStream<MaybeTlsStream<TcpStream>>;
 const NAME: &str = "loadtest";
 const REPLY_TIMEOUT: Duration = Duration::from_secs(15);
 const DELIVERY_TIMEOUT: Duration = Duration::from_secs(15);
+const POLL: Duration = Duration::from_millis(200);
+const SEND_TIMEOUT: Duration = Duration::from_secs(5);
 
 struct Settings {
     admin_db: String,
@@ -70,20 +73,64 @@ struct User {
     device_id: i64,
 }
 
+#[derive(Clone, Copy)]
+enum Phase {
+    Connect,
+    Auth,
+    OpenDm,
+    Send,
+    Delivery,
+}
+
+const PHASES: [(Phase, &str); 5] = [
+    (Phase::Connect, "connect"),
+    (Phase::Auth, "auth"),
+    (Phase::OpenDm, "open_dm"),
+    (Phase::Send, "send"),
+    (Phase::Delivery, "delivery"),
+];
+
 #[derive(Default)]
 struct Stats {
+    attempts: [usize; 5],
+    failures: [usize; 5],
+    errors: BTreeMap<String, usize>,
     connect: Vec<Duration>,
     auth: Vec<Duration>,
     ack: Vec<Duration>,
     delivery: Vec<Duration>,
-    errors: BTreeMap<String, usize>,
-    sent: usize,
-    delivered: usize,
 }
 
 impl Stats {
-    fn error(&mut self, kind: impl Into<String>) {
-        *self.errors.entry(kind.into()).or_default() += 1;
+    fn attempt(&mut self, phase: Phase) {
+        self.attempts[phase as usize] += 1;
+    }
+
+    fn fail(&mut self, phase: Phase, kind: impl Into<String>, count: usize) {
+        self.failures[phase as usize] += count;
+        *self.errors.entry(kind.into()).or_default() += count;
+    }
+
+    fn total_attempts(&self) -> usize {
+        self.attempts.iter().sum()
+    }
+
+    fn total_failures(&self) -> usize {
+        self.failures.iter().sum()
+    }
+}
+
+struct Shared {
+    stats: Mutex<Stats>,
+    acked: Vec<AtomicUsize>,
+    done: Vec<AtomicBool>,
+    barrier: Barrier,
+    origin: Instant,
+}
+
+impl Shared {
+    fn record(&self, f: impl FnOnce(&mut Stats)) {
+        f(&mut self.stats.lock().expect("stats lock"));
     }
 }
 
@@ -150,7 +197,6 @@ async fn seed(s: &Settings, n: usize) -> anyhow::Result<Vec<User>> {
     .await?;
     Ok(users)
 }
-
 async fn run(s: &Settings) -> anyhow::Result<()> {
     let tokens = Arc::new(
         TokenService::from_key_file(&s.key_file, false)
@@ -161,41 +207,47 @@ async fn run(s: &Settings) -> anyhow::Result<()> {
         s.ws_url, s.steps, s.messages
     );
     println!(
-        "{:>6} {:>7} {:>7} {:>22} {:>22} {:>22} {:>22} {:>9}",
+        "{:>6} {:>13} {:>7} {:>22} {:>22} {:>22} {:>22}",
         "socks",
-        "errors",
+        "fail/ops",
         "err%",
         "connect p50/p95/p99",
         "auth p50/p95/p99",
         "ack p50/p95/p99",
-        "deliver p50/p95/p99",
-        "delivered"
+        "deliver p50/p95/p99"
     );
     let mut broke = None;
-    for &n in &s.steps {
-        let users = seed(s, n + n % 2).await?;
+    for &requested in &s.steps {
+        let users = seed(s, requested + requested % 2).await?;
+        let sockets = users.len();
         let stats = step(s, &tokens, users).await;
-        let total_ops = n * (2 + s.messages);
-        let errors: usize = stats.errors.values().sum();
-        let err_pct = 100.0 * errors as f64 / total_ops as f64;
+        let (fails, ops) = (stats.total_failures(), stats.total_attempts());
+        let err_pct = 100.0 * fails as f64 / ops.max(1) as f64;
         println!(
-            "{:>6} {:>7} {:>6.2}% {:>22} {:>22} {:>22} {:>22} {:>4}/{:<4}",
-            n,
-            errors,
+            "{:>6} {:>13} {:>6.2}% {:>22} {:>22} {:>22} {:>22}",
+            sockets,
+            format!("{fails}/{ops}"),
             err_pct,
             pcts(&stats.connect),
             pcts(&stats.auth),
             pcts(&stats.ack),
             pcts(&stats.delivery),
-            stats.delivered,
-            stats.sent
         );
+        for (phase, name) in PHASES {
+            let (f, a) = (
+                stats.failures[phase as usize],
+                stats.attempts[phase as usize],
+            );
+            if f > 0 {
+                println!("         {name}: {f}/{a} failed");
+            }
+        }
         for (kind, count) in &stats.errors {
             println!("         {count:>6} x {kind}");
         }
         let p99_ack = pct(&stats.ack, 0.99).unwrap_or(Duration::MAX);
         if broke.is_none() && (err_pct > 1.0 || p99_ack > Duration::from_secs(1)) {
-            broke = Some(n);
+            broke = Some(sockets);
         }
         tokio::time::sleep(Duration::from_secs(2)).await;
     }
@@ -207,160 +259,218 @@ async fn run(s: &Settings) -> anyhow::Result<()> {
 }
 
 async fn step(s: &Settings, tokens: &Arc<TokenService>, users: Vec<User>) -> Stats {
-    let stats = Arc::new(Mutex::new(Stats::default()));
-    let barrier = Arc::new(Barrier::new(users.len()));
-    let origin = Instant::now();
+    let n = users.len();
+    let shared = Arc::new(Shared {
+        stats: Mutex::new(Stats::default()),
+        acked: (0..n).map(|_| AtomicUsize::new(0)).collect(),
+        done: (0..n).map(|_| AtomicBool::new(false)).collect(),
+        barrier: Barrier::new(n),
+        origin: Instant::now(),
+    });
     let mut tasks = Vec::new();
     for (i, me) in users.iter().enumerate() {
         let partner = users[i ^ 1].clone();
         let me = me.clone();
-        let now = chrono::Utc::now().timestamp();
-        let (token, _) = tokens.issue_access(me.id, me.device_id, now);
+        let (token, _) = tokens.issue_access(me.id, me.device_id, chrono::Utc::now().timestamp());
         let url = s.ws_url.clone();
-        let stats = stats.clone();
-        let barrier = barrier.clone();
+        let shared = shared.clone();
         let messages = s.messages;
         tasks.push(tokio::spawn(async move {
-            socket(url, token, me, partner, messages, barrier, stats, origin).await;
+            socket(i, url, token, me, partner, messages, &shared).await;
+            shared.done[i].store(true, Relaxed);
         }));
     }
     for t in tasks {
-        let _ = t.await;
+        if t.await.is_err() {
+            shared.record(|s| s.fail(Phase::Connect, "task panicked", 1));
+        }
     }
-    Arc::try_unwrap(stats)
+    Arc::try_unwrap(shared)
         .ok()
         .expect("all tasks done")
+        .stats
         .into_inner()
         .expect("stats lock")
 }
 
-#[allow(clippy::too_many_arguments)]
+async fn connect_and_auth(url: String, token: String, shared: &Shared) -> Option<Ws> {
+    shared.record(|s| s.attempt(Phase::Connect));
+    let started = Instant::now();
+    let mut ws =
+        match tokio::time::timeout(REPLY_TIMEOUT, tokio_tungstenite::connect_async(url)).await {
+            Ok(Ok((ws, _))) => {
+                let took = started.elapsed();
+                shared.record(|s| s.connect.push(took));
+                ws
+            }
+            Ok(Err(err)) => {
+                shared.record(|s| {
+                    s.fail(
+                        Phase::Connect,
+                        format!("connect: {}", short(&err.to_string())),
+                        1,
+                    )
+                });
+                return None;
+            }
+            Err(_) => {
+                shared.record(|s| s.fail(Phase::Connect, "connect: timeout", 1));
+                return None;
+            }
+        };
+
+    shared.record(|s| s.attempt(Phase::Auth));
+    let started = Instant::now();
+    let auth = Payload::Authenticate(v1::Authenticate {
+        access_token: token,
+    });
+    match request(&mut ws, 1, auth, &mut |_| {}).await {
+        Ok(Payload::AuthOk(_)) => {}
+        Ok(other) => {
+            shared.record(|s| s.fail(Phase::Auth, format!("auth: {}", kind(&other)), 1));
+            return None;
+        }
+        Err(err) => {
+            shared.record(|s| s.fail(Phase::Auth, format!("auth: {err}"), 1));
+            return None;
+        }
+    }
+    match request(&mut ws, 2, Payload::Ping(v1::Ping {}), &mut |_| {}).await {
+        Ok(Payload::Pong(_)) => {
+            let took = started.elapsed();
+            shared.record(|s| s.auth.push(took));
+            Some(ws)
+        }
+        Ok(other) => {
+            shared.record(|s| s.fail(Phase::Auth, format!("auth: {}", kind(&other)), 1));
+            None
+        }
+        Err(err) => {
+            shared.record(|s| s.fail(Phase::Auth, format!("auth: {err}"), 1));
+            None
+        }
+    }
+}
+
+async fn open_dm(ws: &mut Ws, partner: &User, shared: &Shared) -> Option<u64> {
+    shared.record(|s| s.attempt(Phase::OpenDm));
+    let open = Payload::OpenDm(v1::OpenDm {
+        username: partner.username.clone(),
+    });
+    match request(ws, 3, open, &mut |_| {}).await {
+        Ok(Payload::Conversation(c)) => c.conversation.map(|c| c.id),
+        Ok(other) => {
+            shared.record(|s| s.fail(Phase::OpenDm, format!("open_dm: {}", kind(&other)), 1));
+            None
+        }
+        Err(err) => {
+            shared.record(|s| s.fail(Phase::OpenDm, format!("open_dm: {err}"), 1));
+            None
+        }
+    }
+}
+
 async fn socket(
+    i: usize,
     url: String,
     token: String,
     me: User,
     partner: User,
     messages: usize,
-    barrier: Arc<Barrier>,
-    stats: Arc<Mutex<Stats>>,
-    origin: Instant,
+    shared: &Shared,
 ) {
-    let record = |f: &dyn Fn(&mut Stats)| f(&mut stats.lock().expect("stats lock"));
-    let started = Instant::now();
-    let ws = tokio::time::timeout(REPLY_TIMEOUT, tokio_tungstenite::connect_async(url)).await;
-    let mut ws = match ws {
-        Ok(Ok((ws, _))) => {
-            let took = started.elapsed();
-            record(&|s| s.connect.push(took));
-            Some(ws)
-        }
-        Ok(Err(err)) => {
-            record(&|s| s.error(format!("connect: {}", short(&err.to_string()))));
-            None
-        }
-        Err(_) => {
-            record(&|s| s.error("connect: timeout"));
-            None
-        }
-    };
-
+    let mut ws = connect_and_auth(url, token, shared).await;
     let mut conv = None;
     if let Some(w) = ws.as_mut() {
-        let started = Instant::now();
-        let auth = Payload::Authenticate(v1::Authenticate {
-            access_token: token,
-        });
-        match request(w, 1, auth, &mut |_| {}).await {
-            Ok(Payload::AuthOk(_)) => {
-                let took = started.elapsed();
-                record(&|s| s.auth.push(took));
-            }
-            Ok(other) => {
-                record(&|s| s.error(format!("auth: {}", kind(&other))));
-                ws = None;
-            }
-            Err(err) => {
-                record(&|s| s.error(format!("auth: {err}")));
-                ws = None;
-            }
-        }
+        conv = open_dm(w, &partner, shared).await;
     }
 
-    let delivered = std::sync::atomic::AtomicUsize::new(0);
+    shared.barrier.wait().await;
+
+    let (Some(mut w), Some(conv)) = (ws, conv) else {
+        return;
+    };
+
+    let mut seen = HashSet::new();
+    let mut deliveries = Vec::new();
+    let got = AtomicUsize::new(0);
     let mut on_push = |p: Payload| {
         if let Payload::MessageCreated(m) = p
             && let Some(m) = m.message
+            && m.conversation_id == conv
             && m.author_id == partner.id as u64
+            && seen.insert(m.id)
             && let Some(sent_at) = std::str::from_utf8(&m.content)
                 .ok()
                 .and_then(|c| c.parse::<u64>().ok())
         {
-            let took = origin
-                .elapsed()
-                .saturating_sub(Duration::from_micros(sent_at));
-            delivered.fetch_add(1, Relaxed);
-            record(&|s| {
-                s.delivery.push(took);
-                s.delivered += 1;
-            });
+            got.fetch_add(1, Relaxed);
+            deliveries.push(
+                shared
+                    .origin
+                    .elapsed()
+                    .saturating_sub(Duration::from_micros(sent_at)),
+            );
         }
     };
 
-    if let Some(w) = ws.as_mut() {
-        let open = Payload::OpenDm(v1::OpenDm {
-            username: partner.username.clone(),
-        });
-        match request(w, 2, open, &mut on_push).await {
-            Ok(Payload::Conversation(c)) => conv = c.conversation.map(|c| c.id),
-            Ok(other) => record(&|s| s.error(format!("open_dm: {}", kind(&other)))),
-            Err(err) => record(&|s| s.error(format!("open_dm: {err}"))),
-        }
-    }
-
-    barrier.wait().await;
-
-    let (Some(w), Some(conv)) = (ws.as_mut(), conv) else {
-        return;
-    };
+    let mut acks = Vec::new();
     for n in 0..messages {
-        let sent_at = origin.elapsed().as_micros() as u64;
+        let sent_at = shared.origin.elapsed().as_micros() as u64;
         let send = Payload::SendMessage(v1::SendMessage {
             conversation_id: conv,
             content: sent_at.to_string().into_bytes(),
             nonce: format!("{}-{n}", me.id),
             attachment_ids: vec![],
+            reply_to: 0,
         });
         let started = Instant::now();
-        record(&|s| s.sent += 1);
-        match request(w, 10 + n as u64, send, &mut on_push).await {
+        shared.record(|s| s.attempt(Phase::Send));
+        match request(&mut w, 10 + n as u64, send, &mut on_push).await {
             Ok(Payload::MessageAck(_)) => {
-                let took = started.elapsed();
-                record(&|s| s.ack.push(took));
+                acks.push(started.elapsed());
+                shared.acked[i].fetch_add(1, Relaxed);
             }
-            Ok(other) => record(&|s| s.error(format!("send: {}", kind(&other)))),
-            Err(err) => record(&|s| s.error(format!("send: {err}"))),
+            Ok(other) => {
+                shared.record(|s| s.fail(Phase::Send, format!("send: {}", kind(&other)), 1))
+            }
+            Err(err) => shared.record(|s| s.fail(Phase::Send, format!("send: {err}"), 1)),
         }
     }
+    shared.done[i].store(true, Relaxed);
 
+    let p = i ^ 1;
     let deadline = tokio::time::Instant::now() + DELIVERY_TIMEOUT;
-    while delivered.load(Relaxed) < messages {
-        let left = deadline.saturating_duration_since(tokio::time::Instant::now());
-        match tokio::time::timeout(left, w.next()).await {
+    loop {
+        let partner_done = shared.done[p].load(Relaxed);
+        let expected = shared.acked[p].load(Relaxed);
+        if partner_done && got.load(Relaxed) >= expected {
+            break;
+        }
+        if tokio::time::Instant::now() >= deadline {
+            break;
+        }
+        match tokio::time::timeout(POLL, w.next()).await {
             Ok(Some(Ok(WsMessage::Binary(b)))) => {
                 if let Some(p) = Envelope::decode(b).ok().and_then(|e| e.payload) {
                     on_push(p);
                 }
             }
-            Ok(Some(Ok(_))) => {}
-            _ => break,
+            Ok(Some(Ok(_))) | Err(_) => {}
+            Ok(None) | Ok(Some(Err(_))) => break,
         }
     }
-    let missing = messages.saturating_sub(delivered.load(Relaxed));
-    if missing > 0 {
-        record(&|s| *s.errors.entry("delivery: missing".into()).or_default() += missing);
-    }
-    barrier.wait().await;
-    let _ = w.close(None).await;
+    let expected = shared.acked[p].load(Relaxed);
+    let missing = expected.saturating_sub(deliveries.len());
+    shared.record(|s| {
+        s.attempts[Phase::Delivery as usize] += expected;
+        if missing > 0 {
+            s.fail(Phase::Delivery, "delivery: missing", missing);
+        }
+        s.ack.extend(acks);
+        s.delivery.extend(deliveries);
+    });
+    let _ = tokio::time::timeout(Duration::from_secs(2), w.close(None)).await;
 }
 
 async fn request(
@@ -373,9 +483,13 @@ async fn request(
         id,
         payload: Some(payload),
     };
-    ws.send(WsMessage::Binary(env.encode_to_vec().into()))
-        .await
-        .map_err(|e| short(&e.to_string()))?;
+    tokio::time::timeout(
+        SEND_TIMEOUT,
+        ws.send(WsMessage::Binary(env.encode_to_vec().into())),
+    )
+    .await
+    .map_err(|_| "send timeout".to_string())?
+    .map_err(|e| short(&e.to_string()))?;
     let deadline = tokio::time::Instant::now() + REPLY_TIMEOUT;
     loop {
         let left = deadline.saturating_duration_since(tokio::time::Instant::now());

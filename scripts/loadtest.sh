@@ -21,11 +21,28 @@ cleanup() {
 }
 trap cleanup EXIT
 
+port_in_use() {
+  (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null
+}
+
+safe_log_tail() {
+  grep -viE "token|secret|password|authorization|bearer" "$WORK/api.log" | tail -n 20 || true
+}
+
+if port_in_use "$PORT"; then
+  echo "port $PORT is already in use; pick another with LT_PORT=..." >&2
+  exit 1
+fi
+
 cd "$ROOT"
 cargo build --release -p api -p loadtest
 BIN="$ROOT/target/release"
 
 export API_SIGNING_KEY_FILE="$WORK/signing_key"
+if port_in_use "$PORT"; then
+  echo "port $PORT became busy during the build; aborting" >&2
+  exit 1
+fi
 "$BIN/loadtest" reset
 
 # Run from an empty dir so the api does not load the repo's .env, and keep
@@ -40,16 +57,30 @@ export API_SIGNING_KEY_FILE="$WORK/signing_key"
   SCYLLA_KEYSPACE=loadtest \
   S3_BUCKET=loadtest \
   ZITADEL_PAT=unused \
+  RATE_LIMITS=off \
   RUST_LOG=warn \
   exec "$BIN/api"
 ) >"$WORK/api.log" 2>&1 &
 API_PID=$!
 
+READY=""
 for _ in $(seq 1 60); do
-  curl -fs "http://127.0.0.1:$PORT/health" >/dev/null 2>&1 && break
-  kill -0 "$API_PID" 2>/dev/null || { cat "$WORK/api.log"; exit 1; }
+  if ! kill -0 "$API_PID" 2>/dev/null; then
+    echo "the load-test api exited during startup. Last log lines:" >&2
+    safe_log_tail >&2
+    exit 1
+  fi
+  if curl -fs "http://127.0.0.1:$PORT/health" >/dev/null 2>&1; then
+    READY=1
+    break
+  fi
   sleep 1
 done
+if [[ -z "$READY" ]]; then
+  echo "the load-test api did not become healthy in 60s. Last log lines:" >&2
+  safe_log_tail >&2
+  exit 1
+fi
 
 LT_WS_URL="ws://127.0.0.1:$PORT/ws" "$BIN/loadtest" run
 

@@ -65,7 +65,13 @@ async fn request_accept_remove_flow_with_pushes() {
     assert_eq!(res.status(), StatusCode::OK);
     assert_eq!(alice.push(friend_update(&b)).await, FriendState::Friend);
     assert_eq!(bob.push(friend_update(&a)).await, FriendState::Friend);
-    assert_eq!(ids(&list(&http, &a).await, "friends"), [b.id]);
+    let (la, lb) = (list(&http, &a).await, list(&http, &b).await);
+    assert_eq!(ids(&la, "friends"), [b.id]);
+    assert_eq!(ids(&lb, "friends"), [a.id]);
+    for l in [&la, &lb] {
+        assert!(ids(l, "incoming").is_empty());
+        assert!(ids(l, "outgoing").is_empty());
+    }
 
     let res = http
         .delete(&a, &format!("/friends/{}", b.id))
@@ -75,7 +81,15 @@ async fn request_accept_remove_flow_with_pushes() {
     assert_eq!(res.status(), StatusCode::NO_CONTENT);
     assert_eq!(alice.push(friend_update(&b)).await, FriendState::None);
     assert_eq!(bob.push(friend_update(&a)).await, FriendState::None);
-    assert!(ids(&list(&http, &b).await, "friends").is_empty());
+    assert_nothing(&http, &a).await;
+    assert_nothing(&http, &b).await;
+}
+
+async fn assert_nothing(http: &Http, user: &TestUser) {
+    let l = list(http, user).await;
+    for key in ["friends", "incoming", "outgoing"] {
+        assert!(ids(&l, key).is_empty(), "{key} not empty: {l}");
+    }
 }
 
 #[tokio::test]
@@ -98,7 +112,8 @@ async fn decline_clears_request_for_both() {
     assert_eq!(res.status(), StatusCode::NO_CONTENT);
     assert_eq!(alice.push(friend_update(&b)).await, FriendState::None);
     assert_eq!(bob.push(friend_update(&a)).await, FriendState::None);
-    assert!(ids(&list(&http, &a).await, "outgoing").is_empty());
+    assert_nothing(&http, &a).await;
+    assert_nothing(&http, &b).await;
 }
 
 #[tokio::test]

@@ -97,6 +97,7 @@ async fn leave_pushes_to_old_members_and_blocks_sending() {
         assert!(!member_ids(&pushed).contains(&(users[2].id as u64)));
         assert_eq!(pushed.members.len(), 2);
     }
+    clients[3].no_push(conversation_update(group.id)).await;
 
     let reply = clients[2]
         .request(Payload::SendMessage(v1::SendMessage {
@@ -104,6 +105,7 @@ async fn leave_pushes_to_old_members_and_blocks_sending() {
             content: b"still here?".to_vec(),
             nonce: "n1".into(),
             attachment_ids: vec![],
+            reply_to: 0,
         }))
         .await;
     assert_eq!(error_code(&reply), "conversation_not_found");
