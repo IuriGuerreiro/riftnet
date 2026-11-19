@@ -11,7 +11,7 @@ export function DmHeader({ conversation }: { conversation: Conversation }) {
   const nameFor = useNameFor();
   const other = otherMember(conversation, me?.id);
   return (
-    <header className="flex items-center justify-between border-b border-zinc-800 p-4 font-semibold">
+    <header className="flex items-center justify-between border-b border-line p-4 font-semibold">
       <span className="flex items-center gap-2">
         <Avatar userId={other?.id} />
         <StatusDot userId={other?.id} />

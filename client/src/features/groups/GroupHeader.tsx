@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import { fieldClass as field } from "../../components/ui";
+import { Button, fieldClass as field } from "../../components/ui";
 import type { Conversation } from "../../gen/v1/conversations_pb";
 import { nameOf, useProfiles } from "../../stores/profiles";
 
@@ -18,7 +18,7 @@ export function GroupHeader({
   const [username, setUsername] = useState("");
   const profiles = useProfiles((s) => s.byId);
   return (
-    <header className="space-y-2 border-b border-zinc-800 p-4">
+    <header className="space-y-2 border-b border-line p-4">
       <div className="flex items-center gap-3">
         <button
           className="font-semibold hover:text-brand"
@@ -30,12 +30,12 @@ export function GroupHeader({
         >
           # {group.name}
         </button>
-        <span className="text-xs text-zinc-500">{group.members.length}/5</span>
-        <button className="ml-auto text-xs text-red-400 hover:text-red-300" onClick={onLeave}>
+        <span className="text-xs text-fg-subtle">{group.members.length}/5</span>
+        <button className="ml-auto text-xs text-danger hover:text-danger" onClick={onLeave}>
           Leave
         </button>
       </div>
-      <p className="text-xs text-zinc-400">
+      <p className="text-xs text-fg-muted">
         {group.members.map((m) => nameOf(profiles[m.id.toString()])).join(", ")}
       </p>
       {group.members.length < 5 && (
@@ -54,7 +54,9 @@ export function GroupHeader({
             placeholder="add username"
             className={field}
           />
-          <button className="rounded-md bg-zinc-700 px-2 text-sm hover:bg-zinc-600">Add</button>
+          <Button type="submit" size="sm" variant="secondary">
+            Add
+          </Button>
         </form>
       )}
     </header>

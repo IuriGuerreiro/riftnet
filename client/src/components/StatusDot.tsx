@@ -1,9 +1,9 @@
 import { PresenceStatus, usePresence } from "../stores/presence";
 
 const look: Record<PresenceStatus, { color: string; label: string }> = {
-  [PresenceStatus.ONLINE]: { color: "bg-green-500", label: "online" },
-  [PresenceStatus.IDLE]: { color: "bg-yellow-500", label: "idle" },
-  [PresenceStatus.OFFLINE]: { color: "bg-zinc-600", label: "offline" },
+  [PresenceStatus.ONLINE]: { color: "bg-success", label: "online" },
+  [PresenceStatus.IDLE]: { color: "bg-warning", label: "idle" },
+  [PresenceStatus.OFFLINE]: { color: "bg-surface-4", label: "offline" },
 };
 
 export function StatusDot({ userId }: { userId: bigint | string | undefined }) {

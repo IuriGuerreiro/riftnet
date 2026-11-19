@@ -38,7 +38,7 @@ export function Avatar({
         alt={label}
         title={label}
         onError={() => onImageError(url)}
-        className={`${base} bg-zinc-800 object-cover`}
+        className={`${base} bg-surface-2 object-cover`}
       />
     );
   }

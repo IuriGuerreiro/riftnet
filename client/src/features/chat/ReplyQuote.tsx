@@ -22,7 +22,7 @@ export function ReplyQuote({
   const profiles = useProfiles((s) => s.byId);
   const [gone, setGone] = useState(false);
   const target = gone ? ({ state: "deleted" } as const) : replyTarget(messages, deleted, replyTo);
-  const muted = mine ? "text-zinc-800" : "text-zinc-400";
+  const muted = mine ? "text-on-brand/70" : "text-fg-muted";
 
   if (target.state === "deleted")
     return <span className={`mb-1 block text-xs italic ${muted}`}>↪ Original deleted</span>;

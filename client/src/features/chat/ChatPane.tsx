@@ -36,11 +36,11 @@ export function ChatPane() {
           />
         </>
       ) : (
-        <p className="m-auto text-sm text-zinc-500">
+        <p className="m-auto text-sm text-fg-subtle">
           Pick a conversation, or start a DM or a group.
         </p>
       )}
-      {chat.error && <p className="px-4 pb-2 text-xs text-red-400">{chat.error}</p>}
+      {chat.error && <p className="px-4 pb-2 text-xs text-danger">{chat.error}</p>}
     </section>
   );
 }

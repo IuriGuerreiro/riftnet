@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import { fieldClass as field } from "../../components/ui";
+import { Button, fieldClass as field } from "../../components/ui";
 
 export function NewGroup({
   disabled,
@@ -13,7 +13,7 @@ export function NewGroup({
   const [usernames, setUsernames] = useState("");
   return (
     <form
-      className="space-y-2 border-b border-zinc-800 p-3"
+      className="space-y-2 border-b border-line p-3"
       onSubmit={(e) => {
         e.preventDefault();
         const list = usernames
@@ -39,12 +39,9 @@ export function NewGroup({
           placeholder="ana, bob, carl"
           className={field}
         />
-        <button
-          disabled={disabled}
-          className="rounded-md bg-brand px-2 text-sm font-semibold text-zinc-950 disabled:opacity-50"
-        >
+        <Button type="submit" size="sm" disabled={disabled}>
           Group
-        </button>
+        </Button>
       </div>
     </form>
   );

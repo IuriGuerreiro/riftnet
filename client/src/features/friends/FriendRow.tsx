@@ -22,7 +22,7 @@ export function FriendRow({
       {userId && <StatusDot userId={userId} />}
       <div className="min-w-0 flex-1">
         <p className="truncate">{label}</p>
-        {hint && <p className="text-xs text-zinc-500">{hint}</p>}
+        {hint && <p className="text-xs text-fg-subtle">{hint}</p>}
       </div>
       {children}
     </div>

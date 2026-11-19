@@ -1,3 +1,4 @@
+import { SmilePlus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { useChat } from "../../stores/chat";
@@ -25,12 +26,12 @@ export function ReactionPicker({ messageId }: { messageId: bigint }) {
         aria-label="Add reaction"
         title="Add reaction"
         onClick={() => setOpen((o) => !o)}
-        className={`${open ? "flex" : "hidden group-hover:flex"} rounded px-1.5 py-0.5 text-sm text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100`}
+        className={`${open ? "flex" : "hidden group-hover:flex"} rounded px-1.5 py-0.5 text-sm text-fg-muted hover:bg-surface-2 hover:text-fg`}
       >
-        ☺+
+        <SmilePlus size={16} />
       </button>
       {open && (
-        <div className="absolute bottom-full z-10 mb-1 flex gap-0.5 rounded-lg border border-zinc-700 bg-zinc-900 p-1 shadow-lg">
+        <div className="absolute bottom-full z-10 mb-1 flex gap-0.5 rounded-lg border border-line-strong bg-surface-1 p-1 shadow-lg">
           {QUICK_EMOJIS.map((e) => (
             <button
               key={e}
@@ -38,7 +39,7 @@ export function ReactionPicker({ messageId }: { messageId: bigint }) {
                 setOpen(false);
                 void toggle(ws, messageId, e);
               }}
-              className="rounded px-1 text-lg hover:bg-zinc-800"
+              className="rounded px-1 text-lg hover:bg-surface-2"
             >
               {e}
             </button>

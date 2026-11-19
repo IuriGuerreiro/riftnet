@@ -25,7 +25,7 @@ export function UsernamePage() {
           error={form.formState.errors.username?.message}
         />
         <ErrorText error={setUsername.error} />
-        <Button type="submit" disabled={setUsername.isPending}>
+        <Button type="submit" block size="lg" disabled={setUsername.isPending}>
           Continue
         </Button>
       </form>

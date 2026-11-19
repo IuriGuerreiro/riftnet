@@ -40,12 +40,12 @@ export function LoginPage() {
           error={form.formState.errors.password?.message}
         />
         <ErrorText error={action.error} />
-        <Button type="submit" disabled={action.isPending}>
+        <Button type="submit" block size="lg" disabled={action.isPending}>
           {mode === "login" ? "Log in" : "Register"}
         </Button>
       </form>
       <button
-        className="text-sm text-zinc-400 hover:text-zinc-200"
+        className="text-sm text-fg-muted hover:text-fg"
         onClick={() => setMode(mode === "login" ? "register" : "login")}
       >
         {mode === "login" ? "No account? Register" : "Have an account? Log in"}
