@@ -84,6 +84,8 @@ message Pong {}
 message Error {
   string code = 1;
   string message = 2;
+  // Set on "rate_limited": wait this long before retrying.
+  uint64 retry_after_ms = 3;
 }
 
 message Authenticate {

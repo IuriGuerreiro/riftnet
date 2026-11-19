@@ -3,6 +3,7 @@ use protocol::v1::{self, envelope::Payload};
 use super::connection::Session;
 use crate::app::AppState;
 use crate::common::error::ApiError;
+use crate::common::user_limits::{GROUP_CHANGE, SEND_MESSAGE};
 use crate::features::conversations::models::Conversation;
 use crate::features::presence::service::update as presence_update;
 
@@ -15,7 +16,10 @@ pub async fn dispatch(
         Payload::Ping(_) => Ok(Payload::Pong(v1::Pong {})),
         Payload::OpenDm(req) => open_dm(state, session, req).await,
         Payload::ListConversations(_) => list_conversations(state, session).await,
-        Payload::SendMessage(req) => send_message(state, session, req).await,
+        Payload::SendMessage(req) => {
+            state.user_limits.hit(SEND_MESSAGE, session.user_id).await?;
+            send_message(state, session, req).await
+        }
         Payload::GetHistory(req) => get_history(state, session, req).await,
         Payload::Sync(req) => sync(state, session, req).await,
         Payload::EditMessage(req) => edit_message(state, session, req).await,
@@ -43,10 +47,22 @@ pub async fn dispatch(
             .await
         }
         Payload::GetReactors(req) => get_reactors(state, session, req).await,
-        Payload::CreateGroup(req) => create_group(state, session, req).await,
-        Payload::AddMember(req) => add_member(state, session, req).await,
-        Payload::LeaveGroup(req) => leave_group(state, session, req).await,
-        Payload::RenameGroup(req) => rename_group(state, session, req).await,
+        Payload::CreateGroup(req) => {
+            state.user_limits.hit(GROUP_CHANGE, session.user_id).await?;
+            create_group(state, session, req).await
+        }
+        Payload::AddMember(req) => {
+            state.user_limits.hit(GROUP_CHANGE, session.user_id).await?;
+            add_member(state, session, req).await
+        }
+        Payload::LeaveGroup(req) => {
+            state.user_limits.hit(GROUP_CHANGE, session.user_id).await?;
+            leave_group(state, session, req).await
+        }
+        Payload::RenameGroup(req) => {
+            state.user_limits.hit(GROUP_CHANGE, session.user_id).await?;
+            rename_group(state, session, req).await
+        }
         Payload::SetIdle(req) => {
             state
                 .presence
