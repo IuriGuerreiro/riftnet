@@ -21,7 +21,8 @@ use crate::features::auth::identity::ZitadelClient;
 use crate::features::auth::repository::PgAuthRepo;
 use crate::features::auth::service::AuthService;
 use crate::features::auth::tokens::TokenService;
-use crate::features::bots::BotService;
+use crate::features::bots::repository::PgBotRepo;
+use crate::features::bots::service::BotService;
 use crate::features::calls::media::NatsMediaClient;
 use crate::features::calls::service::CallService;
 use crate::features::calls::store::MemoryCallStore;
@@ -138,7 +139,7 @@ pub async fn build(
     ));
 
     let state = AppState {
-        bots: Arc::new(BotService::new(pool, ids.clone())),
+        bots: Arc::new(BotService::new(Arc::new(PgBotRepo::new(pool)), ids.clone())),
         attachments: attachment_service.clone(),
         auth: Arc::new(AuthService::new(
             identity,
