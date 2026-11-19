@@ -12,7 +12,7 @@ import {
 } from "../schemas/profile";
 import { useProfile } from "../stores/profiles";
 import { Avatar } from "./Avatar";
-import { Button, ErrorText, Input } from "./ui";
+import { Button, ErrorText, Input, Modal, Textarea } from "./ui";
 
 export function ProfilePanel({ myId, onClose }: { myId: string; onClose: () => void }) {
   const me = useProfile(myId);
@@ -49,113 +49,85 @@ export function ProfilePanel({ myId, onClose }: { myId: string; onClose: () => v
   );
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-sm space-y-4 rounded-xl bg-zinc-900 p-6 shadow-lg"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <header className="flex items-center justify-between">
-          <h2 className="text-lg font-bold">Your profile</h2>
-          <button
-            onClick={onClose}
-            className="text-zinc-400 hover:text-zinc-100"
-            aria-label="Close"
-          >
-            ✕
-          </button>
-        </header>
-
-        <section className="flex items-center gap-4">
+    <Modal open title="Edit profile" onClose={onClose}>
+      <section className="flex items-center gap-4">
+        {preview ? (
+          <img
+            src={preview.url}
+            alt="Avatar preview"
+            className="size-24 rounded-full object-cover"
+          />
+        ) : (
+          <Avatar userId={myId} size="lg" />
+        )}
+        <div className="flex flex-col items-start gap-2">
+          <input
+            ref={fileInput}
+            type="file"
+            accept={AVATAR_TYPES.join(",")}
+            className="hidden"
+            onChange={(e) => {
+              pick(e.target.files?.[0]);
+              e.target.value = "";
+            }}
+          />
           {preview ? (
-            <img src={preview.url} alt="preview" className="size-24 rounded-full object-cover" />
+            <>
+              <Button
+                size="sm"
+                disabled={upload.isPending}
+                onClick={() => upload.mutate(preview.file, { onSuccess: () => setPreview(null) })}
+              >
+                {upload.isPending ? "Uploading…" : "Save avatar"}
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setPreview(null)}>
+                Cancel
+              </Button>
+            </>
           ) : (
-            <Avatar userId={myId} size="lg" />
+            <>
+              <Button size="sm" variant="secondary" onClick={() => fileInput.current?.click()}>
+                Change avatar
+              </Button>
+              {me?.avatarHash && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="hover:text-danger"
+                  disabled={remove.isPending}
+                  onClick={() => remove.mutate()}
+                >
+                  Remove avatar
+                </Button>
+              )}
+            </>
           )}
-          <div className="flex flex-col gap-2 text-sm">
-            <input
-              ref={fileInput}
-              type="file"
-              accept={AVATAR_TYPES.join(",")}
-              className="hidden"
-              onChange={(e) => {
-                pick(e.target.files?.[0]);
-                e.target.value = "";
-              }}
-            />
-            {preview ? (
-              <>
-                <button
-                  className="rounded bg-brand px-3 py-1 font-semibold text-zinc-950 disabled:opacity-50"
-                  disabled={upload.isPending}
-                  onClick={() => upload.mutate(preview.file, { onSuccess: () => setPreview(null) })}
-                >
-                  {upload.isPending ? "Uploading…" : "Save avatar"}
-                </button>
-                <button
-                  className="text-zinc-400 hover:text-zinc-100"
-                  onClick={() => setPreview(null)}
-                >
-                  Cancel
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  className="rounded bg-zinc-800 px-3 py-1 hover:bg-zinc-700"
-                  onClick={() => fileInput.current?.click()}
-                >
-                  Change avatar
-                </button>
-                {me?.avatarHash && (
-                  <button
-                    className="text-zinc-400 hover:text-red-400 disabled:opacity-50"
-                    disabled={remove.isPending}
-                    onClick={() => remove.mutate()}
-                  >
-                    Remove
-                  </button>
-                )}
-              </>
-            )}
-          </div>
-        </section>
-        <ErrorText error={fileError ?? upload.error ?? remove.error} />
+        </div>
+      </section>
+      <ErrorText error={fileError ?? upload.error ?? remove.error} />
 
-        <form onSubmit={onSave} className="space-y-3">
-          <label className="block space-y-1 text-xs text-zinc-400">
-            Display name
-            <Input
-              placeholder={me?.username ? `@${me.username}` : "display name"}
-              {...form.register("display_name")}
-              error={form.formState.errors.display_name?.message}
-            />
-          </label>
-          <label className="block space-y-1 text-xs text-zinc-400">
-            Bio
-            <textarea
-              rows={3}
-              {...form.register("bio")}
-              className="w-full resize-none rounded-lg bg-zinc-800 px-3 py-2 text-sm text-zinc-100 outline-none ring-brand focus:ring-2"
-            />
-            <span className="flex justify-between">
-              <span className="text-red-400">{form.formState.errors.bio?.message}</span>
-              <span>
-                {bio.length}/{MAX_BIO}
-              </span>
-            </span>
-          </label>
-          <ErrorText error={update.error} />
-          {update.isSuccess && !form.formState.isDirty && (
-            <p className="text-xs text-green-400">Saved</p>
-          )}
-          <Button type="submit" disabled={update.isPending}>
-            Save profile
-          </Button>
-        </form>
-      </div>
-    </div>
+      <form onSubmit={onSave} className="space-y-4">
+        <Input
+          label="Display name"
+          placeholder={me?.username ? `@${me.username}` : "Display name"}
+          {...form.register("display_name")}
+          error={form.formState.errors.display_name?.message}
+        />
+        <Textarea
+          label="Bio"
+          rows={3}
+          {...form.register("bio")}
+          error={form.formState.errors.bio?.message}
+          hint={`${bio.length}/${MAX_BIO}`}
+        />
+        <ErrorText error={update.error} />
+        {update.isSuccess && !form.formState.isDirty && (
+          <p className="text-xs text-success">Profile saved</p>
+        )}
+        <Button type="submit" block disabled={update.isPending}>
+          Save profile
+        </Button>
+      </form>
+    </Modal>
   );
 }

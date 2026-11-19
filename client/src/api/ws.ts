@@ -29,7 +29,7 @@ export class WsClient {
     ws.binaryType = "arraybuffer";
     ws.onmessage = (ev) => this.receive(new Uint8Array(ev.data as ArrayBuffer));
     ws.onclose = (ev) => {
-      for (const p of this.pending.values()) p.reject(new WsError("closed", "connection closed"));
+      for (const p of this.pending.values()) p.reject(new WsError("closed", "Connection closed"));
       this.pending.clear();
       this.onClose(ev.code);
     };
@@ -44,7 +44,7 @@ export class WsClient {
       socket.addEventListener("open", () => res(), { once: true });
       socket.addEventListener(
         "error",
-        () => rej(new WsError("connect_failed", "can't reach the server")),
+        () => rej(new WsError("connect_failed", "Can't reach the server")),
         { once: true },
       );
     });
@@ -53,8 +53,7 @@ export class WsClient {
       case: "authenticate",
       value: create(AuthenticateSchema, { accessToken }),
     });
-    if (reply.case !== "authOk")
-      throw new WsError("bad_reply", `expected authOk, got ${reply.case}`);
+    if (reply.case !== "authOk") throw new WsError("bad_reply", "Unexpected server response");
     return { ws, user: reply.value.user };
   }
 
@@ -63,8 +62,7 @@ export class WsClient {
       case: "authenticate",
       value: create(AuthenticateSchema, { accessToken }),
     });
-    if (reply.case !== "authOk")
-      throw new WsError("bad_reply", `expected authOk, got ${reply.case}`);
+    if (reply.case !== "authOk") throw new WsError("bad_reply", "Unexpected server response");
   }
 
   request(payload: Payload): Promise<Payload> {

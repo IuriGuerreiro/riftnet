@@ -53,9 +53,9 @@ export function MessageRow({
                 setEditing(false);
               }
             }}
-            className="w-full resize-none rounded-lg bg-zinc-800 px-3 py-1.5 text-sm outline-none ring-2 ring-brand"
+            className="w-full resize-none rounded-lg bg-surface-2 px-3 py-1.5 text-sm outline-none ring-2 ring-brand"
           />
-          <p className="text-right text-xs text-zinc-500">Enter to save · Esc to cancel</p>
+          <p className="text-right text-xs text-fg-subtle">Enter to save · Esc to cancel</p>
         </div>
       </div>
     );
@@ -67,10 +67,10 @@ export function MessageRow({
         {!mine && <Avatar userId={m.authorId} size="xs" />}
         {mine && canReact && <ReactionPicker messageId={m.id} />}
         {canReact && (
-          <div className="hidden gap-1 text-xs text-zinc-400 group-hover:flex">
+          <div className="hidden gap-1 text-xs text-fg-muted group-hover:flex">
             <button
               onClick={() => setReplyingTo(m.id)}
-              className="rounded px-1.5 py-0.5 hover:bg-zinc-800 hover:text-zinc-100"
+              className="rounded px-1.5 py-0.5 hover:bg-surface-2 hover:text-fg"
             >
               Reply
             </button>
@@ -81,7 +81,7 @@ export function MessageRow({
                     setDraft(m.text);
                     setEditing(true);
                   }}
-                  className="rounded px-1.5 py-0.5 hover:bg-zinc-800 hover:text-zinc-100"
+                  className="rounded px-1.5 py-0.5 hover:bg-surface-2 hover:text-fg"
                 >
                   Edit
                 </button>
@@ -90,7 +90,7 @@ export function MessageRow({
                     window.confirm("Delete this message? This can't be undone.") &&
                     void remove(ws, m.id)
                   }
-                  className="rounded px-1.5 py-0.5 hover:bg-zinc-800 hover:text-red-400"
+                  className="rounded px-1.5 py-0.5 hover:bg-surface-2 hover:text-danger"
                 >
                   Delete
                 </button>
@@ -101,9 +101,9 @@ export function MessageRow({
         <div
           id={m.id !== 0n ? messageDomId(m.id) : undefined}
           className={`max-w-[75%] whitespace-pre-wrap break-words rounded-lg px-3 py-1.5 text-sm ${
-            mine ? "bg-brand text-zinc-950" : "bg-zinc-800"
-          } ${m.pending ? "opacity-50" : ""} ${m.failed ? "ring-2 ring-red-500" : ""}`}
-          title={m.pending ? "sending…" : `seq ${m.seq}`}
+            mine ? "bg-brand text-on-brand" : "bg-surface-2"
+          } ${m.pending ? "opacity-50" : ""} ${m.failed ? "ring-2 ring-danger" : ""}`}
+          title={m.pending ? "Sending…" : `Message #${m.seq}`}
         >
           {m.replyTo !== undefined && (
             <ReplyQuote conversationId={conversationId} replyTo={m.replyTo} mine={mine} />
@@ -114,7 +114,7 @@ export function MessageRow({
           ))}
           {m.editedAt ? (
             <span
-              className={`ml-1.5 text-[10px] ${mine ? "text-zinc-800" : "text-zinc-500"}`}
+              className={`ml-1.5 text-[10px] ${mine ? "text-on-brand/70" : "text-fg-subtle"}`}
               title={new Date(Number(m.editedAt)).toLocaleString()}
             >
               (edited)

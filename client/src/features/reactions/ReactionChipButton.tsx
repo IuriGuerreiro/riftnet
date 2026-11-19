@@ -43,8 +43,8 @@ export function ReactionChipButton({
       aria-pressed={r.me}
       className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${
         r.me
-          ? "border-brand bg-brand/15 text-zinc-100"
-          : "border-zinc-700 bg-zinc-800/60 text-zinc-300 hover:border-zinc-500"
+          ? "border-brand bg-brand/15 text-fg"
+          : "border-line-strong bg-surface-2/60 text-fg-muted hover:border-fg-subtle"
       }`}
     >
       <span className="text-sm">{r.emoji}</span>

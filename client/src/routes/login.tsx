@@ -24,7 +24,7 @@ export function LoginPage() {
   return (
     <Card>
       <h1 className="text-2xl font-bold">
-        {mode === "login" ? "Welcome back 🐒" : "Create account"}
+        {mode === "login" ? "Welcome back" : "Create an account"}
       </h1>
       <form onSubmit={onSubmit} className="space-y-3">
         <Input
@@ -40,15 +40,15 @@ export function LoginPage() {
           error={form.formState.errors.password?.message}
         />
         <ErrorText error={action.error} />
-        <Button type="submit" disabled={action.isPending}>
-          {mode === "login" ? "Log in" : "Register"}
+        <Button type="submit" block size="lg" disabled={action.isPending}>
+          {mode === "login" ? "Log in" : "Create account"}
         </Button>
       </form>
       <button
-        className="text-sm text-zinc-400 hover:text-zinc-200"
+        className="text-sm text-fg-muted hover:text-fg"
         onClick={() => setMode(mode === "login" ? "register" : "login")}
       >
-        {mode === "login" ? "No account? Register" : "Have an account? Log in"}
+        {mode === "login" ? "New here? Create an account" : "Already have an account? Log in"}
       </button>
     </Card>
   );

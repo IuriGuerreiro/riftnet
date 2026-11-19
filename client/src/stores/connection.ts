@@ -40,16 +40,16 @@ export const useConnection = create<ConnectionState>()((set, get) => ({
 
     try {
       const token = await freshAccessToken();
-      if (!token) throw new Error("not logged in");
+      if (!token) throw new Error("Not logged in");
       const { ws, user } = await WsClient.connect(token);
       attempt = 0;
       ws.onClose = (code) => {
         clearTimeout(reauthTimer);
         set({ status: "offline", ws: null });
-        if (code === CLOSE_UNAUTHORIZED) set({ error: "unauthorized" });
+        if (code === CLOSE_UNAUTHORIZED) set({ error: "Session expired" });
         else if (code === CLOSE_SESSION_REVOKED) {
           wanted = false;
-          set({ error: "session_revoked" });
+          set({ error: "Session ended" });
           useAuth.getState().clear();
         } else if (code === CLOSE_TOKEN_EXPIRED) {
           attempt = 0;

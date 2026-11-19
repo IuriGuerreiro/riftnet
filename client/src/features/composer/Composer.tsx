@@ -1,6 +1,8 @@
+import { CirclePlus, Paperclip, SendHorizontal, X } from "lucide-react";
 import { useRef, useState } from "react";
 
 import { formatSize } from "../../api/attachments";
+import { IconButton } from "../../components/ui";
 import { useChat } from "../../stores/chat";
 import { ReplyBar } from "./ReplyBar";
 import { useAttachmentUpload } from "./useAttachmentUpload";
@@ -32,7 +34,7 @@ export function Composer({
 
   return (
     <form
-      className="flex flex-col gap-2 border-t border-zinc-800 p-3"
+      className="flex flex-col gap-2 border-t border-line p-3"
       onSubmit={(e) => {
         e.preventDefault();
         void submit();
@@ -40,29 +42,31 @@ export function Composer({
     >
       <ReplyBar conversationId={conversationId} />
       {(files.length > 0 || error !== null || busy) && (
-        <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-400">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-fg-muted">
           {files.map((f, i) => (
             <span
               key={`${f.name}:${f.size}:${f.lastModified}`}
-              className="flex items-center gap-1 rounded bg-zinc-800 px-2 py-1"
+              className="flex items-center gap-1.5 rounded-control bg-surface-3 py-1 pl-2 pr-1"
             >
-              📎 {f.name} · {formatSize(f.size)}
+              <Paperclip size={14} />
+              {f.name} · {formatSize(f.size)}
               {!busy && (
-                <button
-                  type="button"
+                <IconButton
+                  label={`Remove ${f.name}`}
+                  size="sm"
+                  tone="danger"
+                  icon={<X size={14} />}
                   onClick={() => removeAt(i)}
-                  className="ml-1 hover:text-red-400"
-                >
-                  ✕
-                </button>
+                  className="size-5"
+                />
               )}
             </span>
           ))}
           {busy && <span>{progress}</span>}
-          {error && <span className="text-red-400">{error}</span>}
+          {error && <span className="text-danger">{error}</span>}
         </div>
       )}
-      <div className="flex gap-2">
+      <div className="flex items-center gap-1 rounded-control bg-surface-3 px-1.5">
         <input
           ref={picker}
           type="file"
@@ -73,15 +77,12 @@ export function Composer({
             e.target.value = "";
           }}
         />
-        <button
-          type="button"
+        <IconButton
+          label="Attach files"
+          icon={<CirclePlus size={20} />}
           disabled={disabled || busy}
           onClick={() => picker.current?.click()}
-          title="Attach files"
-          className="rounded-lg bg-zinc-800 px-3 text-lg disabled:opacity-50"
-        >
-          +
-        </button>
+        />
         <input
           value={text}
           onChange={(e) => {
@@ -91,16 +92,17 @@ export function Composer({
           onKeyDown={(e) => {
             if (e.key === "Escape") useChat.getState().setReplyingTo(null);
           }}
-          placeholder="Message"
+          placeholder="Write a message…"
           maxLength={4000}
-          className="min-w-0 flex-1 rounded-lg bg-zinc-800 px-3 py-2 text-sm outline-none ring-brand focus:ring-2"
+          className="min-w-0 flex-1 bg-transparent py-2.5 text-sm text-fg outline-none placeholder:text-fg-subtle"
         />
-        <button
+        <IconButton
+          type="submit"
+          label="Send message"
+          icon={<SendHorizontal size={20} />}
           disabled={disabled || busy}
-          className="rounded-lg bg-brand px-4 font-semibold text-zinc-950 disabled:opacity-50"
-        >
-          Send
-        </button>
+          className="hover:text-brand"
+        />
       </div>
     </form>
   );

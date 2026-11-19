@@ -70,12 +70,12 @@ export async function uploadFile(
 export async function downloadFile(id: bigint, filename: string, expected: Uint8Array) {
   const { url } = await http<DownloadDto>(`/attachments/${id}`);
   const res = await fetch(url);
-  if (!res.ok) throw new Error(`download failed (${res.status})`);
+  if (!res.ok) throw new Error(`Download failed (${res.status})`);
   const blob = await res.blob();
 
   const got = await blake3Hex(blob);
   const want = Array.from(expected, (b) => b.toString(16).padStart(2, "0")).join("");
-  if (got !== want) throw new Error("file is damaged (BLAKE3 doesn't match), not saved");
+  if (got !== want) throw new Error("File could not be verified and was not saved");
 
   const href = URL.createObjectURL(blob);
   const link = document.createElement("a");

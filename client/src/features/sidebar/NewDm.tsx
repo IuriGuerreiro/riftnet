@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import { fieldClass } from "../../components/ui";
+import { Button, fieldClass } from "../../components/ui";
 
 export function NewDm({
   disabled,
@@ -12,7 +12,7 @@ export function NewDm({
   const [username, setUsername] = useState("");
   return (
     <form
-      className="flex gap-2 border-b border-zinc-800 p-3"
+      className="flex gap-2 border-b border-line p-3"
       onSubmit={(e) => {
         e.preventDefault();
         if (!username.trim()) return;
@@ -23,15 +23,12 @@ export function NewDm({
       <input
         value={username}
         onChange={(e) => setUsername(e.target.value)}
-        placeholder="username"
+        placeholder="Username"
         className={fieldClass}
       />
-      <button
-        disabled={disabled}
-        className="rounded-md bg-brand px-2 text-sm font-semibold text-zinc-950 disabled:opacity-50"
-      >
-        DM
-      </button>
+      <Button type="submit" size="sm" disabled={disabled}>
+        Message
+      </Button>
     </form>
   );
 }

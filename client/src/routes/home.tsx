@@ -15,7 +15,7 @@ export function HomePage() {
   const [editingProfile, setEditingProfile] = useState(false);
 
   return (
-    <div className="flex h-full w-full max-w-5xl overflow-hidden rounded-xl bg-zinc-900 shadow-lg">
+    <div className="flex h-full w-full max-w-5xl overflow-hidden rounded-xl bg-surface-1 shadow-lg">
       <RemoteScreen />
       <IncomingCall ws={ws} callerName={(id) => nameFor(id)} />
       {editingProfile && me && (

@@ -1,7 +1,8 @@
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { useState } from "react";
 
 import type { Friend } from "../../api/types";
-import { fieldClass as field } from "../../components/ui";
+import { Button, fieldClass as field } from "../../components/ui";
 import { useFriends } from "../../stores/friends";
 import { fromJson, nameOf, useProfiles } from "../../stores/profiles";
 import { FriendRow, RowButton } from "./FriendRow";
@@ -19,18 +20,18 @@ export function FriendsPanel({ onDm }: { onDm: (username: string) => void }) {
   const pendingCount = list.incoming.length;
 
   return (
-    <section className="border-b border-zinc-800">
+    <section className="border-b border-line">
       <button
-        className="flex w-full items-center justify-between px-3 py-2 text-xs font-semibold uppercase tracking-wide text-zinc-400 hover:text-zinc-100"
+        className="flex w-full items-center justify-between px-3 py-2 text-xs font-semibold uppercase tracking-wide text-fg-muted hover:text-fg"
         onClick={() => setOpen(!open)}
       >
         <span>
           Friends ({list.friends.length})
           {pendingCount > 0 && (
-            <span className="ml-2 rounded-full bg-brand px-1.5 text-zinc-950">{pendingCount}</span>
+            <span className="ml-2 rounded-full bg-brand px-1.5 text-on-brand">{pendingCount}</span>
           )}
         </span>
-        <span>{open ? "−" : "+"}</span>
+        {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
       </button>
 
       {open && (
@@ -51,30 +52,34 @@ export function FriendsPanel({ onDm }: { onDm: (username: string) => void }) {
               placeholder="Search by username"
               className={field}
             />
-            <button
+            <Button
+              type="submit"
+              size="sm"
+              variant="secondary"
               disabled={!validQuery || addFriend.isPending}
-              className="rounded-md bg-zinc-700 px-2 text-sm hover:bg-zinc-600 disabled:opacity-50"
             >
               Add
-            </button>
+            </Button>
           </form>
-          {error && <p className="text-xs text-red-400">{error}</p>}
+          {error && <p className="text-xs text-danger">{error}</p>}
           {query && !validQuery && (
-            <p className="text-xs text-zinc-400">Use 1–32 letters, numbers, underscores or dots.</p>
+            <p className="text-xs text-fg-muted">
+              Use 1 to 32 letters, numbers, underscores, or dots.
+            </p>
           )}
           {validQuery && (!searchReady || search.isPending) && (
-            <p role="status" className="text-xs text-zinc-400">
+            <p role="status" className="text-xs text-fg-muted">
               Searching…
             </p>
           )}
           {searchReady && search.isError && (
-            <p role="alert" className="text-xs text-red-400">
+            <p role="alert" className="text-xs text-danger">
               {search.error.message}
             </p>
           )}
           {searchReady && search.isSuccess && search.data.length === 0 && (
-            <p role="status" className="text-xs text-zinc-400">
-              No matching usernames.
+            <p role="status" className="text-xs text-fg-muted">
+              No matching users.
             </p>
           )}
           {searchReady &&
@@ -89,11 +94,11 @@ export function FriendsPanel({ onDm }: { onDm: (username: string) => void }) {
                   <div className="min-w-0">
                     <p className="truncate">{user.display_name ?? target}</p>
                     {user.display_name && (
-                      <p className="truncate text-xs text-zinc-400">@{target}</p>
+                      <p className="truncate text-xs text-fg-muted">@{target}</p>
                     )}
                   </div>
                   {isFriend || sent ? (
-                    <span className="shrink-0 text-xs text-zinc-400">
+                    <span className="shrink-0 text-xs text-fg-muted">
                       {isFriend ? "Friend" : "Request sent"}
                     </span>
                   ) : (
@@ -112,23 +117,18 @@ export function FriendsPanel({ onDm }: { onDm: (username: string) => void }) {
             })}
 
           {list.incoming.map((f) => (
-            <FriendRow
-              key={f.user.id}
-              label={name(f)}
-              avatarId={f.user.id}
-              hint="wants to be friends"
-            >
-              <RowButton onClick={() => accept(f.user.id)} className="text-green-400">
+            <FriendRow key={f.user.id} label={name(f)} avatarId={f.user.id} hint="Incoming request">
+              <RowButton onClick={() => accept(f.user.id)} className="text-success">
                 Accept
               </RowButton>
-              <RowButton onClick={() => deleteRequest(f.user.id)} className="text-red-400">
+              <RowButton onClick={() => deleteRequest(f.user.id)} className="text-danger">
                 Decline
               </RowButton>
             </FriendRow>
           ))}
           {list.outgoing.map((f) => (
-            <FriendRow key={f.user.id} label={name(f)} avatarId={f.user.id} hint="request sent">
-              <RowButton onClick={() => deleteRequest(f.user.id)} className="text-zinc-400">
+            <FriendRow key={f.user.id} label={name(f)} avatarId={f.user.id} hint="Request sent">
+              <RowButton onClick={() => deleteRequest(f.user.id)} className="text-fg-muted">
                 Cancel
               </RowButton>
             </FriendRow>
@@ -139,20 +139,22 @@ export function FriendsPanel({ onDm }: { onDm: (username: string) => void }) {
                 onClick={() => f.user.username && onDm(f.user.username)}
                 className="text-brand"
               >
-                DM
+                Message
               </RowButton>
               <RowButton
                 onClick={() =>
-                  confirm(`Remove ${name(f)} from friends?`) && removeFriend(f.user.id)
+                  confirm(`Remove ${name(f)} from your friends?`) && removeFriend(f.user.id)
                 }
-                className="text-red-400"
+                className="text-danger"
               >
                 Remove
               </RowButton>
             </FriendRow>
           ))}
           {list.friends.length + list.incoming.length + list.outgoing.length === 0 && (
-            <p className="text-xs text-zinc-500">No friends yet. Add someone by username.</p>
+            <p className="text-xs text-fg-subtle">
+              No friends yet. Search by username to add someone.
+            </p>
           )}
         </div>
       )}
