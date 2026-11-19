@@ -1,13 +1,9 @@
-mod app;
-mod common;
-mod config;
-mod features;
-
 use std::net::SocketAddr;
 
 use metrics_exporter_prometheus::{Matcher, PrometheusBuilder};
 
-use crate::common::middleware::http_metrics;
+use api::common::middleware::http_metrics;
+use api::{app, config};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
