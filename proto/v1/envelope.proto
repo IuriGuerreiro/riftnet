@@ -39,6 +39,8 @@ message Envelope {
     RemoveReaction remove_reaction = 27;
     GetReactors get_reactors = 28;
     MarkRead mark_read = 29;
+    SendChannelMessage send_channel_message = 30;
+    GetChannelHistory get_channel_history = 31;
 
     Pong pong = 50;
     Error error = 51;
@@ -64,6 +66,8 @@ message Envelope {
     PresenceUpdated presence_updated = 68;
     ReactionUpdated reaction_updated = 71;
     ReadStateUpdated read_state_updated = 72; // reply to MarkRead, and a push to your own sockets
+    ChannelHistory channel_history = 73;
+    ChannelMessage channel_message = 74;
 
     // calls: field numbers 100-139 are reserved for them
     CallStart call_start = 100;
