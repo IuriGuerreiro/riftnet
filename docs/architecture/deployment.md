@@ -114,18 +114,21 @@ Healthy log: `media UDP listening`, then `media ready`.
 Media `.env`: `MEDIA_IP` = VPS public IP, `MEDIA_PORT` = the UDP port,
 `MAIN_TAILSCALE_IP` = server's Tailscale IP, `NATS_PASSWORD` = same as server.
 
-## 5. Desktop app (Windows)
+## 5. Desktop app
 
 In **Settings → Secrets and variables → Actions → Variables**, set `PROD_API_HTTP`
 to the production HTTPS API URL and `PROD_API_WS` to the production WSS URL ending
-in `/ws`. GitHub Actions embeds these URLs in the executable.
+in `/ws`. GitHub Actions embeds these URLs in both builds.
 
-Merge `main` into `prod` to start **Release Windows app**. After CI passes, the
-workflow builds `discord2-windows-x64.exe` and attaches it to a draft GitHub Release
-tagged `windows-<commit SHA>`. Download the executable from the draft and verify
-sign-in on Windows. Then publish the release.
+Merge `main` into `prod` to start **Release app**. After CI and both builds pass,
+the workflow attaches `discord2-windows-x64.exe` and `discord2-linux-x64.AppImage`
+to a draft GitHub Release tagged `app-<commit SHA>`.
 
-### Build manually on the server
+Download both files from the draft. On Linux, run
+`chmod +x discord2-linux-x64.AppImage` before launching it. Verify sign-in on
+both platforms, then publish the release.
+
+### Build the Windows executable manually on the server
 
 Built on the server (cross-compiled, no Windows needed):
 ```sh
