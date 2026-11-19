@@ -69,6 +69,7 @@ impl MessageService {
         conversation_id: i64,
         content: Vec<u8>,
         attachment_ids: &[i64],
+        reply_to: i64,
         nonce: &str,
     ) -> Result<Message, ApiError> {
         check_content(&content, !attachment_ids.is_empty())?;
@@ -95,6 +96,15 @@ impl MessageService {
             }
         }
 
+        // The original must exist and be in this conversation. The lookup is
+        // scoped to the conversation, so another conversation's id is just "not found".
+        if reply_to != 0 && self.repo.get(conversation_id, reply_to).await?.is_none() {
+            return Err(ApiError::bad_request(
+                "bad_reply",
+                "the replied-to message is not in this conversation",
+            ));
+        }
+
         // Postgres first, then Scylla. If the Scylla write fails, the client's
         // retry (same nonce, same id) claims the same files again, which is allowed.
         let attachments = self
@@ -111,6 +121,7 @@ impl MessageService {
             encryption: 0,
             edited_at: 0,
             attachments,
+            reply_to,
             reactions: Vec::new(),
         };
         self.repo.insert(&message).await?;
@@ -594,13 +605,13 @@ mod tests {
                 }
             }
         }
-        async fn get(&self, _: i64, id: i64) -> Result<Option<Message>, RepoError> {
+        async fn get(&self, conversation_id: i64, id: i64) -> Result<Option<Message>, RepoError> {
             Ok(self
                 .messages
                 .lock()
                 .unwrap()
                 .iter()
-                .find(|m| m.id == id)
+                .find(|m| m.id == id && m.conversation_id == conversation_id)
                 .cloned())
         }
         async fn insert(&self, m: &Message) -> Result<(), RepoError> {
@@ -799,7 +810,7 @@ mod tests {
         async fn send(&self, from: i64, text: &str) -> Message {
             let nonce = format!("n-{}", self.repo.nonces.lock().unwrap().len());
             self.svc
-                .send(from, DM, text.into(), &[], &nonce)
+                .send(from, DM, text.into(), &[], 0, &nonce)
                 .await
                 .unwrap()
         }
@@ -954,14 +965,14 @@ mod tests {
         let t = setup();
         let m = t
             .svc
-            .send(ALICE, DM, "oops".into(), &[], "retry-me")
+            .send(ALICE, DM, "oops".into(), &[], 0, "retry-me")
             .await
             .unwrap();
         t.svc.delete(ALICE, DM, m.id).await.unwrap();
 
         let err = t
             .svc
-            .send(ALICE, DM, "oops".into(), &[], "retry-me")
+            .send(ALICE, DM, "oops".into(), &[], 0, "retry-me")
             .await
             .unwrap_err();
 
@@ -975,12 +986,12 @@ mod tests {
         let t = setup();
         let first = t
             .svc
-            .send(ALICE, DM, "hi".into(), &[], "same")
+            .send(ALICE, DM, "hi".into(), &[], 0, "same")
             .await
             .unwrap();
         let again = t
             .svc
-            .send(ALICE, DM, "hi".into(), &[], "same")
+            .send(ALICE, DM, "hi".into(), &[], 0, "same")
             .await
             .unwrap();
         assert_eq!(first.id, again.id);
@@ -1177,5 +1188,63 @@ mod tests {
             code(t.svc.react(BOB, DM, m.id, THUMBS, true).await.unwrap_err()),
             "message_not_found"
         );
+    }
+
+    #[tokio::test]
+    async fn reply_is_stored_and_returned_everywhere() {
+        let t = setup();
+        let original = t.send(ALICE, "question").await;
+        let reply = t
+            .svc
+            .send(BOB, DM, "answer".into(), &[], original.id, "r1")
+            .await
+            .unwrap();
+
+        assert_eq!(reply.reply_to, original.id);
+        assert_eq!(
+            t.svc.history(ALICE, DM, None, 50).await.unwrap()[0].reply_to,
+            original.id
+        );
+        assert_eq!(
+            protocol::v1::Message::from(&reply).reply_to,
+            original.id as u64
+        );
+    }
+
+    #[tokio::test]
+    async fn reply_to_unknown_or_other_conversation_is_rejected() {
+        let t = setup();
+        let elsewhere = Message {
+            conversation_id: 200,
+            ..t.send(ALICE, "other room").await
+        };
+        t.repo.messages.lock().unwrap().push(Message {
+            id: 999,
+            ..elsewhere
+        });
+
+        for target in [999, 12345] {
+            let err = t
+                .svc
+                .send(ALICE, DM, "hi".into(), &[], target, &format!("n{target}"))
+                .await
+                .unwrap_err();
+            assert_eq!(code(err), "bad_reply");
+        }
+    }
+
+    #[tokio::test]
+    async fn reply_keeps_its_link_after_the_original_is_deleted() {
+        let t = setup();
+        let original = t.send(ALICE, "gone soon").await;
+        t.svc
+            .send(BOB, DM, "re".into(), &[], original.id, "r1")
+            .await
+            .unwrap();
+        t.svc.delete(ALICE, DM, original.id).await.unwrap();
+
+        let history = t.svc.history(BOB, DM, None, 50).await.unwrap();
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0].reply_to, original.id);
     }
 }

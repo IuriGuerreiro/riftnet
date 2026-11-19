@@ -121,6 +121,7 @@ impl MessageRepo for ScyllaMessageRepo {
                     &m.content,
                     m.encryption,
                     attachment_blobs(m),
+                    (m.reply_to != 0).then_some(m.reply_to),
                 ),
             )
             .await

@@ -13,6 +13,7 @@ impl From<&Message> for v1::Message {
             encryption: i32::from(m.encryption),
             edited_at: m.edited_at as u64,
             attachments: m.attachments.iter().map(Into::into).collect(),
+            reply_to: m.reply_to as u64,
             reactions: m.reactions.iter().map(Into::into).collect(),
         }
     }

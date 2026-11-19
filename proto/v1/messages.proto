@@ -15,6 +15,7 @@ message Message {
   // Empty in MessageCreated/MessageUpdated pushes and EditMessageAck:
   // keep the reactions you already have and apply ReactionUpdated pushes.
   repeated Reaction reactions = 9;
+  uint64 reply_to = 10; // id of the message this replies to (same conversation), 0 = not a reply
 }
 
 // One emoji on a message: how many people used it, and whether you did.
@@ -53,6 +54,8 @@ message SendMessage {
   // Finished uploads (max 10) from this sender, in this conversation, not on
   // another message yet. content may be empty when this isn't.
   repeated uint64 attachment_ids = 4;
+  // Optional: a message in this conversation to reply to. 0 = not a reply.
+  uint64 reply_to = 5;
 }
 
 message MessageAck {
