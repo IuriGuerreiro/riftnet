@@ -13,6 +13,7 @@ use super::models::{
 use super::repository::ConversationRepo;
 use crate::common::error::ApiError;
 use crate::common::events::EventBus;
+use crate::features::calls::service::CallService;
 use crate::features::users::models::User;
 use crate::features::users::repository::UserRepo;
 use crate::features::users::service::normalize_username;
@@ -22,6 +23,7 @@ pub struct ConversationService {
     users: Arc<dyn UserRepo>,
     events: Arc<dyn EventBus>,
     ids: Arc<Snowflake>,
+    calls: Arc<CallService>,
 }
 
 impl ConversationService {
@@ -30,12 +32,14 @@ impl ConversationService {
         users: Arc<dyn UserRepo>,
         events: Arc<dyn EventBus>,
         ids: Arc<Snowflake>,
+        calls: Arc<CallService>,
     ) -> Self {
         Self {
             repo,
             users,
             events,
             ids,
+            calls,
         }
     }
 
@@ -148,11 +152,19 @@ impl ConversationService {
                 .filter(|id| *id != me)
                 .collect();
 
-            if self
+            let changed = self
                 .repo
                 .set_members(conversation_id, &group.member_ids, &new_members)
-                .await?
-            {
+                .await;
+            let left = match &changed {
+                Ok(applied) => *applied,
+                Err(_) => matches!(self.repo.get(conversation_id).await,
+                    Ok(current) if current.as_ref().is_none_or(|c| !c.member_ids.contains(&me))),
+            };
+            if left {
+                self.calls.member_left(conversation_id, me).await;
+            }
+            if changed? {
                 let notify = group.member_ids.clone();
                 let group = ConversationRecord {
                     member_ids: new_members,

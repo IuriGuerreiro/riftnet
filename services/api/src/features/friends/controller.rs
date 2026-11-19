@@ -29,6 +29,10 @@ pub async fn send_request(
         REQUESTS_PER_HOUR,
         HOUR,
     )?;
+    state
+        .user_limits
+        .hit(crate::common::user_limits::FRIEND_REQUEST, auth.user_id)
+        .await?;
     Ok(Json(
         state
             .friends

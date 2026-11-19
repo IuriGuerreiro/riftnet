@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use axum::Router;
+use axum::extract::DefaultBodyLimit;
 use axum::http::{HeaderValue, Method, header};
 use axum::middleware;
 use common::snowflake::Snowflake;
@@ -10,7 +11,9 @@ use tower_http::cors::CorsLayer;
 use crate::common::events::{EventBus, NatsEventBus};
 use crate::common::middleware::http_metrics;
 use crate::common::middleware::rate_limit::RateLimiter;
+use crate::common::shutdown::Shutdown;
 use crate::common::storage::{S3Config, S3FileStore};
+use crate::common::user_limits::{SocketSlots, UserLimiter};
 use crate::config::Config;
 use crate::features::attachments::repository::PgAttachmentRepo;
 use crate::features::attachments::service::{AttachmentService, Limits};
@@ -25,7 +28,7 @@ use crate::features::conversations::repository::{ConversationRepo, ScyllaConvers
 use crate::features::conversations::service::ConversationService;
 use crate::features::friends::repository::PgFriendRepo;
 use crate::features::friends::service::FriendService;
-use crate::features::messages::repository::ScyllaMessageRepo;
+use crate::features::messages::repository::{ScyllaMessageRepo, ScyllaReactionRepo};
 use crate::features::messages::service::MessageService;
 use crate::features::presence::service::PresenceService;
 use crate::features::presence::store::RedisPresenceStore;
@@ -47,10 +50,19 @@ pub struct AppState {
     pub typing: Arc<TypingService>,
     pub tokens: Arc<TokenService>,
     pub limiter: Arc<RateLimiter>,
+    pub user_limits: UserLimiter,
+    pub socket_slots: SocketSlots,
+    pub shutdown: Arc<Shutdown>,
     pub events: Arc<dyn EventBus>,
 }
 
-pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Result<Router> {
+const MAX_BODY_BYTES: usize = 1024 * 1024;
+
+pub async fn build(
+    config: &Config,
+    prometheus: PrometheusHandle,
+    shutdown: Arc<Shutdown>,
+) -> anyhow::Result<Router> {
     let pool = crate::common::db::connect(&config.database_url).await?;
     let scylla = crate::common::scylla::connect(
         &config.scylla_nodes,
@@ -72,8 +84,15 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
 
     let conversation_repo: Arc<dyn ConversationRepo> =
         Arc::new(ScyllaConversationRepo::new(scylla.clone()).await?);
-    let message_repo = Arc::new(ScyllaMessageRepo::new(scylla).await?);
+    let message_repo = Arc::new(ScyllaMessageRepo::new(scylla.clone()).await?);
+    let reaction_repo = Arc::new(ScyllaReactionRepo::new(scylla).await?);
     let friend_repo = Arc::new(PgFriendRepo::new(pool.clone()));
+    let user_limits = UserLimiter::new(redis.clone(), config.rate_limits);
+    let socket_slots = SocketSlots::new(
+        redis.clone(),
+        crate::features::gateway::PRESENCE_TTL,
+        config.rate_limits,
+    );
     let presence_store = Arc::new(RedisPresenceStore::new(
         redis,
         crate::features::gateway::PRESENCE_TTL,
@@ -105,6 +124,14 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
         std::time::Duration::from_secs(60 * 60),
     );
 
+    let calls = Arc::new(CallService::new(
+        Arc::new(MemoryCallStore::default()),
+        conversation_repo.clone(),
+        Arc::new(NatsMediaClient::connect(&config.nats_url).await?),
+        events.clone(),
+        ids.clone(),
+    ));
+
     let state = AppState {
         attachments: attachment_service.clone(),
         auth: Arc::new(AuthService::new(
@@ -117,6 +144,7 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
         )),
         messages: Arc::new(MessageService::new(
             message_repo,
+            reaction_repo,
             conversation_repo.clone(),
             events.clone(),
             ids.clone(),
@@ -127,18 +155,13 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
             user_repo.clone(),
             events.clone(),
             ids.clone(),
+            calls.clone(),
         )),
         typing: Arc::new(TypingService::new(
             conversation_repo.clone(),
             events.clone(),
         )),
-        calls: Arc::new(CallService::new(
-            Arc::new(MemoryCallStore::default()),
-            conversation_repo.clone(),
-            Arc::new(NatsMediaClient::connect(&config.nats_url).await?),
-            events.clone(),
-            ids,
-        )),
+        calls,
         presence: Arc::new(PresenceService::new(
             presence_store,
             friend_repo.clone(),
@@ -158,7 +181,10 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
             events.clone(),
         )),
         tokens,
-        limiter: Arc::new(RateLimiter::default()),
+        limiter: Arc::new(RateLimiter::new(config.rate_limits)),
+        user_limits,
+        socket_slots,
+        shutdown,
         events,
     };
 
@@ -189,6 +215,7 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
         .merge(friends::routes())
         .merge(attachments::routes())
         .merge(gateway::routes())
+        .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
         .layer(middleware::from_fn(http_metrics::track))
         .layer(cors)
         .with_state(state))

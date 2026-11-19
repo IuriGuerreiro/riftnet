@@ -15,11 +15,12 @@ import type { Conversation } from "../gen/v1/conversations_pb";
 import type { Attachment as AttachmentInfo } from "../gen/v1/messages_pb";
 import { useAuth } from "../stores/auth";
 import { useCalls } from "../stores/calls";
-import { type ChatMessage, isGroup, useChat } from "../stores/chat";
+import { type ChatMessage, isGroup, replyTarget, useChat } from "../stores/chat";
 import { useConnection } from "../stores/connection";
 import { useFriends } from "../stores/friends";
 import { usePresence } from "../stores/presence";
 import { fromJson, fromProto, nameOf, useProfiles } from "../stores/profiles";
+import { QUICK_EMOJIS, type ReactionChip, reactorsText } from "../stores/reactions";
 import { typingText, useTyping } from "../stores/typing";
 
 const dot = { online: "bg-green-500", connecting: "bg-yellow-500", offline: "bg-red-500" };
@@ -550,19 +551,90 @@ function Messages({ conversationId, myId }: { conversationId: bigint; myId?: big
   return (
     <div className="flex-1 space-y-1 overflow-y-auto p-4">
       {messages.map((m) => (
-        <MessageRow key={m.nonce ?? m.id.toString()} m={m} mine={m.authorId === myId} />
+        <MessageRow
+          key={m.nonce ?? m.id.toString()}
+          m={m}
+          mine={m.authorId === myId}
+          conversationId={conversationId}
+        />
       ))}
       <div ref={bottom} />
     </div>
   );
 }
 
-function MessageRow({ m, mine }: { m: ChatMessage; mine: boolean }) {
+const messageDomId = (id: bigint) => `msg-${id}`;
+
+function jumpTo(id: bigint) {
+  const el = document.getElementById(messageDomId(id));
+  if (!el) return false;
+  el.scrollIntoView({ behavior: "smooth", block: "center" });
+  el.classList.add("ring-2", "ring-yellow-400");
+  setTimeout(() => el.classList.remove("ring-2", "ring-yellow-400"), 1500);
+  return true;
+}
+
+function ReplyQuote({
+  conversationId,
+  replyTo,
+  mine,
+}: {
+  conversationId: bigint;
+  replyTo: bigint;
+  mine: boolean;
+}) {
   const ws = useConnection((s) => s.ws);
-  const { edit, remove } = useChat();
+  const k = conversationId.toString();
+  const messages = useChat((s) => s.messages[k]) ?? [];
+  const deleted = useChat((s) => s.deleted[k]);
+  const loadUntil = useChat((s) => s.loadUntil);
+  const profiles = useProfiles((s) => s.byId);
+  const [gone, setGone] = useState(false);
+  const target = gone ? ({ state: "deleted" } as const) : replyTarget(messages, deleted, replyTo);
+  const muted = mine ? "text-zinc-800" : "text-zinc-400";
+
+  if (target.state === "deleted")
+    return <span className={`mb-1 block text-xs italic ${muted}`}>↪ Original deleted</span>;
+
+  return (
+    <button
+      type="button"
+      onClick={async () => {
+        if (jumpTo(replyTo) || !ws) return;
+        if (await loadUntil(ws, conversationId, replyTo)) setTimeout(() => jumpTo(replyTo), 50);
+        else setGone(true);
+      }}
+      className={`mb-1 block max-w-full truncate border-l-2 border-current pl-2 text-left text-xs hover:underline ${muted}`}
+    >
+      {target.state === "loaded" ? (
+        <>
+          <span className="font-semibold">
+            {nameOf(profiles[target.message.authorId.toString()])}
+          </span>{" "}
+          {target.message.text || "📎 attachment"}
+        </>
+      ) : (
+        "↪ Earlier message · click to load"
+      )}
+    </button>
+  );
+}
+
+function MessageRow({
+  m,
+  mine,
+  conversationId,
+}: {
+  m: ChatMessage;
+  mine: boolean;
+  conversationId: bigint;
+}) {
+  const ws = useConnection((s) => s.ws);
+  const { edit, remove, setReplyingTo } = useChat();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const canChange = mine && !m.pending && m.id !== 0n && !!ws;
+  const canReact = !m.pending && m.id !== 0n && !!ws;
 
   async function save() {
     if (!ws) return;
@@ -600,49 +672,197 @@ function MessageRow({ m, mine }: { m: ChatMessage; mine: boolean }) {
   }
 
   return (
-    <div className={`group flex items-center gap-2 ${mine ? "justify-end" : ""}`}>
-      {!mine && <Avatar userId={m.authorId} size="xs" />}
-      {canChange && (
-        <div className="hidden gap-1 text-xs text-zinc-400 group-hover:flex">
-          <button
-            onClick={() => {
-              setDraft(m.text);
-              setEditing(true);
-            }}
-            className="rounded px-1.5 py-0.5 hover:bg-zinc-800 hover:text-zinc-100"
-          >
-            Edit
-          </button>
-          <button
-            onClick={() =>
-              window.confirm("Delete this message? This can't be undone.") && void remove(ws, m.id)
-            }
-            className="rounded px-1.5 py-0.5 hover:bg-zinc-800 hover:text-red-400"
-          >
-            Delete
-          </button>
+    <div className={`group flex flex-col ${mine ? "items-end" : "items-start"}`}>
+      <div className={`flex w-full items-center gap-2 ${mine ? "justify-end" : ""}`}>
+        {!mine && <Avatar userId={m.authorId} size="xs" />}
+        {mine && canReact && <ReactionPicker messageId={m.id} />}
+        {canReact && (
+          <div className="hidden gap-1 text-xs text-zinc-400 group-hover:flex">
+            <button
+              onClick={() => setReplyingTo(m.id)}
+              className="rounded px-1.5 py-0.5 hover:bg-zinc-800 hover:text-zinc-100"
+            >
+              Reply
+            </button>
+            {canChange && (
+              <>
+                <button
+                  onClick={() => {
+                    setDraft(m.text);
+                    setEditing(true);
+                  }}
+                  className="rounded px-1.5 py-0.5 hover:bg-zinc-800 hover:text-zinc-100"
+                >
+                  Edit
+                </button>
+                <button
+                  onClick={() =>
+                    window.confirm("Delete this message? This can't be undone.") &&
+                    void remove(ws, m.id)
+                  }
+                  className="rounded px-1.5 py-0.5 hover:bg-zinc-800 hover:text-red-400"
+                >
+                  Delete
+                </button>
+              </>
+            )}
+          </div>
+        )}
+        <div
+          id={m.id !== 0n ? messageDomId(m.id) : undefined}
+          className={`max-w-[75%] whitespace-pre-wrap break-words rounded-lg px-3 py-1.5 text-sm ${
+            mine ? "bg-brand text-zinc-950" : "bg-zinc-800"
+          } ${m.pending ? "opacity-50" : ""} ${m.failed ? "ring-2 ring-red-500" : ""}`}
+          title={m.pending ? "sending…" : `seq ${m.seq}`}
+        >
+          {m.replyTo !== undefined && (
+            <ReplyQuote conversationId={conversationId} replyTo={m.replyTo} mine={mine} />
+          )}
+          <Markdown text={m.text} />
+          {m.attachments?.map((a) => (
+            <Attachment key={a.id.toString()} a={a} mine={mine} />
+          ))}
+          {m.editedAt ? (
+            <span
+              className={`ml-1.5 text-[10px] ${mine ? "text-zinc-800" : "text-zinc-500"}`}
+              title={new Date(Number(m.editedAt)).toLocaleString()}
+            >
+              (edited)
+            </span>
+          ) : null}
+        </div>
+        {!mine && canReact && <ReactionPicker messageId={m.id} />}
+      </div>
+      {m.reactions?.length ? (
+        <div className={`mt-0.5 flex flex-wrap gap-1 ${mine ? "justify-end" : "pl-8"}`}>
+          {m.reactions.map((r) => (
+            <ReactionChipButton key={r.emoji} messageId={m.id} r={r} disabled={!canReact} />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ReactionPicker({ messageId }: { messageId: bigint }) {
+  const ws = useConnection((s) => s.ws);
+  const toggle = useChat((s) => s.toggleReaction);
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open]);
+  if (!ws) return null;
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        aria-label="Add reaction"
+        title="Add reaction"
+        onClick={() => setOpen((o) => !o)}
+        className={`${open ? "flex" : "hidden group-hover:flex"} rounded px-1.5 py-0.5 text-sm text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100`}
+      >
+        ☺+
+      </button>
+      {open && (
+        <div className="absolute bottom-full z-10 mb-1 flex gap-0.5 rounded-lg border border-zinc-700 bg-zinc-900 p-1 shadow-lg">
+          {QUICK_EMOJIS.map((e) => (
+            <button
+              key={e}
+              onClick={() => {
+                setOpen(false);
+                void toggle(ws, messageId, e);
+              }}
+              className="rounded px-1 text-lg hover:bg-zinc-800"
+            >
+              {e}
+            </button>
+          ))}
         </div>
       )}
-      <div
-        className={`max-w-[75%] whitespace-pre-wrap break-words rounded-lg px-3 py-1.5 text-sm ${
-          mine ? "bg-brand text-zinc-950" : "bg-zinc-800"
-        } ${m.pending ? "opacity-50" : ""} ${m.failed ? "ring-2 ring-red-500" : ""}`}
-        title={m.pending ? "sending…" : `seq ${m.seq}`}
-      >
-        <Markdown text={m.text} />
-        {m.attachments?.map((a) => (
-          <Attachment key={a.id.toString()} a={a} mine={mine} />
-        ))}
-        {m.editedAt ? (
-          <span
-            className={`ml-1.5 text-[10px] ${mine ? "text-zinc-800" : "text-zinc-500"}`}
-            title={new Date(Number(m.editedAt)).toLocaleString()}
-          >
-            (edited)
-          </span>
-        ) : null}
-      </div>
     </div>
+  );
+}
+
+function ReplyBar({ conversationId }: { conversationId: bigint }) {
+  const replyingTo = useChat((s) => s.replyingTo);
+  const message = useChat((s) =>
+    s.messages[conversationId.toString()]?.find((m) => m.id === s.replyingTo),
+  );
+  const setReplyingTo = useChat((s) => s.setReplyingTo);
+  const profiles = useProfiles((s) => s.byId);
+  if (replyingTo === null || !message) return null;
+  return (
+    <div className="flex items-center gap-2 rounded bg-zinc-800/60 px-2 py-1 text-xs text-zinc-400">
+      <span className="min-w-0 flex-1 truncate">
+        Replying to{" "}
+        <span className="font-semibold text-zinc-200">
+          {nameOf(profiles[message.authorId.toString()])}
+        </span>
+        : {message.text || "📎 attachment"}
+      </span>
+      <button
+        type="button"
+        title="Cancel reply (Esc)"
+        onClick={() => setReplyingTo(null)}
+        className="hover:text-red-400"
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
+
+function ReactionChipButton({
+  messageId,
+  r,
+  disabled,
+}: {
+  messageId: bigint;
+  r: ReactionChip;
+  disabled: boolean;
+}) {
+  const ws = useConnection((s) => s.ws);
+  const { toggleReaction, reactors } = useChat();
+  const members = useChat((s) => s.conversations.find((c) => c.id === s.selected)?.members ?? []);
+  const profiles = useProfiles((s) => s.byId);
+  const [who, setWho] = useState<{ count: number; ids: bigint[] } | null>(null);
+
+  async function loadWho() {
+    if (!ws || who?.count === r.count) return;
+    try {
+      setWho({ count: r.count, ids: await reactors(ws, messageId, r.emoji) });
+    } catch {
+      setWho(null);
+    }
+  }
+  const names = (who?.ids ?? []).map((id) => {
+    const member = members.find((u) => u.id === id);
+    return member ? nameOf(fromProto(member)) : nameOf(profiles[id.toString()]);
+  });
+
+  return (
+    <button
+      disabled={disabled}
+      onMouseEnter={() => void loadWho()}
+      onFocus={() => void loadWho()}
+      onClick={() => ws && void toggleReaction(ws, messageId, r.emoji)}
+      title={names.length ? `${reactorsText(names, r.count)} reacted with ${r.emoji}` : r.emoji}
+      aria-pressed={r.me}
+      className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${
+        r.me
+          ? "border-brand bg-brand/15 text-zinc-100"
+          : "border-zinc-700 bg-zinc-800/60 text-zinc-300 hover:border-zinc-500"
+      }`}
+    >
+      <span className="text-sm">{r.emoji}</span>
+      <span>{r.count}</span>
+    </button>
   );
 }
 
@@ -789,6 +1009,7 @@ function Composer({
         void submit();
       }}
     >
+      <ReplyBar conversationId={conversationId} />
       {(files.length > 0 || error !== null || busy) && (
         <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-400">
           {files.map((f, i) => (
@@ -837,6 +1058,9 @@ function Composer({
           onChange={(e) => {
             setText(e.target.value);
             if (e.target.value.trim()) onType();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") useChat.getState().setReplyingTo(null);
           }}
           placeholder="Message"
           maxLength={4000}

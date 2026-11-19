@@ -26,6 +26,11 @@ pub trait CallStore: Send + Sync {
         activate: bool,
     ) -> Result<Call, AddError>;
     async fn remove_if(&self, call_id: i64, condition: Condition) -> Option<Call>;
+    async fn withdraw_member(
+        &self,
+        conversation_id: i64,
+        user_id: i64,
+    ) -> Option<(Call, Option<Participant>)>;
     async fn with_connection(&self, connection_id: u64) -> Vec<Call>;
 }
 
@@ -67,6 +72,9 @@ impl CallStore for MemoryCallStore {
     ) -> Result<Call, AddError> {
         let mut calls = self.calls.lock().unwrap();
         let call = calls.get_mut(&call_id).ok_or(AddError::NotFound)?;
+        if !call.member_ids.contains(&p.user_id) {
+            return Err(AddError::NotFound);
+        }
         if call.participants.iter().any(|x| x.user_id == p.user_id) {
             return Err(AddError::AlreadyIn);
         }
@@ -83,6 +91,24 @@ impl CallStore for MemoryCallStore {
             return None;
         }
         calls.remove(&call_id)
+    }
+
+    async fn withdraw_member(
+        &self,
+        conversation_id: i64,
+        user_id: i64,
+    ) -> Option<(Call, Option<Participant>)> {
+        let mut calls = self.calls.lock().unwrap();
+        let call = calls.values_mut().find(|call| {
+            call.conversation_id == conversation_id && call.member_ids.contains(&user_id)
+        })?;
+        call.member_ids.retain(|id| *id != user_id);
+        let participant = call
+            .participants
+            .iter()
+            .position(|p| p.user_id == user_id)
+            .map(|index| call.participants.remove(index));
+        Some((call.clone(), participant))
     }
 
     async fn with_connection(&self, connection_id: u64) -> Vec<Call> {
