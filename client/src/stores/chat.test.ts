@@ -14,9 +14,9 @@ function fakeWs(answer: (p: Payload) => Payload) {
   const sent: Payload[] = [];
   const ws = {
     onPush: () => {},
-    request: async (p: Payload) => {
+    request: (p: Payload) => {
       sent.push(p);
-      return answer(p);
+      return Promise.resolve(answer(p));
     },
   } as unknown as WsClient;
   return { ws, sent };

@@ -15,6 +15,8 @@ pub enum ApiError {
     NotFound,
     #[error("too many requests")]
     TooManyRequests,
+    #[error("rate limited")]
+    RateLimited { retry_after: std::time::Duration },
     #[error(transparent)]
     Internal(#[from] anyhow::Error),
 }
@@ -56,6 +58,11 @@ impl ApiError {
                 "rate_limited",
                 "too many requests, slow down".into(),
             ),
+            Self::RateLimited { retry_after } => (
+                StatusCode::TOO_MANY_REQUESTS,
+                "rate_limited",
+                format!("too many requests, retry in {}ms", retry_after.as_millis()),
+            ),
             Self::Internal(err) => {
                 tracing::error!(error = ?err, "internal error");
                 (
@@ -68,11 +75,31 @@ impl ApiError {
     }
 }
 
+impl ApiError {
+    pub fn retry_after(&self) -> Option<std::time::Duration> {
+        match self {
+            Self::RateLimited { retry_after } => Some(*retry_after),
+            _ => None,
+        }
+    }
+}
+
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let (status, code, message) = self.describe();
         tracing::Span::current().record("error.code", code);
-        (status, Json(json!({ "code": code, "message": message }))).into_response()
+        let Some(wait) = self.retry_after() else {
+            return (status, Json(json!({ "code": code, "message": message }))).into_response();
+        };
+        let ms = wait.as_millis() as u64;
+        let secs = ms.div_ceil(1000).to_string();
+        let body = json!({ "code": code, "message": message, "retry_after_ms": ms });
+        (
+            status,
+            [(axum::http::header::RETRY_AFTER, secs)],
+            Json(body),
+        )
+            .into_response()
     }
 }
 

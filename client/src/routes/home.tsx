@@ -8,6 +8,7 @@ import { http } from "../api/http";
 import type { Friend, User } from "../api/types";
 import { CallBar, IncomingCall, RemoteScreen } from "../call/CallBar";
 import { Avatar } from "../components/Avatar";
+import { Markdown } from "../components/Markdown";
 import { ProfilePanel } from "../components/ProfilePanel";
 import { StatusDot } from "../components/StatusDot";
 import type { Conversation } from "../gen/v1/conversations_pb";
@@ -713,7 +714,7 @@ function MessageRow({
         {m.replyTo !== undefined && (
           <ReplyQuote conversationId={conversationId} replyTo={m.replyTo} mine={mine} />
         )}
-        {m.text}
+        <Markdown text={m.text} />
         {m.attachments?.map((a) => (
           <Attachment key={a.id.toString()} a={a} mine={mine} />
         ))}

@@ -80,3 +80,19 @@ DMs and group DMs can reply to a message.
 - Three backends = more testing. One shared test suite every backend must pass.
 - Very busy channels create hot partitions in Scylla (time buckets help).
 - Quiet conversations with 10-day buckets need several reads for "last 50". Fix when designing the schema (track the latest bucket, or bucket by count).
+
+## Markdown in messages
+
+The web and desktop clients render Markdown in direct and group messages.
+The composer and edit field use the original text. The protocol and storage
+still carry plain text, so clients can render Markdown after decryption when
+end-to-end encryption is added.
+
+The renderer supports bold, italic, strikethrough, inline code, fenced code,
+quotes, ordered and unordered lists, spoilers, and HTTP(S) links. HTML tags
+and Markdown images display as text. Links open in a new tab with
+`noreferrer noopener`. Rendering does not fetch external resources or previews.
+
+Fenced code blocks have a copy button. The client loads syntax highlighting
+on demand for fences with a language label. Unknown languages display as plain
+code.
