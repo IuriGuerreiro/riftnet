@@ -50,5 +50,8 @@ declare module "@tanstack/react-router" {
 }
 
 useAuth.subscribe((s, prev) => {
-  if (prev.refreshToken && !s.refreshToken) void router.navigate({ to: "/login" });
+  if (prev.refreshToken && !s.refreshToken) {
+    const { invite } = readWorkspaceSearch(router.state.location.search);
+    void router.navigate({ to: "/login", search: { invite } });
+  }
 });

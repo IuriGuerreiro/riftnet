@@ -109,7 +109,7 @@ export function HomePage() {
         </header>
 
         <ServerNavigation />
-        <div hidden={Boolean(server ?? invite)} className="min-h-0 flex-1 flex-col not-hidden:flex">
+        <div className={(server ?? invite) ? "hidden" : "flex min-h-0 flex-1 flex-col"}>
           <NewDm disabled={!ws} onOpen={(username) => ws && chat.openDm(ws, username)} />
           <NewGroup
             disabled={!ws}
