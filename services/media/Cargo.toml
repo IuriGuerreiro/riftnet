@@ -16,3 +16,4 @@ str0m = { version = "0.21", default-features = false, features = ["aws-lc-rs"] }
 async-nats = "0.52.0"
 futures = "0.3.34"
 metrics = "0.24"
+metrics-exporter-prometheus = { version = "0.16", default-features = false }

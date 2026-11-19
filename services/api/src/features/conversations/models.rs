@@ -20,6 +20,7 @@ pub struct ConversationRecord {
     pub last_seq: i64,
     pub name: String,
     pub member_ids: Vec<i64>,
+    pub last_message_at: i64,
 }
 
 #[derive(Debug, Clone)]
@@ -29,7 +30,17 @@ pub struct Conversation {
     pub last_seq: i64,
     pub name: String,
     pub members: Vec<User>,
+    pub last_message_at: i64,
+    pub read: ReadState,
 }
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ReadState {
+    pub last_read_seq: i64,
+    pub unread_count: u32,
+}
+
+pub const UNREAD_CAP: u32 = 10;
 
 pub fn dm_key(a: i64, b: i64) -> String {
     format!("{}:{}", a.min(b), a.max(b))

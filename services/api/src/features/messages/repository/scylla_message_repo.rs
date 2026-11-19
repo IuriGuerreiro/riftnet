@@ -26,6 +26,7 @@ pub struct ScyllaMessageRepo {
     pub(super) changes_since: PreparedStatement,
     pub(super) mark_deleted: PreparedStatement,
     pub(super) was_deleted: PreparedStatement,
+    pub(super) delete_reactions: PreparedStatement,
 }
 
 pub(super) type Row = (
@@ -37,6 +38,7 @@ pub(super) type Row = (
     Option<i8>,
     Option<i64>,
     Option<Vec<Vec<u8>>>,
+    Option<i64>,
 );
 
 impl ScyllaMessageRepo {
@@ -67,13 +69,14 @@ impl ScyllaMessageRepo {
             changes_since: prepare(q::CHANGES_SINCE).await?,
             mark_deleted: prepare(q::MARK_DELETED).await?,
             was_deleted: prepare(q::WAS_DELETED).await?,
+            delete_reactions: prepare(q::DELETE_REACTIONS).await?,
             session,
         })
     }
 }
 
 pub(super) fn to_message(
-    (conversation_id, id, seq, author_id, content, encryption, edited_at, attachments): Row,
+    (conversation_id, id, seq, author_id, content, encryption, edited_at, attachments, reply_to): Row,
 ) -> Message {
     Message {
         id,
@@ -83,6 +86,7 @@ pub(super) fn to_message(
         content: content.unwrap_or_default(),
         encryption: encryption.unwrap_or(0),
         edited_at: edited_at.unwrap_or(0),
+        reply_to: reply_to.unwrap_or(0),
         attachments: attachments
             .unwrap_or_default()
             .iter()
@@ -94,6 +98,7 @@ pub(super) fn to_message(
                 }
             })
             .collect(),
+        reactions: Vec::new(),
     }
 }
 

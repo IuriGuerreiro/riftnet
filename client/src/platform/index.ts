@@ -10,6 +10,7 @@ const isTauri = "__TAURI_INTERNALS__" in window;
 const httpUrl = import.meta.env.VITE_API_HTTP ?? defaultHttpUrl();
 
 function webUrl(): string {
+  if (import.meta.env.VITE_WEB_URL) return new URL(import.meta.env.VITE_WEB_URL).origin;
   if (!isTauri) return window.location.origin;
   const url = new URL(httpUrl, window.location.href);
   if (url.hostname.startsWith("api.")) {

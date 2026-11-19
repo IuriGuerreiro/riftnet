@@ -12,7 +12,15 @@ export function ChannelChat({ channelId: id, name }: { channelId: string; name: 
   const channelId = BigInt(id);
   const userId = useAuth((state) => state.user?.id);
   const ws = useConnection((state) => state.ws);
-  const [live, setLive] = useState(() => new Map<bigint, ChannelMessage>());
+  const [live, setLive] = useState(() => ({
+    connection: ws,
+    messages: new Map<bigint, ChannelMessage>(),
+  }));
+  const receive = (message: ChannelMessage) =>
+    setLive((current) => ({
+      connection: ws,
+      messages: new Map(current.connection === ws ? current.messages : []).set(message.id, message),
+    }));
   const [draft, setDraft] = useState("");
   const [nonce, setNonce] = useState(newNonce);
   const bottom = useRef<HTMLDivElement>(null);
@@ -31,7 +39,13 @@ export function ChannelChat({ channelId: id, name }: { channelId: string; name: 
   useEffect(() => {
     if (!ws) return;
     const unsubscribe = onChannelMessage(ws, channelId, (message) =>
-      setLive((current) => new Map(current).set(message.id, message)),
+      setLive((current) => ({
+        connection: ws,
+        messages: new Map(current.connection === ws ? current.messages : []).set(
+          message.id,
+          message,
+        ),
+      })),
     );
     void refetch({ cancelRefetch: false });
     return unsubscribe;
@@ -43,13 +57,13 @@ export function ChannelChat({ channelId: id, name }: { channelId: string; name: 
       return sendChannelMessage(ws, channelId, text, nonce);
     },
     onSuccess: (message) => {
-      setLive((current) => new Map(current).set(message.id, message));
+      receive(message);
       setDraft("");
       setNonce(newNonce());
     },
   });
 
-  const messages = new Map(live);
+  const messages = new Map(live.connection === ws ? live.messages : []);
   for (const page of history.data?.pages ?? []) {
     for (const message of page.messages) messages.set(message.id, message);
   }

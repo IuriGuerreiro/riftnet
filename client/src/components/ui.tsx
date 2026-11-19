@@ -44,3 +44,6 @@ export function ErrorText({ error }: { error: unknown }) {
     </p>
   );
 }
+
+export const fieldClass =
+  "min-w-0 flex-1 rounded-md bg-zinc-800 px-2 py-1 text-sm outline-none ring-brand focus:ring-2";

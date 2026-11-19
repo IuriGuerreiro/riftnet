@@ -39,6 +39,13 @@ pub trait MessageRepo: Send + Sync {
     async fn delete(&self, conversation_id: i64, id: i64, change_seq: i64)
     -> Result<(), RepoError>;
     async fn was_deleted(&self, conversation_id: i64, id: i64) -> Result<bool, RepoError>;
+    /// Logs a reaction change so sync can report the message.
+    async fn log_reaction(
+        &self,
+        conversation_id: i64,
+        id: i64,
+        change_seq: i64,
+    ) -> Result<(), RepoError>;
     async fn changes_since(
         &self,
         conversation_id: i64,
@@ -114,6 +121,7 @@ impl MessageRepo for ScyllaMessageRepo {
                     &m.content,
                     m.encryption,
                     attachment_blobs(m),
+                    (m.reply_to != 0).then_some(m.reply_to),
                 ),
             )
             .await
@@ -247,6 +255,7 @@ impl MessageRepo for ScyllaMessageRepo {
         batch.append_statement(self.delete_message.clone());
         batch.append_statement(self.insert_change.clone());
         batch.append_statement(self.mark_deleted.clone());
+        batch.append_statement(self.delete_reactions.clone());
         self.session
             .batch(
                 &batch,
@@ -254,10 +263,28 @@ impl MessageRepo for ScyllaMessageRepo {
                     (conversation_id, bucket_of(id), id),
                     (conversation_id, change_seq, id, ChangeKind::Delete as i8),
                     (conversation_id, id),
+                    (conversation_id, id),
                 ),
             )
             .await
             .context("delete message")?;
+        Ok(())
+    }
+
+    #[tracing::instrument(name = "db INSERT message_changes", skip_all, err(Display), fields(otel.kind = "client", db.system = "scylladb", db.operation = "INSERT", db.collection.name = "message_changes"))]
+    async fn log_reaction(
+        &self,
+        conversation_id: i64,
+        id: i64,
+        change_seq: i64,
+    ) -> Result<(), RepoError> {
+        self.session
+            .execute_unpaged(
+                &self.insert_change,
+                (conversation_id, change_seq, id, ChangeKind::Reaction as i8),
+            )
+            .await
+            .context("log reaction")?;
         Ok(())
     }
 
@@ -304,6 +331,24 @@ impl MessageRepo for ScyllaMessageRepo {
             .maybe_first_row::<(i64,)>()
             .context("was deleted")?;
         Ok(row.is_some())
+    }
+}
+
+#[async_trait]
+impl<T: MessageRepo + ?Sized> crate::features::conversations::repository::UnreadCounter for T {
+    async fn count_after(
+        &self,
+        conversation: &crate::features::conversations::models::ConversationRecord,
+        after_seq: i64,
+        cap: u32,
+    ) -> Result<u32, RepoError> {
+        if conversation.last_seq <= after_seq || cap == 0 {
+            return Ok(0);
+        }
+        let found = self
+            .since_seq(conversation.id, after_seq, cap as usize, conversation.id)
+            .await?;
+        Ok(found.len() as u32)
     }
 }
 

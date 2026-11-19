@@ -51,7 +51,7 @@ Never returns email. Rate limited to 30 per 10s per user (`429`). Uses the `user
 - **Request → reply:** the client numbers its requests (1, 2, 3…); the reply carries the **same `id`**.
   Replies can arrive in any order, so the client keeps a map `id → waiting promise`.
 - **Push:** `id = 0`. The server tells you something happened (e.g. `message_created`).
-- **Errors:** an `error { code, message }` frame with the request's `id`. Same codes as HTTP (`user_not_found`, …).
+- **Errors:** an `error { code, message, retry_after_ms }` frame with the request's `id`. Same codes as HTTP (`user_not_found`, …). `retry_after_ms` is only set for `rate_limited`.
 
 ### Connecting
 
@@ -81,10 +81,36 @@ sequenceDiagram
   | 4002 | `token_expired`   | access token ran out, no re-auth     | refreshes the token, reconnects now  |
   | 4003 | `session_revoked` | device logged out or revoked         | clears the session, goes to `/login` |
   | 1011 | `unavailable` | server couldn't check revocation (DB down) | reconnects with backoff |
+  | 1012 | `server_restarting` | server is shutting down (deploy)  | reconnects with backoff             |
+  | 1008 | `too_many_sockets` | user already has 10 sockets open  | reconnects with backoff             |
   | else | —                 | network drop, server restart         | reconnects after 1s, 2s, 4s… (max 30s) |
 - After auth, the socket remembers `(user_id, device_id)`; later frames don't carry the token.
 - **Re-auth:** send `authenticate {access_token}` again on the open socket to move its expiry. The token must be for the same user and device, or the reply is `error {wrong_session}` and the old expiry still applies. The app does this about 25s before expiry.
 - **Revoke:** the socket listens on NATS `device.<device_id>.revoked` and closes with 4003 when a message arrives. It also checks `devices.revoked_at` once at connect, after the NATS subscribe is confirmed. Revoke and expiry win over a pending request. See [identity-auth.md](identity-auth.md#logout).
+
+### Heartbeat and limits
+
+- **Heartbeat:** the server sends a WebSocket ping every 30s. Browsers answer with pong on their own. Any frame (pong included) counts as "alive". The server drops the socket at the next heartbeat check after more than 75s of silence.
+- **Size:** one message (and one frame) is at most 64 KiB. Bigger ones close the socket.
+- **Sockets per user:** at most 10 open at once, counted in Redis (`ws:slots:<user_id>`, refreshed each heartbeat, expires after 90s if the server dies). The 11th gets close 1008.
+- **Shutdown:** on SIGTERM the server refuses new upgrades with `503`, closes active gateway sessions with 1012, drains HTTP requests, and gives any remaining socket tasks up to 10s to finish.
+
+### Rate limits
+
+Per user, in Redis, shared by all api instances. Fixed window: the first hit starts the timer.
+
+| Rule             | Limit      | Covers                                                    |
+| ---------------- | ---------- | --------------------------------------------------------- |
+| `send_message`   | 10 / 10s   | `send_message`                                            |
+| `group_change`   | 20 / 1 min | `create_group`, `add_member`, `leave_group`, `rename_group` |
+| `friend_request` | 10 / 1 min | `POST /friends/requests` (the 20/hour limit still applies) |
+
+Over the limit:
+
+- **WebSocket:** `error {code: "rate_limited", retry_after_ms}` with the request's `id`. The socket stays open.
+- **HTTP:** `429`, header `Retry-After: <seconds, rounded up>`, body `{code: "rate_limited", message, retry_after_ms}`.
+
+If Redis is unavailable, the server logs a warning and allows the action or connection. The existing in-memory limits still apply.
 
 ### Requests
 
@@ -93,7 +119,10 @@ sequenceDiagram
 | `authenticate {access_token}`                     | `auth_ok {user}`               | first frame; again to re-auth |
 | `ping`                                            | `pong`                         |                              |
 | `open_dm {username}`                              | `conversation`                 | creates it the first time    |
-| `list_conversations`                              | `conversations`                |                              |
+| `list_conversations`                              | `conversations`                | newest activity first, with your own unread counts (see [dms.md](dms.md#list-order-and-unread)) |
+| `mark_read {conversation_id, seq}`                | `read_state_updated {conversation_id, last_read_seq, unread_count}` | only moves forward; also pushed to **your own** sockets, never to others |
+| `create_group {name, usernames, nonce}`           | `conversation`                 | `nonce` optional (≤ 64): a retry returns the same group |
+| `add_member` / `leave_group` / `rename_group`     | `conversation`                 | safe to retry: adding a member twice or leaving twice is not an error |
 | `send_message {conversation_id, content, nonce}`  | `message_ack {nonce, message}` | see [dms.md](dms.md#sending) |
 | `get_history {conversation_id, before_id, limit}` | `history` (newest first)       | limit default 50, max 100    |
 | `sync {conversation_id, after_seq}`               | `sync_result`                  | also edits + deletes         |

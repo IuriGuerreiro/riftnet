@@ -127,6 +127,8 @@ impl ChannelMessageService {
             encryption: 0,
             edited_at: 0,
             attachments: Vec::new(),
+            reply_to: 0,
+            reactions: Vec::new(),
         };
         if !self.repo.insert_channel_message(&message).await? {
             let existing = self.repo.get(channel_id, id).await?.ok_or_else(|| {
