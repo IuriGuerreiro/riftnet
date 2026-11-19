@@ -124,6 +124,11 @@ export function HomePage() {
               {!isGroup(c) && <Avatar userId={other(c)?.id} size="xs" />}
               {!isGroup(c) && <StatusDot userId={other(c)?.id} />}
               <span className="truncate">{title(c)}</span>
+              {c.unreadCount > 0 && c.id !== chat.selected && (
+                <span className="ml-auto rounded-full bg-brand px-1.5 text-xs font-semibold text-white">
+                  {c.unreadCount >= 10 ? "9+" : c.unreadCount}
+                </span>
+              )}
             </button>
           ))}
           {chat.conversations.length === 0 && (

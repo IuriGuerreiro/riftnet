@@ -80,6 +80,11 @@ Emoji reactions on messages in DMs and group DMs. Done for the hub.
 - **Limits:** any member can react. Unicode emoji only (max 32 bytes, no letters/digits/spaces). Max 20 different emojis per message (`too_many_reactions`); adding to one already there always works. Max 10 changes per 10s per user (`rate_limited`), kept in memory per API node.
 - **Not yet:** custom emoji. Read receipts are a separate thing and are never shown.
 
+## Order, unread, retries
+
+The DM list is sorted by the last message, each user has a private unread count, and
+group/friend actions are safe to retry. Details: [dms.md](dms.md#list-order-and-unread).
+
 ## Open questions
 
 - Message events: threads, pins. (Edit + delete: done for DMs, see [dms.md](dms.md#edit-and-delete). Reactions: see above.)

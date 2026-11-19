@@ -13,6 +13,9 @@ impl From<&Conversation> for v1::Conversation {
             members: c.members.iter().map(v1::User::from).collect(),
             last_seq: c.last_seq as u64,
             name: c.name.clone(),
+            last_message_at: c.last_message_at as u64,
+            unread_count: c.read.unread_count,
+            last_read_seq: c.read.last_read_seq as u64,
         }
     }
 }

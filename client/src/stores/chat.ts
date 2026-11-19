@@ -9,6 +9,7 @@ import {
   CreateGroupSchema,
   LeaveGroupSchema,
   ListConversationsSchema,
+  MarkReadSchema,
   OpenDmSchema,
   RenameGroupSchema,
 } from "../gen/v1/conversations_pb";
@@ -190,12 +191,32 @@ export const useChat = create<ChatState>()((set, get) => {
 
   function upsertConversation(c: Conversation, myId: bigint) {
     const stillMember = c.members.some((m) => m.id === myId);
+    set((s) => {
+      const old = s.conversations.find((x) => x.id === c.id);
+      if (old) {
+        c.unreadCount = old.unreadCount;
+        c.lastReadSeq = old.lastReadSeq;
+      }
+      return {
+        conversations: stillMember
+          ? [c, ...s.conversations.filter((x) => x.id !== c.id)]
+          : s.conversations.filter((x) => x.id !== c.id),
+        selected: !stillMember && s.selected === c.id ? null : s.selected,
+      };
+    });
+  }
+
+  function patchConversation(id: bigint, patch: (c: Conversation) => Partial<Conversation>) {
     set((s) => ({
-      conversations: stillMember
-        ? [c, ...s.conversations.filter((x) => x.id !== c.id)]
-        : s.conversations.filter((x) => x.id !== c.id),
-      selected: !stillMember && s.selected === c.id ? null : s.selected,
+      conversations: s.conversations.map((c) => (c.id === id ? { ...c, ...patch(c) } : c)),
     }));
+  }
+
+  async function markRead(ws: WsClient, conversationId: bigint, seq: bigint) {
+    patchConversation(conversationId, () => ({ unreadCount: 0 }));
+    await ws
+      .request({ case: "markRead", value: createProto(MarkReadSchema, { conversationId, seq }) })
+      .catch(() => null);
   }
 
   async function groupRequest(ws: WsClient, payload: Envelope["payload"]) {
@@ -210,11 +231,23 @@ export const useChat = create<ChatState>()((set, get) => {
     }
   }
 
+  function readUpToLatest(ws: WsClient, conversationId: bigint) {
+    const c = get().conversations.find((x) => x.id === conversationId);
+    const local = get().lastSeq[key(conversationId)] ?? 0n;
+    const seq = c && c.lastSeq > local ? c.lastSeq : local;
+    if (seq > 0n) return markRead(ws, conversationId, seq);
+  }
+
   let myId = 0n;
 
   function onPush(payload: Envelope["payload"], ws: WsClient) {
     if (payload.case === "conversationUpdated" && payload.value.conversation) {
       upsertConversation(payload.value.conversation, myId);
+      return;
+    }
+    if (payload.case === "readStateUpdated") {
+      const { conversationId, lastReadSeq, unreadCount } = payload.value;
+      patchConversation(conversationId, () => ({ lastReadSeq, unreadCount }));
       return;
     }
     if (payload.case === "messageUpdated" && payload.value.message) {
@@ -242,7 +275,23 @@ export const useChat = create<ChatState>()((set, get) => {
     const last = get().lastSeq[k];
     if (last !== undefined && m.seq > last + 1n) void sync(ws, m.conversationId);
     addMessages(m.conversationId, [toChat(m)]);
-    if (!get().conversations.some((c) => c.id === m.conversationId)) void loadConversations(ws);
+    if (!get().conversations.some((c) => c.id === m.conversationId)) {
+      void loadConversations(ws);
+      return;
+    }
+    const mine = m.authorId === myId;
+    const open = get().selected === m.conversationId;
+    set((s) => {
+      const c = s.conversations.find((x) => x.id === m.conversationId);
+      if (!c) return {};
+      const bumped = {
+        ...c,
+        lastSeq: m.seq > c.lastSeq ? m.seq : c.lastSeq,
+        unreadCount: mine || open ? c.unreadCount : Math.min(c.unreadCount + 1, 10),
+      };
+      return { conversations: [bumped, ...s.conversations.filter((x) => x.id !== c.id)] };
+    });
+    if (open && !mine) void markRead(ws, m.conversationId, m.seq);
   }
 
   return {
@@ -305,7 +354,7 @@ export const useChat = create<ChatState>()((set, get) => {
     createGroup: async (ws, name, usernames) => {
       const reply = await groupRequest(ws, {
         case: "createGroup",
-        value: createProto(CreateGroupSchema, { name, usernames }),
+        value: createProto(CreateGroupSchema, { name, usernames, nonce: crypto.randomUUID() }),
       });
       if (reply?.case === "conversation" && reply.value.conversation)
         await get().select(ws, reply.value.conversation.id);
@@ -345,7 +394,10 @@ export const useChat = create<ChatState>()((set, get) => {
 
     select: async (ws, conversationId) => {
       set({ selected: conversationId, replyingTo: null });
-      if (get().lastSeq[key(conversationId)] !== undefined) return sync(ws, conversationId);
+      if (get().lastSeq[key(conversationId)] !== undefined) {
+        await sync(ws, conversationId);
+        return readUpToLatest(ws, conversationId);
+      }
       const reply = await ws.request({
         case: "getHistory",
         value: createProto(GetHistorySchema, { conversationId, limit: 50 }),
@@ -358,6 +410,7 @@ export const useChat = create<ChatState>()((set, get) => {
       set((s) => ({
         lastSeq: { ...s.lastSeq, [key(conversationId)]: s.lastSeq[key(conversationId)] ?? 0n },
       }));
+      await readUpToLatest(ws, conversationId);
     },
 
     send: async (ws, myId, text, attachmentIds = []) => {

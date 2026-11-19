@@ -22,9 +22,23 @@ pub struct ScyllaConversationRepo {
     pub(super) delete_by_user: PreparedStatement,
     pub(super) set_members: PreparedStatement,
     pub(super) rename: PreparedStatement,
+    pub(super) bump_message_seq: PreparedStatement,
+    pub(super) claim_group_nonce: PreparedStatement,
+    pub(super) get_group_nonce: PreparedStatement,
+    pub(super) list_read_states: PreparedStatement,
+    pub(super) insert_read_state: PreparedStatement,
+    pub(super) advance_read_state: PreparedStatement,
 }
 
-type Row = (i64, i8, Option<i64>, Option<Vec<i64>>, Option<String>);
+type Row = (
+    i64,
+    i8,
+    Option<i64>,
+    Option<Vec<i64>>,
+    Option<String>,
+    Option<i64>,
+    Option<CqlTimestamp>,
+);
 
 impl ScyllaConversationRepo {
     pub async fn new(session: Arc<Session>) -> anyhow::Result<Self> {
@@ -43,6 +57,12 @@ impl ScyllaConversationRepo {
             delete_by_user: prepare(q::DELETE_BY_USER).await?,
             set_members: prepare(q::SET_MEMBERS).await?,
             rename: prepare(q::RENAME).await?,
+            bump_message_seq: prepare(q::BUMP_MESSAGE_SEQ).await?,
+            claim_group_nonce: prepare(q::CLAIM_GROUP_NONCE).await?,
+            get_group_nonce: prepare(q::GET_GROUP_NONCE).await?,
+            list_read_states: prepare(q::LIST_READ_STATES).await?,
+            insert_read_state: prepare(q::INSERT_READ_STATE).await?,
+            advance_read_state: prepare(q::ADVANCE_READ_STATE).await?,
             session,
         })
     }
@@ -88,8 +108,12 @@ impl ScyllaConversationRepo {
     }
 }
 
-fn to_record((id, kind, last_seq, members, name): Row) -> ConversationRecord {
+fn to_record(
+    (id, kind, last_seq, members, name, last_message_at, created_at): Row,
+) -> ConversationRecord {
+    let created_ms = created_at.map(|t| t.0).unwrap_or(0);
     ConversationRecord {
+        last_message_at: last_message_at.unwrap_or(created_ms),
         id,
         kind: Kind::from_db(kind),
         last_seq: last_seq.unwrap_or(0),
