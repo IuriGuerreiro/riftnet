@@ -20,6 +20,7 @@ import { useConnection } from "../stores/connection";
 import { useFriends } from "../stores/friends";
 import { usePresence } from "../stores/presence";
 import { fromJson, fromProto, nameOf, useProfiles } from "../stores/profiles";
+import { QUICK_EMOJIS, type ReactionChip, reactorsText } from "../stores/reactions";
 import { typingText, useTyping } from "../stores/typing";
 
 const dot = { online: "bg-green-500", connecting: "bg-yellow-500", offline: "bg-red-500" };
@@ -563,6 +564,7 @@ function MessageRow({ m, mine }: { m: ChatMessage; mine: boolean }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const canChange = mine && !m.pending && m.id !== 0n && !!ws;
+  const canReact = !m.pending && m.id !== 0n && !!ws;
 
   async function save() {
     if (!ws) return;
@@ -600,49 +602,154 @@ function MessageRow({ m, mine }: { m: ChatMessage; mine: boolean }) {
   }
 
   return (
-    <div className={`group flex items-center gap-2 ${mine ? "justify-end" : ""}`}>
-      {!mine && <Avatar userId={m.authorId} size="xs" />}
-      {canChange && (
-        <div className="hidden gap-1 text-xs text-zinc-400 group-hover:flex">
-          <button
-            onClick={() => {
-              setDraft(m.text);
-              setEditing(true);
-            }}
-            className="rounded px-1.5 py-0.5 hover:bg-zinc-800 hover:text-zinc-100"
-          >
-            Edit
-          </button>
-          <button
-            onClick={() =>
-              window.confirm("Delete this message? This can't be undone.") && void remove(ws, m.id)
-            }
-            className="rounded px-1.5 py-0.5 hover:bg-zinc-800 hover:text-red-400"
-          >
-            Delete
-          </button>
+    <div className={`group flex flex-col ${mine ? "items-end" : "items-start"}`}>
+      <div className={`flex w-full items-center gap-2 ${mine ? "justify-end" : ""}`}>
+        {!mine && <Avatar userId={m.authorId} size="xs" />}
+        {mine && canReact && <ReactionPicker messageId={m.id} />}
+        {canChange && (
+          <div className="hidden gap-1 text-xs text-zinc-400 group-hover:flex">
+            <button
+              onClick={() => {
+                setDraft(m.text);
+                setEditing(true);
+              }}
+              className="rounded px-1.5 py-0.5 hover:bg-zinc-800 hover:text-zinc-100"
+            >
+              Edit
+            </button>
+            <button
+              onClick={() =>
+                window.confirm("Delete this message? This can't be undone.") &&
+                void remove(ws, m.id)
+              }
+              className="rounded px-1.5 py-0.5 hover:bg-zinc-800 hover:text-red-400"
+            >
+              Delete
+            </button>
+          </div>
+        )}
+        <div
+          className={`max-w-[75%] whitespace-pre-wrap break-words rounded-lg px-3 py-1.5 text-sm ${
+            mine ? "bg-brand text-zinc-950" : "bg-zinc-800"
+          } ${m.pending ? "opacity-50" : ""} ${m.failed ? "ring-2 ring-red-500" : ""}`}
+          title={m.pending ? "sending…" : `seq ${m.seq}`}
+        >
+          <Markdown text={m.text} />
+          {m.attachments?.map((a) => (
+            <Attachment key={a.id.toString()} a={a} mine={mine} />
+          ))}
+          {m.editedAt ? (
+            <span
+              className={`ml-1.5 text-[10px] ${mine ? "text-zinc-800" : "text-zinc-500"}`}
+              title={new Date(Number(m.editedAt)).toLocaleString()}
+            >
+              (edited)
+            </span>
+          ) : null}
+        </div>
+        {!mine && canReact && <ReactionPicker messageId={m.id} />}
+      </div>
+      {m.reactions?.length ? (
+        <div className={`mt-0.5 flex flex-wrap gap-1 ${mine ? "justify-end" : "pl-8"}`}>
+          {m.reactions.map((r) => (
+            <ReactionChipButton key={r.emoji} messageId={m.id} r={r} disabled={!canReact} />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ReactionPicker({ messageId }: { messageId: bigint }) {
+  const ws = useConnection((s) => s.ws);
+  const toggle = useChat((s) => s.toggleReaction);
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open]);
+  if (!ws) return null;
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        aria-label="Add reaction"
+        title="Add reaction"
+        onClick={() => setOpen((o) => !o)}
+        className={`${open ? "flex" : "hidden group-hover:flex"} rounded px-1.5 py-0.5 text-sm text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100`}
+      >
+        ☺+
+      </button>
+      {open && (
+        <div className="absolute bottom-full z-10 mb-1 flex gap-0.5 rounded-lg border border-zinc-700 bg-zinc-900 p-1 shadow-lg">
+          {QUICK_EMOJIS.map((e) => (
+            <button
+              key={e}
+              onClick={() => {
+                setOpen(false);
+                void toggle(ws, messageId, e);
+              }}
+              className="rounded px-1 text-lg hover:bg-zinc-800"
+            >
+              {e}
+            </button>
+          ))}
         </div>
       )}
-      <div
-        className={`max-w-[75%] whitespace-pre-wrap break-words rounded-lg px-3 py-1.5 text-sm ${
-          mine ? "bg-brand text-zinc-950" : "bg-zinc-800"
-        } ${m.pending ? "opacity-50" : ""} ${m.failed ? "ring-2 ring-red-500" : ""}`}
-        title={m.pending ? "sending…" : `seq ${m.seq}`}
-      >
-        <Markdown text={m.text} />
-        {m.attachments?.map((a) => (
-          <Attachment key={a.id.toString()} a={a} mine={mine} />
-        ))}
-        {m.editedAt ? (
-          <span
-            className={`ml-1.5 text-[10px] ${mine ? "text-zinc-800" : "text-zinc-500"}`}
-            title={new Date(Number(m.editedAt)).toLocaleString()}
-          >
-            (edited)
-          </span>
-        ) : null}
-      </div>
     </div>
+  );
+}
+
+function ReactionChipButton({
+  messageId,
+  r,
+  disabled,
+}: {
+  messageId: bigint;
+  r: ReactionChip;
+  disabled: boolean;
+}) {
+  const ws = useConnection((s) => s.ws);
+  const { toggleReaction, reactors } = useChat();
+  const members = useChat((s) => s.conversations.find((c) => c.id === s.selected)?.members ?? []);
+  const profiles = useProfiles((s) => s.byId);
+  const [who, setWho] = useState<{ count: number; ids: bigint[] } | null>(null);
+
+  async function loadWho() {
+    if (!ws || who?.count === r.count) return;
+    try {
+      setWho({ count: r.count, ids: await reactors(ws, messageId, r.emoji) });
+    } catch {
+      setWho(null);
+    }
+  }
+  const names = (who?.ids ?? []).map((id) => {
+    const member = members.find((u) => u.id === id);
+    return member ? nameOf(fromProto(member)) : nameOf(profiles[id.toString()]);
+  });
+
+  return (
+    <button
+      disabled={disabled}
+      onMouseEnter={() => void loadWho()}
+      onFocus={() => void loadWho()}
+      onClick={() => ws && void toggleReaction(ws, messageId, r.emoji)}
+      title={names.length ? `${reactorsText(names, r.count)} reacted with ${r.emoji}` : r.emoji}
+      aria-pressed={r.me}
+      className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${
+        r.me
+          ? "border-brand bg-brand/15 text-zinc-100"
+          : "border-zinc-700 bg-zinc-800/60 text-zinc-300 hover:border-zinc-500"
+      }`}
+    >
+      <span className="text-sm">{r.emoji}</span>
+      <span>{r.count}</span>
+    </button>
   );
 }
 

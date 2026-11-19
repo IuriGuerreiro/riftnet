@@ -8,6 +8,60 @@ pub struct Message {
     pub encryption: i8,
     pub edited_at: i64,
     pub attachments: Vec<MessageAttachment>,
+    /// Per viewer (`me`), filled by the service. Never stored on the row.
+    pub reactions: Vec<ReactionCount>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReactionCount {
+    pub emoji: String,
+    pub count: u32,
+    pub me: bool,
+}
+
+/// One stored reaction row.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReactionRow {
+    pub message_id: i64,
+    pub emoji: String,
+    pub user_id: i64,
+}
+
+/// Groups rows of one message into counts, in first-seen order.
+pub fn count_reactions<'a>(
+    rows: impl IntoIterator<Item = &'a ReactionRow>,
+    me: i64,
+) -> Vec<ReactionCount> {
+    let mut out: Vec<ReactionCount> = Vec::new();
+    for r in rows {
+        match out.iter_mut().find(|c| c.emoji == r.emoji) {
+            Some(c) => {
+                c.count += 1;
+                c.me |= r.user_id == me;
+            }
+            None => out.push(ReactionCount {
+                emoji: r.emoji.clone(),
+                count: 1,
+                me: r.user_id == me,
+            }),
+        }
+    }
+    out
+}
+
+pub const MAX_DISTINCT_REACTIONS: usize = 20;
+pub const MAX_EMOJI_BYTES: usize = 32;
+pub const MAX_REACTORS: usize = 100;
+
+/// A Unicode emoji (or a short sequence of them): no letters, digits,
+/// spaces or control characters, and at least one non-ASCII char.
+pub fn is_valid_emoji(s: &str) -> bool {
+    !s.is_empty()
+        && s.len() <= MAX_EMOJI_BYTES
+        && !s.is_ascii()
+        && !s
+            .chars()
+            .any(|c| c.is_alphanumeric() || c.is_whitespace() || c.is_control())
 }
 
 /// A file's details as shown on the message. A copy made at send; the
@@ -48,6 +102,8 @@ pub struct MessageChange {
 pub enum ChangeKind {
     Edit = 1,
     Delete = 2,
+    /// A reaction was added or removed. Sync treats it like an edit.
+    Reaction = 3,
 }
 
 impl ChangeKind {
@@ -55,6 +111,7 @@ impl ChangeKind {
         match v {
             1 => Some(Self::Edit),
             2 => Some(Self::Delete),
+            3 => Some(Self::Reaction),
             _ => None,
         }
     }
@@ -84,5 +141,30 @@ mod tests {
         assert_eq!(bucket_at(0), 0);
         assert_eq!(bucket_at(BUCKET_MS - 1), 0);
         assert_eq!(bucket_at(BUCKET_MS), 1);
+    }
+
+    #[test]
+    fn emoji_check() {
+        for ok in ["👍", "❤️", "👨‍👩‍👧", "🇵🇹", "🦀"] {
+            assert!(is_valid_emoji(ok), "{ok}");
+        }
+        for bad in ["", "a", ":)", "é", "👍 ", "\u{200b}x"] {
+            assert!(!is_valid_emoji(bad), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn counts_group_by_emoji_and_flag_me() {
+        let row = |emoji: &str, user_id| ReactionRow {
+            message_id: 1,
+            emoji: emoji.into(),
+            user_id,
+        };
+        let rows = [row("👍", 1), row("🎉", 2), row("👍", 2)];
+        let c = count_reactions(&rows, 2);
+        assert_eq!(c.len(), 2);
+        assert_eq!((c[0].emoji.as_str(), c[0].count, c[0].me), ("👍", 2, true));
+        assert_eq!((c[1].emoji.as_str(), c[1].count, c[1].me), ("🎉", 1, true));
+        assert!(!count_reactions(&rows, 9)[0].me);
     }
 }
