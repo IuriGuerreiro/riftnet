@@ -125,6 +125,7 @@ async fn send_message(
                 .iter()
                 .map(|id| *id as i64)
                 .collect::<Vec<_>>(),
+            req.reply_to as i64,
             &req.nonce,
         )
         .await?;

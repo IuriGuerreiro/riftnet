@@ -95,12 +95,18 @@ function handle(req: Envelope): Envelope["payload"] {
       return { case: "history", value: create(HistorySchema, { messages: history }) };
     case "sendMessage": {
       const m = req.payload.value;
+      if (
+        m.replyTo &&
+        !history.some((h) => h.id === m.replyTo && h.conversationId === m.conversationId)
+      )
+        return fail("bad_reply", "the replied-to message is not in this conversation");
       const message = create(MessageSchema, {
         id: nextId++,
         conversationId: m.conversationId,
         authorId: 1n,
         seq: ++seq,
         content: m.content,
+        replyTo: m.replyTo,
       });
       history.push(message);
       return { case: "messageAck", value: create(MessageAckSchema, { nonce: m.nonce, message }) };

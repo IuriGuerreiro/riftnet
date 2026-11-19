@@ -33,6 +33,7 @@ export interface ChatMessage {
   text: string;
   editedAt?: bigint;
   attachments?: Attachment[];
+  replyTo?: bigint;
   pending?: boolean;
   failed?: boolean;
 }
@@ -42,7 +43,12 @@ interface ChatState {
   messages: Record<Key, ChatMessage[]>;
   lastSeq: Record<Key, bigint>;
   selected: bigint | null;
+  replyingTo: bigint | null;
+  deleted: Record<Key, bigint[]>;
   error: string | null;
+
+  setReplyingTo: (messageId: bigint | null) => void;
+  loadUntil: (ws: WsClient, conversationId: bigint, messageId: bigint) => Promise<boolean>;
 
   attach: (ws: WsClient, myId: bigint) => Promise<void>;
   createGroup: (ws: WsClient, name: string, usernames: string[]) => Promise<void>;
@@ -66,7 +72,24 @@ const toChat = (m: Message): ChatMessage => ({
   text: dec.decode(m.content),
   editedAt: m.editedAt || undefined,
   attachments: m.attachments.length ? m.attachments : undefined,
+  replyTo: m.replyTo || undefined,
 });
+
+export type ReplyTarget =
+  { state: "loaded"; message: ChatMessage } | { state: "deleted" } | { state: "missing" };
+
+export function replyTarget(
+  messages: ChatMessage[],
+  deleted: bigint[] | undefined,
+  id: bigint,
+): ReplyTarget {
+  const message = messages.find((m) => m.id === id);
+  if (message) return { state: "loaded", message };
+  if (deleted?.includes(id)) return { state: "deleted" };
+  return { state: "missing" };
+}
+
+const MAX_JUMP_PAGES = 20;
 
 export const isGroup = (c: Conversation) => c.kind === ConversationKind.GROUP;
 
@@ -94,6 +117,8 @@ export const useChat = create<ChatState>()((set, get) => {
     const k = key(conversationId);
     set((s) => ({
       messages: { ...s.messages, [k]: (s.messages[k] ?? []).filter((m) => !ids.includes(m.id)) },
+      deleted: { ...s.deleted, [k]: [...(s.deleted[k] ?? []), ...ids] },
+      replyingTo: s.replyingTo !== null && ids.includes(s.replyingTo) ? null : s.replyingTo,
     }));
   }
 
@@ -191,7 +216,28 @@ export const useChat = create<ChatState>()((set, get) => {
     messages: {},
     lastSeq: {},
     selected: null,
+    replyingTo: null,
+    deleted: {},
     error: null,
+
+    setReplyingTo: (messageId) => set({ replyingTo: messageId }),
+
+    loadUntil: async (ws, conversationId, messageId) => {
+      const k = key(conversationId);
+      const has = () => get().messages[k]?.some((m) => m.id === messageId) ?? false;
+      for (let page = 0; page < MAX_JUMP_PAGES && !has(); page++) {
+        const loaded = (get().messages[k] ?? []).filter((m) => m.id !== 0n);
+        const oldest = loaded.reduce((min, m) => (m.id < min ? m.id : min), loaded[0]?.id ?? 0n);
+        if (oldest !== 0n && oldest < messageId) break;
+        const reply = await ws.request({
+          case: "getHistory",
+          value: createProto(GetHistorySchema, { conversationId, beforeId: oldest, limit: 100 }),
+        });
+        if (reply.case !== "history" || !reply.value.messages.length) break;
+        addMessages(conversationId, reply.value.messages.map(toChat));
+      }
+      return has();
+    },
 
     attach: async (ws, me) => {
       myId = me;
@@ -261,7 +307,7 @@ export const useChat = create<ChatState>()((set, get) => {
     },
 
     select: async (ws, conversationId) => {
-      set({ selected: conversationId });
+      set({ selected: conversationId, replyingTo: null });
       if (get().lastSeq[key(conversationId)] !== undefined) return sync(ws, conversationId);
       const reply = await ws.request({
         case: "getHistory",
@@ -277,8 +323,10 @@ export const useChat = create<ChatState>()((set, get) => {
       const conversationId = get().selected;
       if (!conversationId || (!text.trim() && !attachmentIds.length)) return;
       const nonce = crypto.randomUUID();
+      const replyTo = get().replyingTo ?? undefined;
+      set({ replyingTo: null });
       addMessages(conversationId, [
-        { id: 0n, nonce, seq: 0n, authorId: myId, text, pending: true },
+        { id: 0n, nonce, seq: 0n, authorId: myId, text, replyTo, pending: true },
       ]);
       try {
         const reply = await ws.request({
@@ -288,6 +336,7 @@ export const useChat = create<ChatState>()((set, get) => {
             content: enc.encode(text),
             nonce,
             attachmentIds,
+            replyTo: replyTo ?? 0n,
           }),
         });
         if (reply.case === "messageAck" && reply.value.message) {
@@ -295,7 +344,7 @@ export const useChat = create<ChatState>()((set, get) => {
         }
       } catch (e) {
         addMessages(conversationId, [
-          { id: 0n, nonce, seq: 0n, authorId: myId, text, pending: true, failed: true },
+          { id: 0n, nonce, seq: 0n, authorId: myId, text, replyTo, pending: true, failed: true },
         ]);
         set({ error: (e as Error).message });
       }

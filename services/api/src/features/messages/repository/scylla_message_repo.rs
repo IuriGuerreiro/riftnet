@@ -34,6 +34,7 @@ pub(super) type Row = (
     Option<i8>,
     Option<i64>,
     Option<Vec<Vec<u8>>>,
+    Option<i64>,
 );
 
 impl ScyllaMessageRepo {
@@ -65,7 +66,7 @@ impl ScyllaMessageRepo {
 }
 
 pub(super) fn to_message(
-    (conversation_id, id, seq, author_id, content, encryption, edited_at, attachments): Row,
+    (conversation_id, id, seq, author_id, content, encryption, edited_at, attachments, reply_to): Row,
 ) -> Message {
     Message {
         id,
@@ -75,6 +76,7 @@ pub(super) fn to_message(
         content: content.unwrap_or_default(),
         encryption: encryption.unwrap_or(0),
         edited_at: edited_at.unwrap_or(0),
+        reply_to: reply_to.unwrap_or(0),
         attachments: attachments
             .unwrap_or_default()
             .iter()

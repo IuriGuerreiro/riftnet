@@ -8,6 +8,8 @@ pub struct Message {
     pub encryption: i8,
     pub edited_at: i64,
     pub attachments: Vec<MessageAttachment>,
+    /// Id of the message this replies to, 0 = not a reply. Kept after the original is deleted.
+    pub reply_to: i64,
 }
 
 /// A file's details as shown on the message. A copy made at send; the

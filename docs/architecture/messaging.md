@@ -31,6 +31,18 @@ sequenceDiagram
 
 **Save before publish**, and the outbox makes sure a crash between save and publish can't lose a message.
 
+## Replies
+
+DMs and group DMs can reply to a message.
+
+- `SendMessage.reply_to` holds the original's id. `0` means it isn't a reply.
+- The API checks that the original exists in **the same conversation**. If it doesn't, the send fails with `bad_reply`.
+- `Message.reply_to` is stored on the row (Scylla `messages.reply_to`, see `006_message_replies.cql`). It's returned in history, sync, the ack and `MessageCreated`.
+- Only the id is stored, not a copy of the text. The client looks the original up in what it has loaded.
+- **Deleted originals:** the reply keeps its `reply_to`. The client shows "Original deleted" when it saw the delete or can't find the message in history.
+- **Not loaded yet:** clicking the quote pages back through history (up to 20 pages), then scrolls to the message.
+- Replies don't notify the original's author (yet).
+
 ## Storage and fan-out are traits
 
 - `MessageStore`: where messages live.

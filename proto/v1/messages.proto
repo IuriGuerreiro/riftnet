@@ -11,6 +11,7 @@ message Message {
   Encryption encryption = 6;
   uint64 edited_at = 7; // unix ms of the last edit, 0 = never edited
   repeated Attachment attachments = 8; // fixed once sent; edits don't change them
+  uint64 reply_to = 9; // id of the message this replies to (same conversation), 0 = not a reply
 }
 
 // A file on a message. Upload it first over HTTP (POST /attachments, chunks,
@@ -42,6 +43,8 @@ message SendMessage {
   // Finished uploads (max 10) from this sender, in this conversation, not on
   // another message yet. content may be empty when this isn't.
   repeated uint64 attachment_ids = 4;
+  // Optional: a message in this conversation to reply to. 0 = not a reply.
+  uint64 reply_to = 5;
 }
 
 message MessageAck {
