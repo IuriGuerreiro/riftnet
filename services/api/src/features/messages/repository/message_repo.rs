@@ -306,3 +306,8 @@ impl MessageRepo for ScyllaMessageRepo {
         Ok(row.is_some())
     }
 }
+
+#[async_trait]
+pub trait ChannelMessageRepo: MessageRepo {
+    async fn insert_channel_message(&self, message: &Message) -> Result<bool, RepoError>;
+}

@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use protocol::v1::{self, envelope::Payload};
 
 use super::connection::Session;
@@ -17,6 +19,26 @@ pub async fn dispatch(
         Payload::ListConversations(_) => list_conversations(state, session).await,
         Payload::SendMessage(req) => send_message(state, session, req).await,
         Payload::GetHistory(req) => get_history(state, session, req).await,
+        Payload::SendChannelMessage(req) => {
+            state.limiter.check(
+                &format!("channel_message:user:{}", session.user_id),
+                60,
+                Duration::from_secs(60),
+            )?;
+            Ok(Payload::ChannelMessage(
+                state.channel_messages.send(session.user_id, req).await?,
+            ))
+        }
+        Payload::GetChannelHistory(req) => {
+            state.limiter.check(
+                &format!("channel_history:user:{}", session.user_id),
+                120,
+                Duration::from_secs(60),
+            )?;
+            Ok(Payload::ChannelHistory(
+                state.channel_messages.history(session.user_id, req).await?,
+            ))
+        }
         Payload::Sync(req) => sync(state, session, req).await,
         Payload::EditMessage(req) => edit_message(state, session, req).await,
         Payload::DeleteMessage(req) => delete_message(state, session, req).await,

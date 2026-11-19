@@ -30,7 +30,9 @@ use crate::features::messages::repository::ScyllaMessageRepo;
 use crate::features::messages::service::MessageService;
 use crate::features::presence::service::PresenceService;
 use crate::features::presence::store::RedisPresenceStore;
-use crate::features::servers::ServerService;
+use crate::features::servers::channel_service::ChannelMessageService;
+use crate::features::servers::repository::PgServerRepo;
+use crate::features::servers::service::ServerService;
 use crate::features::typing::service::TypingService;
 use crate::features::users::repository::{PgUserRepo, UserRepo};
 use crate::features::users::service::UserService;
@@ -40,6 +42,7 @@ use crate::features::{attachments, auth, bots, friends, gateway, health, servers
 pub struct AppState {
     pub bots: Arc<BotService>,
     pub servers: Arc<ServerService>,
+    pub channel_messages: Arc<ChannelMessageService>,
     pub attachments: Arc<AttachmentService>,
     pub auth: Arc<AuthService>,
     pub users: Arc<UserService>,
@@ -111,7 +114,16 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
 
     let state = AppState {
         bots: Arc::new(BotService::new(pool.clone(), ids.clone())),
-        servers: Arc::new(ServerService::new(pool, ids.clone())),
+        servers: Arc::new(ServerService::new(
+            Arc::new(PgServerRepo::new(pool.clone())),
+            ids.clone(),
+        )),
+        channel_messages: Arc::new(ChannelMessageService::new(
+            Arc::new(PgServerRepo::new(pool)),
+            message_repo.clone(),
+            events.clone(),
+            ids.clone(),
+        )),
         attachments: attachment_service.clone(),
         auth: Arc::new(AuthService::new(
             identity,

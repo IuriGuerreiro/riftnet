@@ -35,6 +35,8 @@ message Envelope {
     StartTyping start_typing = 21; // fire-and-forget: send with id 0, no reply
     SetIdle set_idle = 24;
     GetPresence get_presence = 25;
+    SendChannelMessage send_channel_message = 26;
+    GetChannelHistory get_channel_history = 27;
 
     Pong pong = 50;
     Error error = 51;
@@ -56,6 +58,8 @@ message Envelope {
     MessageDeleted message_deleted = 66;
     TypingStarted typing_started = 62;
     PresenceUpdated presence_updated = 68;
+    ChannelHistory channel_history = 69;
+    ChannelMessage channel_message = 70;
 
     // calls: field numbers 100-139 are reserved for them
     CallStart call_start = 100;

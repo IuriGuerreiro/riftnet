@@ -8,6 +8,7 @@ import { http } from "../api/http";
 import type { Friend, User } from "../api/types";
 import { CallBar, IncomingCall, RemoteScreen } from "../call/CallBar";
 import { Avatar } from "../components/Avatar";
+import { MessageBubble } from "../components/MessageBubble";
 import { ProfilePanel } from "../components/ProfilePanel";
 import { ServerNavigation, ServerPanel } from "../components/Servers";
 import { StatusDot } from "../components/StatusDot";
@@ -632,10 +633,10 @@ function MessageRow({ m, mine }: { m: ChatMessage; mine: boolean }) {
           </button>
         </div>
       )}
-      <p
-        className={`max-w-[75%] whitespace-pre-wrap break-words rounded-lg px-3 py-1.5 text-sm ${
-          mine ? "bg-brand text-zinc-950" : "bg-zinc-800"
-        } ${m.pending ? "opacity-50" : ""} ${m.failed ? "ring-2 ring-red-500" : ""}`}
+      <MessageBubble
+        mine={mine}
+        pending={m.pending ?? false}
+        failed={m.failed ?? false}
         title={m.pending ? "sending…" : `seq ${m.seq}`}
       >
         {m.text}
@@ -650,7 +651,7 @@ function MessageRow({ m, mine }: { m: ChatMessage; mine: boolean }) {
             (edited)
           </span>
         ) : null}
-      </p>
+      </MessageBubble>
     </div>
   );
 }

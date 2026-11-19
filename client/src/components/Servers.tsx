@@ -13,6 +13,7 @@ import {
 import { platform } from "../platform";
 import { readWorkspaceSearch } from "../schemas/workspace";
 import { useAuth } from "../stores/auth";
+import { ChannelChat } from "./ChannelChat";
 import { Button, ErrorText, Input } from "./ui";
 
 function useMyServers() {
@@ -192,14 +193,17 @@ function ServerWorkspace({ serverId }: { serverId: string }) {
         )}
         {server?.is_owner && <InviteControls serverId={serverId} />}
       </header>
-      <div className="m-auto p-4 text-center text-sm text-zinc-400">
-        {channels.isPending && "Loading channels…"}
-        {channels.isError && (
-          <button onClick={() => void channels.refetch()}>Couldn’t load channels. Retry</button>
-        )}
-        {channels.isSuccess &&
-          (selected ? "Channel messaging is coming next." : "No text channels yet.")}
-      </div>
+      {selected && !channels.isError ? (
+        <ChannelChat key={selected.id} channelId={selected.id} name={selected.name} />
+      ) : (
+        <div className="m-auto p-4 text-center text-sm text-zinc-400">
+          {channels.isPending && "Loading channels…"}
+          {channels.isError && (
+            <button onClick={() => void channels.refetch()}>Couldn’t load channels. Retry</button>
+          )}
+          {channels.isSuccess && "No text channels yet."}
+        </div>
+      )}
     </section>
   );
 }
