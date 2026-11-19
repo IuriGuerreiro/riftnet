@@ -30,3 +30,15 @@ pub const MARK_DELETED: &str = "INSERT INTO deleted_messages (conversation_id, i
 
 pub const WAS_DELETED: &str =
     "SELECT id FROM deleted_messages WHERE conversation_id = ? AND id = ?";
+
+pub const DELETE_REACTIONS: &str =
+    "DELETE FROM message_reactions WHERE conversation_id = ? AND message_id = ?";
+
+pub const ADD_REACTION: &str = "INSERT INTO message_reactions (conversation_id, message_id, emoji, user_id) \
+     VALUES (?, ?, ?, ?) IF NOT EXISTS";
+
+pub const REMOVE_REACTION: &str = "DELETE FROM message_reactions \
+     WHERE conversation_id = ? AND message_id = ? AND emoji = ? AND user_id = ? IF EXISTS";
+
+pub const REACTIONS_FOR: &str = "SELECT message_id, emoji, user_id FROM message_reactions \
+     WHERE conversation_id = ? AND message_id IN ?";

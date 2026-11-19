@@ -1,6 +1,6 @@
 use protocol::v1;
 
-use super::models::{Message, MessageAttachment};
+use super::models::{Message, MessageAttachment, ReactionCount};
 
 impl From<&Message> for v1::Message {
     fn from(m: &Message) -> Self {
@@ -14,6 +14,7 @@ impl From<&Message> for v1::Message {
             edited_at: m.edited_at as u64,
             attachments: m.attachments.iter().map(Into::into).collect(),
             reply_to: m.reply_to as u64,
+            reactions: m.reactions.iter().map(Into::into).collect(),
         }
     }
 }
@@ -42,6 +43,16 @@ impl From<v1::Attachment> for MessageAttachment {
             blake3: a.blake3,
             expires_at_ms: a.expires_at as i64,
             preview_url: a.preview_url,
+        }
+    }
+}
+
+impl From<&ReactionCount> for v1::Reaction {
+    fn from(r: &ReactionCount) -> Self {
+        Self {
+            emoji: r.emoji.clone(),
+            count: r.count,
+            me: r.me,
         }
     }
 }

@@ -16,6 +16,10 @@ import {
   MessageDeletedSchema,
   MessageSchema,
   MessageUpdatedSchema,
+  ReactionAckSchema,
+  ReactionSchema,
+  ReactionUpdatedSchema,
+  ReactorsSchema,
   TypingStartedSchema,
 } from "../../../client/src/gen/v1/messages_pb.ts";
 import {
@@ -56,6 +60,61 @@ const history = [
 
 const ME = 1n;
 
+const reactions = new Map<bigint, Map<string, bigint[]>>([
+  [
+    1n,
+    new Map([
+      ["🔥", [1n, 2n]],
+      ["😂", [2n]],
+    ]),
+  ],
+]);
+const reactionsOf = (messageId: bigint, me = ME) =>
+  [...(reactions.get(messageId) ?? new Map<string, bigint[]>())].map(([emoji, users]) =>
+    create(ReactionSchema, { emoji, count: users.length, me: users.includes(me) }),
+  );
+const withReactions = (m: (typeof history)[number]) => ({ ...m, reactions: reactionsOf(m.id) });
+
+function react(conversationId: bigint, messageId: bigint, emoji: string, add: boolean) {
+  if (!history.some((m) => m.id === messageId))
+    return fail("message_not_found", "message not found");
+  if (!emoji || emoji.length > 32) return fail("bad_emoji", "not an emoji");
+  const byEmoji = reactions.get(messageId) ?? new Map<string, bigint[]>();
+  reactions.set(messageId, byEmoji);
+  const users = byEmoji.get(emoji) ?? [];
+  const has = users.includes(ME);
+  if (add && !byEmoji.has(emoji) && byEmoji.size >= 20)
+    return fail("too_many_reactions", "this message has too many different reactions");
+  let changeSeq = 0n;
+  if (add !== has) {
+    const next = add ? [...users, ME] : users.filter((u) => u !== ME);
+    if (next.length) byEmoji.set(emoji, next);
+    else byEmoji.delete(emoji);
+    changeSeq = ++seq;
+    pushAll({
+      case: "reactionUpdated",
+      value: create(ReactionUpdatedSchema, {
+        conversationId,
+        messageId,
+        emoji,
+        userId: ME,
+        added: add,
+        count: next.length,
+        seq: changeSeq,
+      }),
+    });
+  }
+  return {
+    case: "reactionAck" as const,
+    value: create(ReactionAckSchema, {
+      conversationId,
+      messageId,
+      seq: changeSeq,
+      reactions: reactionsOf(messageId),
+    }),
+  };
+}
+
 function pushAll(payload: Envelope["payload"]) {
   const bytes = toBinary(EnvelopeSchema, create(EnvelopeSchema, { id: 0n, payload }));
   wss.clients.forEach((c) => c.send(bytes));
@@ -92,7 +151,20 @@ function handle(req: Envelope): Envelope["payload"] {
       console.log(`client is ${req.payload.value.idle ? "idle" : "active"}`);
       return { case: "pong", value: create(PongSchema) };
     case "getHistory":
-      return { case: "history", value: create(HistorySchema, { messages: history }) };
+      return {
+        case: "history",
+        value: create(HistorySchema, { messages: history.map(withReactions) }),
+      };
+    case "addReaction":
+    case "removeReaction": {
+      const { conversationId, messageId, emoji } = req.payload.value;
+      return react(conversationId, messageId, emoji, req.payload.case === "addReaction");
+    }
+    case "getReactors": {
+      const { messageId, emoji } = req.payload.value;
+      const userIds = reactions.get(messageId)?.get(emoji) ?? [];
+      return { case: "reactors", value: create(ReactorsSchema, { userIds }) };
+    }
     case "sendMessage": {
       const m = req.payload.value;
       if (

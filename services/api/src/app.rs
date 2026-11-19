@@ -28,7 +28,7 @@ use crate::features::conversations::repository::{ConversationRepo, ScyllaConvers
 use crate::features::conversations::service::ConversationService;
 use crate::features::friends::repository::PgFriendRepo;
 use crate::features::friends::service::FriendService;
-use crate::features::messages::repository::ScyllaMessageRepo;
+use crate::features::messages::repository::{ScyllaMessageRepo, ScyllaReactionRepo};
 use crate::features::messages::service::MessageService;
 use crate::features::presence::service::PresenceService;
 use crate::features::presence::store::RedisPresenceStore;
@@ -84,7 +84,8 @@ pub async fn build(
 
     let conversation_repo: Arc<dyn ConversationRepo> =
         Arc::new(ScyllaConversationRepo::new(scylla.clone()).await?);
-    let message_repo = Arc::new(ScyllaMessageRepo::new(scylla).await?);
+    let message_repo = Arc::new(ScyllaMessageRepo::new(scylla.clone()).await?);
+    let reaction_repo = Arc::new(ScyllaReactionRepo::new(scylla).await?);
     let friend_repo = Arc::new(PgFriendRepo::new(pool.clone()));
     let user_limits = UserLimiter::new(redis.clone());
     let socket_slots = SocketSlots::new(redis.clone(), crate::features::gateway::PRESENCE_TTL);
@@ -139,6 +140,7 @@ pub async fn build(
         )),
         messages: Arc::new(MessageService::new(
             message_repo,
+            reaction_repo,
             conversation_repo.clone(),
             events.clone(),
             ids.clone(),

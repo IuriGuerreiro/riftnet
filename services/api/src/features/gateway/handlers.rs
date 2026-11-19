@@ -24,6 +24,29 @@ pub async fn dispatch(
         Payload::Sync(req) => sync(state, session, req).await,
         Payload::EditMessage(req) => edit_message(state, session, req).await,
         Payload::DeleteMessage(req) => delete_message(state, session, req).await,
+        Payload::AddReaction(req) => {
+            react(
+                state,
+                session,
+                req.conversation_id,
+                req.message_id,
+                &req.emoji,
+                true,
+            )
+            .await
+        }
+        Payload::RemoveReaction(req) => {
+            react(
+                state,
+                session,
+                req.conversation_id,
+                req.message_id,
+                &req.emoji,
+                false,
+            )
+            .await
+        }
+        Payload::GetReactors(req) => get_reactors(state, session, req).await,
         Payload::CreateGroup(req) => {
             state.user_limits.hit(GROUP_CHANGE, session.user_id).await?;
             create_group(state, session, req).await
@@ -227,6 +250,51 @@ async fn delete_message(
         conversation_id: req.conversation_id,
         message_id: req.message_id,
         seq: seq.unwrap_or(0) as u64,
+    }))
+}
+
+async fn react(
+    state: &AppState,
+    session: &Session,
+    conversation_id: u64,
+    message_id: u64,
+    emoji: &str,
+    add: bool,
+) -> Result<Payload, ApiError> {
+    let (reactions, seq) = state
+        .messages
+        .react(
+            session.user_id,
+            conversation_id as i64,
+            message_id as i64,
+            emoji,
+            add,
+        )
+        .await?;
+    Ok(Payload::ReactionAck(v1::ReactionAck {
+        conversation_id,
+        message_id,
+        seq: seq as u64,
+        reactions: reactions.iter().map(Into::into).collect(),
+    }))
+}
+
+async fn get_reactors(
+    state: &AppState,
+    session: &Session,
+    req: v1::GetReactors,
+) -> Result<Payload, ApiError> {
+    let ids = state
+        .messages
+        .reactors(
+            session.user_id,
+            req.conversation_id as i64,
+            req.message_id as i64,
+            &req.emoji,
+        )
+        .await?;
+    Ok(Payload::Reactors(v1::Reactors {
+        user_ids: ids.into_iter().map(|id| id as u64).collect(),
     }))
 }
 
