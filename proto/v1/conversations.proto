@@ -11,6 +11,12 @@ message Conversation {
   repeated User members = 3;
   uint64 last_seq = 4; // seq of the newest message (0 = empty)
   string name = 5; // group name ("" for DMs)
+  // Unix ms of the newest message, or of creation if there are none.
+  // The list comes newest first; re-sort on MessageCreated.
+  uint64 last_message_at = 6;
+  // Your own unread messages here, capped at 10 (show "9+"). Only you see it.
+  uint32 unread_count = 7;
+  uint64 last_read_seq = 8; // your own read position (private)
 }
 
 enum ConversationKind {
@@ -39,6 +45,9 @@ message Conversations {
 message CreateGroup {
   string name = 1;
   repeated string usernames = 2;
+  // Optional, 1-64 chars. A retry with the same nonce returns the same group
+  // instead of making a second one. Add/leave/rename are safe to retry as-is.
+  string nonce = 3;
 }
 
 message AddMember {
@@ -57,4 +66,19 @@ message RenameGroup {
 
 message ConversationUpdated {
   Conversation conversation = 1;
+}
+
+// --- read state (private: never sent to anyone but you) ---
+
+// "I've read up to seq N here." Only moves forward; a lower seq is ignored.
+message MarkRead {
+  uint64 conversation_id = 1;
+  uint64 seq = 2;
+}
+
+// Reply to MarkRead, and a push to all your sockets so every tab agrees.
+message ReadStateUpdated {
+  uint64 conversation_id = 1;
+  uint64 last_read_seq = 2;
+  uint32 unread_count = 3;
 }

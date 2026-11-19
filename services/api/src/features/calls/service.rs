@@ -336,6 +336,14 @@ mod tests {
         async fn set_members(&self, _: i64, _: &[i64], _: &[i64]) -> Result<bool, RepoError> {
             unimplemented!()
         }
+        async fn claim_group_nonce(
+            &self,
+            _: i64,
+            _: &str,
+            _: i64,
+        ) -> Result<(i64, bool), RepoError> {
+            unimplemented!()
+        }
         async fn rename(&self, _: i64, _: &str) -> Result<(), RepoError> {
             unimplemented!()
         }
@@ -346,6 +354,7 @@ mod tests {
                 last_seq: 0,
                 name: String::new(),
                 member_ids: vec![ALICE, BOB],
+                last_message_at: 0,
             }))
         }
         async fn next_seq(&self, _: i64) -> Result<i64, RepoError> {

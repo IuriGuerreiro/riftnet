@@ -93,7 +93,10 @@ sequenceDiagram
 | `authenticate {access_token}`                     | `auth_ok {user}`               | first frame; again to re-auth |
 | `ping`                                            | `pong`                         |                              |
 | `open_dm {username}`                              | `conversation`                 | creates it the first time    |
-| `list_conversations`                              | `conversations`                |                              |
+| `list_conversations`                              | `conversations`                | newest activity first, with your own unread counts (see [dms.md](dms.md#list-order-and-unread)) |
+| `mark_read {conversation_id, seq}`                | `read_state_updated {conversation_id, last_read_seq, unread_count}` | only moves forward; also pushed to **your own** sockets, never to others |
+| `create_group {name, usernames, nonce}`           | `conversation`                 | `nonce` optional (≤ 64): a retry returns the same group |
+| `add_member` / `leave_group` / `rename_group`     | `conversation`                 | safe to retry: adding a member twice or leaving twice is not an error |
 | `send_message {conversation_id, content, nonce}`  | `message_ack {nonce, message}` | see [dms.md](dms.md#sending) |
 | `get_history {conversation_id, before_id, limit}` | `history` (newest first)       | limit default 50, max 100    |
 | `sync {conversation_id, after_seq}`               | `sync_result`                  | also edits + deletes         |

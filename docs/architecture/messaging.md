@@ -56,6 +56,11 @@ sequenceDiagram
 - **ScyllaDB:** a database built for huge write volumes (a C++ rewrite of Cassandra; Discord uses it). Partition key `(channel_id, bucket ~10 days)`, so "last 50 messages" is one fast read. Heavy to run.
 - **NATS (Core):** tiny, fast pub/sub. Core NATS stores nothing (JetStream, the optional add-on, does). Only needed with 2+ gateways, so a message on gateway 1 reaches users on gateway 3. (Redis pub/sub is an alternative.)
 
+## Order, unread, retries
+
+The DM list is sorted by the last message, each user has a private unread count, and
+group/friend actions are safe to retry. Details: [dms.md](dms.md#list-order-and-unread).
+
 ## Open questions
 
 - Message events: reactions, threads, pins. (Edit + delete: done for DMs, see [dms.md](dms.md#edit-and-delete).)

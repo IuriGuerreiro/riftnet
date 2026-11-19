@@ -24,6 +24,7 @@ pub async fn dispatch(
         Payload::AddMember(req) => add_member(state, session, req).await,
         Payload::LeaveGroup(req) => leave_group(state, session, req).await,
         Payload::RenameGroup(req) => rename_group(state, session, req).await,
+        Payload::MarkRead(req) => mark_read(state, session, req).await,
         Payload::SetIdle(req) => {
             state
                 .presence
@@ -220,7 +221,7 @@ async fn create_group(
 ) -> Result<Payload, ApiError> {
     let group = state
         .conversations
-        .create_group(session.user_id, &req.name, &req.usernames)
+        .create_group(session.user_id, &req.name, &req.usernames, &req.nonce)
         .await?;
     Ok(conversation_result(&group))
 }
@@ -261,6 +262,22 @@ async fn rename_group(
         .rename_group(session.user_id, req.conversation_id as i64, &req.name)
         .await?;
     Ok(conversation_result(&group))
+}
+
+async fn mark_read(
+    state: &AppState,
+    session: &Session,
+    req: v1::MarkRead,
+) -> Result<Payload, ApiError> {
+    let read = state
+        .conversations
+        .mark_read(session.user_id, req.conversation_id as i64, req.seq as i64)
+        .await?;
+    Ok(Payload::ReadStateUpdated(v1::ReadStateUpdated {
+        conversation_id: req.conversation_id,
+        last_read_seq: read.last_read_seq as u64,
+        unread_count: read.unread_count,
+    }))
 }
 
 fn conversation_result(conversation: &Conversation) -> Payload {

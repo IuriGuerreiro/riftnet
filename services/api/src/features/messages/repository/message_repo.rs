@@ -306,3 +306,21 @@ impl MessageRepo for ScyllaMessageRepo {
         Ok(row.is_some())
     }
 }
+
+#[async_trait]
+impl<T: MessageRepo + ?Sized> crate::features::conversations::repository::UnreadCounter for T {
+    async fn count_after(
+        &self,
+        conversation: &crate::features::conversations::models::ConversationRecord,
+        after_seq: i64,
+        cap: u32,
+    ) -> Result<u32, RepoError> {
+        if conversation.last_seq <= after_seq || cap == 0 {
+            return Ok(0);
+        }
+        let found = self
+            .since_seq(conversation.id, after_seq, cap as usize, conversation.id)
+            .await?;
+        Ok(found.len() as u32)
+    }
+}
