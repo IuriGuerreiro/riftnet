@@ -18,6 +18,7 @@ use crate::features::auth::identity::ZitadelClient;
 use crate::features::auth::repository::PgAuthRepo;
 use crate::features::auth::service::AuthService;
 use crate::features::auth::tokens::TokenService;
+use crate::features::bots::BotService;
 use crate::features::calls::media::NatsMediaClient;
 use crate::features::calls::service::CallService;
 use crate::features::calls::store::MemoryCallStore;
@@ -33,10 +34,11 @@ use crate::features::servers::ServerService;
 use crate::features::typing::service::TypingService;
 use crate::features::users::repository::{PgUserRepo, UserRepo};
 use crate::features::users::service::UserService;
-use crate::features::{attachments, auth, friends, gateway, health, servers, users};
+use crate::features::{attachments, auth, bots, friends, gateway, health, servers, users};
 
 #[derive(Clone)]
 pub struct AppState {
+    pub bots: Arc<BotService>,
     pub servers: Arc<ServerService>,
     pub attachments: Arc<AttachmentService>,
     pub auth: Arc<AuthService>,
@@ -108,6 +110,7 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
     );
 
     let state = AppState {
+        bots: Arc::new(BotService::new(pool.clone(), ids.clone())),
         servers: Arc::new(ServerService::new(pool, ids.clone())),
         attachments: attachment_service.clone(),
         auth: Arc::new(AuthService::new(
@@ -188,6 +191,7 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
     Ok(Router::new()
         .merge(health::routes(prometheus))
         .merge(auth::routes())
+        .merge(bots::routes())
         .merge(users::routes())
         .merge(friends::routes())
         .merge(servers::routes())
