@@ -87,8 +87,12 @@ pub async fn build(
     let message_repo = Arc::new(ScyllaMessageRepo::new(scylla.clone()).await?);
     let reaction_repo = Arc::new(ScyllaReactionRepo::new(scylla).await?);
     let friend_repo = Arc::new(PgFriendRepo::new(pool.clone()));
-    let user_limits = UserLimiter::new(redis.clone());
-    let socket_slots = SocketSlots::new(redis.clone(), crate::features::gateway::PRESENCE_TTL);
+    let user_limits = UserLimiter::new(redis.clone(), config.rate_limits);
+    let socket_slots = SocketSlots::new(
+        redis.clone(),
+        crate::features::gateway::PRESENCE_TTL,
+        config.rate_limits,
+    );
     let presence_store = Arc::new(RedisPresenceStore::new(
         redis,
         crate::features::gateway::PRESENCE_TTL,
@@ -177,7 +181,7 @@ pub async fn build(
             events.clone(),
         )),
         tokens,
-        limiter: Arc::new(RateLimiter::default()),
+        limiter: Arc::new(RateLimiter::new(config.rate_limits)),
         user_limits,
         socket_slots,
         shutdown,

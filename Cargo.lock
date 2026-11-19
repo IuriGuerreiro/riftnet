@@ -3321,6 +3321,7 @@ dependencies = [
  "common",
  "futures",
  "metrics",
+ "metrics-exporter-prometheus",
  "protocol",
  "str0m",
  "tokio",

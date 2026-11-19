@@ -24,6 +24,9 @@ pub struct Config {
     pub s3_secret_key: String,
     pub attachment_max_bytes: i64,
     pub attachment_ttl_hours: u64,
+    /// `RATE_LIMITS=off` disables every rate limit and the per-user socket cap.
+    /// For load tests only. Default: on.
+    pub rate_limits: bool,
 }
 
 impl Config {
@@ -63,6 +66,7 @@ impl Config {
             s3_secret_key: env_or("S3_SECRET_KEY", "minio-dev-secret"),
             attachment_max_bytes: env_or("ATTACHMENT_MAX_BYTES", "104857600").parse()?, // 100 MiB
             attachment_ttl_hours: env_or("ATTACHMENT_TTL_HOURS", "168").parse()?,     // 7 days
+            rate_limits: parse_switch("RATE_LIMITS", &env_or("RATE_LIMITS", "on"))?,
             cors_origins: env_or(
                 "CORS_ORIGINS",
                 "http://localhost:7104,https://server.tailcbbc1b.ts.net:7103,tauri://localhost,http://tauri.localhost",
@@ -82,4 +86,26 @@ impl Config {
 
 fn env_or(key: &str, default: &str) -> String {
     std::env::var(key).unwrap_or_else(|_| default.to_string())
+}
+
+fn parse_switch(key: &str, value: &str) -> anyhow::Result<bool> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "on" | "true" | "1" | "yes" => Ok(true),
+        "off" | "false" | "0" | "no" => Ok(false),
+        other => anyhow::bail!("{key} must be on or off, got {other:?}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_switch;
+
+    #[test]
+    fn switch_values() {
+        assert!(parse_switch("X", "on").unwrap());
+        assert!(parse_switch("X", "TRUE").unwrap());
+        assert!(!parse_switch("X", "off").unwrap());
+        assert!(!parse_switch("X", " 0 ").unwrap());
+        assert!(parse_switch("X", "maybe").is_err());
+    }
 }

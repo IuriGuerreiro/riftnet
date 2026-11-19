@@ -39,17 +39,23 @@ return {n, ttl}
 pub struct UserLimiter {
     redis: ConnectionManager,
     script: redis::Script,
+    enabled: bool,
 }
 
 impl UserLimiter {
-    pub fn new(redis: ConnectionManager) -> Self {
+    /// `enabled: false` (`RATE_LIMITS=off`) allows every hit without touching Redis.
+    pub fn new(redis: ConnectionManager, enabled: bool) -> Self {
         Self {
             redis,
             script: redis::Script::new(HIT),
+            enabled,
         }
     }
 
     pub async fn hit(&self, rule: Rule, user_id: i64) -> Result<(), ApiError> {
+        if !self.enabled {
+            return Ok(());
+        }
         let key = format!("rl:{}:{user_id}", rule.name);
         let mut conn = self.redis.clone();
         let res: redis::RedisResult<(u32, i64)> = self
@@ -94,18 +100,24 @@ pub struct SocketSlots {
     redis: ConnectionManager,
     script: redis::Script,
     ttl: Duration,
+    enabled: bool,
 }
 
 impl SocketSlots {
-    pub fn new(redis: ConnectionManager, ttl: Duration) -> Self {
+    /// `enabled: false` (`RATE_LIMITS=off`) lifts the per-user socket cap without touching Redis.
+    pub fn new(redis: ConnectionManager, ttl: Duration, enabled: bool) -> Self {
         Self {
             redis,
             script: redis::Script::new(ACQUIRE),
             ttl,
+            enabled,
         }
     }
 
     pub async fn acquire(&self, user_id: i64, connection_id: u64) -> bool {
+        if !self.enabled {
+            return true;
+        }
         let mut conn = self.redis.clone();
         let res: redis::RedisResult<i64> = self
             .script
@@ -126,6 +138,9 @@ impl SocketSlots {
     }
 
     pub async fn release(&self, user_id: i64, connection_id: u64) {
+        if !self.enabled {
+            return;
+        }
         let mut conn = self.redis.clone();
         let res: redis::RedisResult<()> = redis::cmd("ZREM")
             .arg(slots_key(user_id))
@@ -173,7 +188,7 @@ mod tests {
     #[tokio::test]
     async fn redis_limiter_blocks_after_max() {
         let Some(conn) = redis().await else { return };
-        let limiter = UserLimiter::new(conn);
+        let limiter = UserLimiter::new(conn, true);
         let user = rand::random::<i64>().abs();
         for _ in 0..RULE.max {
             limiter.hit(RULE, user).await.unwrap();
@@ -184,9 +199,21 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn disabled_limits_always_allow() {
+        let Some(conn) = redis().await else { return };
+        let limiter = UserLimiter::new(conn.clone(), false);
+        let slots = SocketSlots::new(conn, Duration::from_secs(30), false);
+        let user = rand::random::<i64>().abs();
+        for id in 0..(RULE.max as u64 + MAX_SOCKETS_PER_USER as u64 + 5) {
+            limiter.hit(RULE, user).await.unwrap();
+            assert!(slots.acquire(user, id).await);
+        }
+    }
+
+    #[tokio::test]
     async fn socket_slots_cap_and_release() {
         let Some(conn) = redis().await else { return };
-        let slots = SocketSlots::new(conn, Duration::from_secs(30));
+        let slots = SocketSlots::new(conn, Duration::from_secs(30), true);
         let user = rand::random::<i64>().abs();
         for id in 0..MAX_SOCKETS_PER_USER as u64 {
             assert!(slots.acquire(user, id).await);

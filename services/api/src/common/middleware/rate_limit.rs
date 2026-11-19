@@ -7,10 +7,22 @@ use crate::common::error::ApiError;
 #[derive(Default)]
 pub struct RateLimiter {
     windows: Mutex<HashMap<String, (Instant, u32)>>,
+    /// Set by `RATE_LIMITS=off` (load tests). Every call then allows.
+    disabled: bool,
 }
 
 impl RateLimiter {
+    pub fn new(enabled: bool) -> Self {
+        Self {
+            disabled: !enabled,
+            ..Self::default()
+        }
+    }
+
     pub fn check(&self, key: &str, limit: u32, window: Duration) -> Result<(), ApiError> {
+        if self.disabled {
+            return Ok(());
+        }
         let mut windows = self.windows.lock().expect("rate limiter mutex poisoned");
         let now = Instant::now();
 
@@ -31,6 +43,9 @@ impl RateLimiter {
     }
 
     pub fn ensure_below(&self, key: &str, limit: u32, window: Duration) -> Result<(), ApiError> {
+        if self.disabled {
+            return Ok(());
+        }
         let windows = self.windows.lock().expect("rate limiter mutex poisoned");
         match windows.get(key) {
             Some((start, count)) if start.elapsed() < window && *count >= limit => {
@@ -42,6 +57,9 @@ impl RateLimiter {
     }
 
     pub fn record(&self, key: &str, window: Duration) {
+        if self.disabled {
+            return;
+        }
         let mut windows = self.windows.lock().expect("rate limiter mutex poisoned");
         let now = Instant::now();
         let entry = windows.entry(key.to_string()).or_insert((now, 0));
@@ -79,6 +97,17 @@ mod tests {
         }
         assert!(limiter.check("k", 3, w).is_err());
         assert!(limiter.check("other", 3, w).is_ok());
+    }
+
+    #[test]
+    fn disabled_always_allows() {
+        let limiter = RateLimiter::new(false);
+        let w = Duration::from_secs(60);
+        for _ in 0..100 {
+            assert!(limiter.check("k", 1, w).is_ok());
+            limiter.record("fail", w);
+        }
+        assert!(limiter.ensure_below("fail", 1, w).is_ok());
     }
 
     #[test]
