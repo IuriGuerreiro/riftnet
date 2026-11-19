@@ -1,0 +1,122 @@
+name: Release app
+
+on:
+  push:
+    branches: [prod]
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  build:
+    needs: ci
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2025
+            platform: windows
+            asset: discord2-windows-x64.exe
+          - runner: ubuntu-22.04
+            platform: linux
+            asset: discord2-linux-x64.AppImage
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target
+      VITE_API_HTTP: ${{ vars.PROD_API_HTTP }}
+      VITE_API_WS: ${{ vars.PROD_API_WS }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Linux build dependencies
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xdg-utils
+      - name: Check production API URLs
+        shell: bash
+        run: |
+          node <<'JS'
+          for (const [name, value, protocol] of [
+            ['PROD_API_HTTP', process.env.VITE_API_HTTP, 'https:'],
+            ['PROD_API_WS', process.env.VITE_API_WS, 'wss:'],
+          ]) {
+            if (URL.parse(value)?.protocol !== protocol) {
+              throw new Error(`Set ${name} to the production ${protocol.slice(0, -1).toUpperCase()} URL.`);
+            }
+          }
+          JS
+      - run: pnpm install --frozen-lockfile
+      - name: Build Windows executable
+        if: matrix.platform == 'windows'
+        run: |
+          pnpm --filter client tauri build --target x86_64-pc-windows-msvc --no-bundle -- --locked
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Copy-Item target/x86_64-pc-windows-msvc/release/desktop.exe '${{ matrix.asset }}'
+      - name: Build Linux AppImage
+        if: matrix.platform == 'linux'
+        run: |
+          pnpm --filter client tauri build --bundles appimage -- --locked
+          cp target/release/bundle/appimage/*.AppImage '${{ matrix.asset }}'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: discord2-${{ matrix.platform }}-x64
+          path: ${{ matrix.asset }}
+          if-no-files-found: error
+          overwrite: true
+
+  draft-release:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    concurrency:
+      group: app-release-${{ github.sha }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: discord2-*-x64
+          merge-multiple: true
+      - name: Create or complete draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          tag="app-$GITHUB_SHA"
+          assets=(discord2-windows-x64.exe discord2-linux-x64.AppImage)
+          for asset in "${assets[@]}"; do
+            if [[ ! -s "$asset" ]]; then
+              echo "Missing release asset: $asset" >&2
+              exit 1
+            fi
+          done
+          if release=$(gh release view "$tag" --json targetCommitish,isDraft,assets); then
+            jq -e --arg sha "$GITHUB_SHA" '.targetCommitish == $sha' <<< "$release" >/dev/null
+            missing=()
+            for asset in "${assets[@]}"; do
+              if ! jq -e --arg asset "$asset" 'any(.assets[]; .name == $asset and .state == "uploaded" and .size > 0)' <<< "$release" >/dev/null; then
+                missing+=("$asset")
+              fi
+            done
+            if (( ${#missing[@]} == 0 )); then
+              exit 0
+            fi
+            jq -e '.isDraft' <<< "$release" >/dev/null
+            gh release upload "$tag" "${missing[@]}" --clobber
+          else
+            refs=$(gh api "repos/$GH_REPO/git/matching-refs/tags/$tag")
+            jq -e --arg ref "refs/tags/$tag" --arg sha "$GITHUB_SHA" \
+              'all(.[] | select(.ref == $ref); .object.sha == $sha)' <<< "$refs" >/dev/null
+            gh release create "$tag" "${assets[@]}" --target "$GITHUB_SHA" --draft \
+              --title "Discord 2.0 (${GITHUB_SHA:0:12})" --generate-notes
+          fi
