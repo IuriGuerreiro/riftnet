@@ -517,6 +517,14 @@ mod tests {
 
     #[async_trait]
     impl ConversationRepo for FakeConversations {
+        async fn claim_group_nonce(
+            &self,
+            _: i64,
+            _: &str,
+            _: i64,
+        ) -> Result<(i64, bool), RepoError> {
+            unimplemented!()
+        }
         async fn get_or_create_dm(
             &self,
             _: i64,
@@ -626,6 +634,7 @@ mod tests {
                 last_seq: 0,
                 name: String::new(),
                 member_ids: vec![ANA, CAT],
+                last_message_at: 0,
             }])),
             events.clone(),
         );

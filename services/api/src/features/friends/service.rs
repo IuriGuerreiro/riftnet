@@ -96,18 +96,23 @@ impl FriendService {
 
     #[tracing::instrument(name = "friends.accept", skip_all, fields(user.id = me))]
     pub async fn accept(&self, me: i64, requester_id: i64) -> Result<FriendEntry, ApiError> {
-        let row = self
-            .repo
-            .accept(me, requester_id)
-            .await?
-            .ok_or(ApiError::NotFound)?;
         let requester = self
             .users
             .find_by_id(requester_id)
             .await?
             .ok_or(ApiError::NotFound)?;
-        self.announce(&row, me, requester_id).await;
-        Ok(entry(&row, me, requester))
+        match self.repo.accept(me, requester_id).await? {
+            Some(row) => {
+                self.announce(&row, me, requester_id).await;
+                Ok(entry(&row, me, requester))
+            }
+            None => match self.repo.find(me, requester_id).await? {
+                Some(row) if row.status == FriendshipStatus::Accepted => {
+                    Ok(entry(&row, me, requester))
+                }
+                _ => Err(ApiError::NotFound),
+            },
+        }
     }
 
     #[tracing::instrument(name = "friends.delete_request", skip_all, fields(user.id = me))]
@@ -130,7 +135,8 @@ impl FriendService {
     ) -> Result<(), ApiError> {
         match self.repo.find(me, other_id).await? {
             Some(row) if row.status == status => {}
-            _ => return Err(ApiError::NotFound),
+            None => return Ok(()),
+            Some(_) => return Err(ApiError::NotFound),
         }
         if self.repo.delete(me, other_id).await?.is_some() {
             self.announce_gone(me, other_id).await;
@@ -145,14 +151,7 @@ impl FriendService {
         existing: Friendship,
     ) -> Result<FriendEntry, ApiError> {
         match existing.state_for(me) {
-            FriendState::Friend => Err(ApiError::conflict(
-                "already_friends",
-                "you're already friends",
-            )),
-            FriendState::Outgoing => Err(ApiError::conflict(
-                "request_already_sent",
-                "request already sent",
-            )),
+            FriendState::Friend | FriendState::Outgoing => Ok(entry(&existing, me, target)),
             FriendState::Incoming | FriendState::None => {
                 self.accept(me, target.id).await.map(|mut accepted| {
                     accepted.user = target;
@@ -462,18 +461,24 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn duplicates_are_rejected() {
-        let (service, _) = setup();
+    async fn retries_are_safe_and_push_once() {
+        let (service, events) = setup();
         service.send_request(ANA, "bob").await.unwrap();
-        assert_eq!(
-            code(service.send_request(ANA, "bob").await.unwrap_err()),
-            "request_already_sent"
-        );
+        let again = service.send_request(ANA, "bob").await.unwrap();
+        assert_eq!(again.state, FriendState::Outgoing);
+
         service.accept(BOB, ANA).await.unwrap();
-        assert_eq!(
-            code(service.send_request(BOB, "ana").await.unwrap_err()),
-            "already_friends"
-        );
+        let again = service.accept(BOB, ANA).await.unwrap();
+        assert_eq!(again.state, FriendState::Friend);
+        let back = service.send_request(BOB, "ana").await.unwrap();
+        assert_eq!(back.state, FriendState::Friend);
+
+        assert_eq!(events.sent.lock().unwrap().len(), 4);
+
+        service.remove_friend(ANA, BOB).await.unwrap();
+        service.remove_friend(ANA, BOB).await.unwrap();
+        service.delete_request(ANA, BOB).await.unwrap();
+        assert_eq!(events.sent.lock().unwrap().len(), 6);
     }
 
     #[tokio::test]

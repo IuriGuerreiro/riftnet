@@ -25,6 +25,8 @@ Scylla has no joins and no `UNIQUE`, so there is **one table per question**:
 | `messages`              | `(conversation_id, bucket)`, `id` ↓   | history, newest first                |
 | `message_nonces`        | `(conversation_id, author_id, nonce)` | "did this client already send this?" |
 | `message_changes`       | `conversation_id`, `seq` ↑            | "what was edited/deleted since N?"   |
+| `read_states`           | `user_id`, `conversation_id`          | "how far have I read?" (private)     |
+| `group_nonces`          | `(user_id, nonce)`, TTL 1 day         | "did I already create this group?"   |
 
 - A **bucket** is ~10 days. One partition = one conversation's 10 days, so "latest 50" is one fast read and
   partitions never grow forever. History walks buckets backwards.
@@ -118,6 +120,33 @@ flowchart LR
   - Seqs aren't committed in order: if change 12 is saved while 11 is still being written, a sync in
     that moment reports 12 and skips 11. Same for messages. Needs a "committed up to" watermark.
   - A crash between an edit's save and its log row: offline clients miss that edit.
+
+### List order and unread
+
+- **Order:** `conversations.last_message_at` (unix ms) is set in the same LWT that takes a new
+  message's seq. Edits and deletes don't move it. Empty conversations use `created_at`.
+  `list_conversations` sorts newest first in the API (max 200 per user, so it's cheap).
+  No extra push: clients move a conversation to the top on `message_created`.
+- **Unread:** `read_states` holds each user's `last_read_seq`. `mark_read` only moves it forward
+  (insert `IF NOT EXISTS`, else update `IF last_read_seq < ?`) and clamps to `last_seq`.
+- **Count:** edits and deletes take seqs too, so `last_seq - last_read_seq` would overcount.
+  We count real messages after `last_read_seq` with the sync query, **capped at 10** (shown as "9+").
+  Fully-read conversations skip the query.
+- **Private:** read state goes only to its owner (list reply, `mark_read` reply, a push to the
+  owner's own sockets). `conversation_updated` pushes to other members always carry zeros.
+  No "seen" for anyone.
+
+### Retries (idempotency)
+
+| Action                     | Retry result                                   |
+| -------------------------- | ---------------------------------------------- |
+| `send_message`             | same message (nonce)                           |
+| `create_group`             | same group if the same `nonce` (`group_nonces`) |
+| `add_member`               | already in → current group, no push            |
+| `leave_group`              | already out → `Ok`                             |
+| `rename_group`             | same name → same result                        |
+| friends: request / accept  | current state, no error, no second push        |
+| friends: decline / remove  | already gone → `Ok`                            |
 
 ### Rules
 

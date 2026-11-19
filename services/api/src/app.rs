@@ -24,7 +24,9 @@ use crate::features::auth::tokens::TokenService;
 use crate::features::calls::media::NatsMediaClient;
 use crate::features::calls::service::CallService;
 use crate::features::calls::store::MemoryCallStore;
-use crate::features::conversations::repository::{ConversationRepo, ScyllaConversationRepo};
+use crate::features::conversations::repository::{
+    ConversationRepo, ReadStateRepo, ScyllaConversationRepo,
+};
 use crate::features::conversations::service::ConversationService;
 use crate::features::friends::repository::PgFriendRepo;
 use crate::features::friends::service::FriendService;
@@ -82,8 +84,9 @@ pub async fn build(
     let auth_repo = Arc::new(PgAuthRepo::new(pool.clone()));
     let identity = Arc::new(ZitadelClient::new(&config.zitadel_url, &config.zitadel_pat));
 
-    let conversation_repo: Arc<dyn ConversationRepo> =
-        Arc::new(ScyllaConversationRepo::new(scylla.clone()).await?);
+    let scylla_conversations = Arc::new(ScyllaConversationRepo::new(scylla.clone()).await?);
+    let conversation_repo: Arc<dyn ConversationRepo> = scylla_conversations.clone();
+    let read_state_repo: Arc<dyn ReadStateRepo> = scylla_conversations;
     let message_repo = Arc::new(ScyllaMessageRepo::new(scylla.clone()).await?);
     let reaction_repo = Arc::new(ScyllaReactionRepo::new(scylla).await?);
     let friend_repo = Arc::new(PgFriendRepo::new(pool.clone()));
@@ -143,7 +146,7 @@ pub async fn build(
             events.clone(),
         )),
         messages: Arc::new(MessageService::new(
-            message_repo,
+            message_repo.clone(),
             reaction_repo,
             conversation_repo.clone(),
             events.clone(),
@@ -152,6 +155,8 @@ pub async fn build(
         )),
         conversations: Arc::new(ConversationService::new(
             conversation_repo.clone(),
+            read_state_repo,
+            message_repo,
             user_repo.clone(),
             events.clone(),
             ids.clone(),

@@ -111,7 +111,11 @@ impl MessageService {
             .attachments
             .attach(me, conversation_id, id, attachment_ids)
             .await?;
-        let seq = self.conversations.next_seq(conversation_id).await?;
+        let now_ms = chrono::Utc::now().timestamp_millis();
+        let seq = self
+            .conversations
+            .next_message_seq(conversation_id, now_ms)
+            .await?;
         let mut message = Message {
             id,
             conversation_id,
@@ -561,6 +565,14 @@ mod tests {
         async fn set_members(&self, _: i64, _: &[i64], _: &[i64]) -> Result<bool, RepoError> {
             unimplemented!()
         }
+        async fn claim_group_nonce(
+            &self,
+            _: i64,
+            _: &str,
+            _: i64,
+        ) -> Result<(i64, bool), RepoError> {
+            unimplemented!()
+        }
         async fn rename(&self, _: i64, _: &str) -> Result<(), RepoError> {
             unimplemented!()
         }
@@ -571,6 +583,7 @@ mod tests {
                 last_seq: *self.last_seq.lock().unwrap(),
                 name: String::new(),
                 member_ids: vec![ALICE, BOB],
+                last_message_at: 0,
             }))
         }
         async fn next_seq(&self, _: i64) -> Result<i64, RepoError> {
