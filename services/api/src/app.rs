@@ -85,7 +85,11 @@ pub async fn build(
 
     let user_repo: Arc<dyn UserRepo> = Arc::new(PgUserRepo::new(pool.clone()));
     let auth_repo = Arc::new(PgAuthRepo::new(pool.clone()));
-    let identity = Arc::new(ZitadelClient::new(&config.zitadel_url, &config.zitadel_pat));
+    let identity = Arc::new(ZitadelClient::new(
+        &config.zitadel_url,
+        &config.zitadel_pat,
+        config.auth_concurrency,
+    ));
 
     let scylla_conversations = Arc::new(ScyllaConversationRepo::new(scylla.clone()).await?);
     let conversation_repo: Arc<dyn ConversationRepo> = scylla_conversations.clone();

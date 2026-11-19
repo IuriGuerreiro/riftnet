@@ -6,6 +6,8 @@ use crate::common::error::RepoError;
 
 #[async_trait]
 pub trait UserRepo: Send + Sync {
+    async fn find_by_email(&self, email: &str) -> Result<Option<User>, RepoError>;
+    async fn remember_email(&self, id: i64, email: &str) -> Result<(), RepoError>;
     async fn find_by_id(&self, id: i64) -> Result<Option<User>, RepoError>;
     async fn find_by_zitadel_id(&self, zitadel_id: &str) -> Result<Option<User>, RepoError>;
     async fn find_by_ids(&self, ids: &[i64]) -> Result<Vec<User>, RepoError>;
@@ -50,6 +52,22 @@ impl PgUserRepo {
 
 #[async_trait]
 impl UserRepo for PgUserRepo {
+    async fn find_by_email(&self, email: &str) -> Result<Option<User>, RepoError> {
+        Ok(sqlx::query_as("SELECT * FROM users WHERE email = $1")
+            .bind(email)
+            .fetch_optional(&self.pool)
+            .await?)
+    }
+
+    async fn remember_email(&self, id: i64, email: &str) -> Result<(), RepoError> {
+        sqlx::query("UPDATE users SET email = $1 WHERE id = $2")
+            .bind(email)
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
     #[tracing::instrument(name = "db SELECT users", skip_all, err(Display), fields(otel.kind = "client", db.system = "postgresql", db.operation = "SELECT", db.collection.name = "users"))]
     async fn find_by_id(&self, id: i64) -> Result<Option<User>, RepoError> {
         Ok(sqlx::query_as("SELECT * FROM users WHERE id = $1")

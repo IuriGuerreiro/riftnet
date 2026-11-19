@@ -166,8 +166,11 @@ and stops exporting.
 | -------------------------------------- | --------- | ------------------------------------------------------------------ |
 | `http_server_requests_total`           | counter   | `method`, `route`, `status`                                        |
 | `http_server_request_duration_seconds` | histogram | `method`, `route`, `status`                                        |
-| `auth_logins_total`                    | counter   | `result`: ok, failed, error                                        |
-| `auth_registrations_total`             | counter   | `result`: ok, rejected, error                                      |
+| `auth_logins_total`                    | counter   | `result`: ok, failed, overloaded, error                                        |
+| `auth_registrations_total`             | counter   | `result`: ok, rejected, overloaded, error                                      |
+| `auth_request_duration_seconds` | histogram | `operation`: login, register |
+| `auth_identity_queue_seconds` | histogram | none |
+| `auth_identity_overload_total` | counter | none |
 | `auth_refreshes_total`                 | counter   | `result`: ok, superseded, reused, revoked, expired, invalid, error |
 | `rate_limited_requests_total`          | counter   | `rule` (e.g. `login:ip`)                                           |
 | `ws_connections`                       | gauge     | —                                                                  |

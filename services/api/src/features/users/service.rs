@@ -373,6 +373,12 @@ mod tests {
 
     #[async_trait]
     impl UserRepo for FakeUsers {
+        async fn find_by_email(&self, _: &str) -> Result<Option<User>, RepoError> {
+            unimplemented!()
+        }
+        async fn remember_email(&self, _: i64, _: &str) -> Result<(), RepoError> {
+            unimplemented!()
+        }
         async fn find_by_id(&self, id: i64) -> Result<Option<User>, RepoError> {
             Ok(self.0.lock().unwrap().get(&id).cloned())
         }

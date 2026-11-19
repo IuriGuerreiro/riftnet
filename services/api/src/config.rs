@@ -12,6 +12,7 @@ pub struct Config {
     pub scylla_replication: u8,
     pub zitadel_url: String,
     pub zitadel_pat: String,
+    pub auth_concurrency: usize,
     pub signing_key_file: PathBuf,
     pub machine_id: u16,
     pub cors_origins: Vec<String>,
@@ -41,6 +42,12 @@ impl Config {
             }
         };
 
+        let auth_concurrency = env_or("AUTH_CONCURRENCY", "2").parse::<usize>()?;
+        anyhow::ensure!(
+            auth_concurrency > 0 && auth_concurrency <= 1024,
+            "AUTH_CONCURRENCY must be 1..=1024"
+        );
+
         Ok(Self {
             env: env_or("APP_ENV", "development"),
             addr: env_or("API_ADDR", "127.0.0.1:7100").parse()?,
@@ -55,6 +62,7 @@ impl Config {
             scylla_replication: env_or("SCYLLA_REPLICATION", "1").parse()?,
             zitadel_url: env_or("ZITADEL_URL", "http://localhost:7102"),
             zitadel_pat,
+            auth_concurrency,
             signing_key_file: env_or("API_SIGNING_KEY_FILE", "infra/.secrets/api_signing_key")
                 .into(),
             machine_id: env_or("MACHINE_ID", "1").parse()?,
