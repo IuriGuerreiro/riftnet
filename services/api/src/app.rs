@@ -36,16 +36,21 @@ use crate::features::messages::repository::{ScyllaMessageRepo, ScyllaReactionRep
 use crate::features::messages::service::MessageService;
 use crate::features::presence::service::PresenceService;
 use crate::features::presence::store::{PreferencePresenceStore, RedisPresenceStore};
+use crate::features::servers::channel_service::ChannelMessageService;
+use crate::features::servers::repository::PgServerRepo;
+use crate::features::servers::service::ServerService;
 use crate::features::settings::{self, SettingsRepository};
 use crate::features::typing::service::TypingService;
 use crate::features::users::repository::{PgUserRepo, UserRepo};
 use crate::features::users::service::UserService;
-use crate::features::{attachments, auth, bots, friends, gateway, health, users};
+use crate::features::{attachments, auth, bots, friends, gateway, health, servers, users};
 
 #[derive(Clone)]
 pub struct AppState {
     pub settings: Arc<SettingsRepository>,
     pub bots: Arc<BotService>,
+    pub servers: Arc<ServerService>,
+    pub channel_messages: Arc<ChannelMessageService>,
     pub attachments: Arc<AttachmentService>,
     pub auth: Arc<AuthService>,
     pub users: Arc<UserService>,
@@ -149,6 +154,16 @@ pub async fn build(
             Arc::new(PgBotRepo::new(pool.clone())),
             ids.clone(),
         )),
+        servers: Arc::new(ServerService::new(
+            Arc::new(PgServerRepo::new(pool.clone())),
+            ids.clone(),
+        )),
+        channel_messages: Arc::new(ChannelMessageService::new(
+            Arc::new(PgServerRepo::new(pool.clone())),
+            message_repo.clone(),
+            events.clone(),
+            ids.clone(),
+        )),
         attachments: attachment_service.clone(),
         auth: Arc::new(AuthService::new(
             identity,
@@ -233,6 +248,7 @@ pub async fn build(
         .merge(users::routes())
         .merge(settings::routes())
         .merge(friends::routes())
+        .merge(servers::routes())
         .merge(attachments::routes())
         .merge(gateway::routes())
         .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))

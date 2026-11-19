@@ -1,13 +1,17 @@
+import { useSearch } from "@tanstack/react-router";
 import { useState } from "react";
 
 import { IncomingCall, RemoteScreen } from "../call/CallBar";
 import { ProfilePanel } from "../components/ProfilePanel";
+import { ServerPanel } from "../components/Servers";
 import { ChatPane } from "../features/chat/ChatPane";
 import { useKnownUsers, useNameFor, useRealtime } from "../features/session/useRealtime";
 import { Sidebar } from "../features/sidebar/Sidebar";
+import { readWorkspaceSearch } from "../schemas/workspace";
 import { useConnection } from "../stores/connection";
 
 export function HomePage() {
+  const { server, invite } = useSearch({ from: "__root__", select: readWorkspaceSearch });
   useRealtime();
   useKnownUsers();
   const { ws, user: me } = useConnection();
@@ -22,7 +26,7 @@ export function HomePage() {
         <ProfilePanel myId={me.id.toString()} onClose={() => setEditingProfile(false)} />
       )}
       <Sidebar onEditProfile={() => setEditingProfile(true)} />
-      <ChatPane />
+      {(server ?? invite) ? <ServerPanel /> : <ChatPane />}
     </div>
   );
 }

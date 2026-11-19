@@ -8,13 +8,16 @@ use protocol::Message as _;
 use protocol::v1;
 
 use super::queries as q;
-use crate::features::messages::models::Message;
+use crate::common::error::RepoError;
+use crate::common::scylla::lwt_applied;
+use crate::features::messages::models::{Message, bucket_of};
 
 pub struct ScyllaMessageRepo {
     pub(super) session: Arc<Session>,
     pub(super) claim_nonce: PreparedStatement,
     pub(super) get_nonce: PreparedStatement,
     pub(super) insert_message: PreparedStatement,
+    insert_channel_message: PreparedStatement,
     pub(super) get_message: PreparedStatement,
     pub(super) history: PreparedStatement,
     pub(super) edit_message: PreparedStatement,
@@ -53,6 +56,11 @@ impl ScyllaMessageRepo {
             claim_nonce: prepare(q::CLAIM_NONCE).await?,
             get_nonce: prepare(q::GET_NONCE).await?,
             insert_message: prepare(q::INSERT_MESSAGE).await?,
+            insert_channel_message: prepare(
+                "INSERT INTO messages (conversation_id, bucket, id, seq, author_id, content, encryption)
+                 VALUES (?, ?, ?, ?, ?, ?, ?) IF NOT EXISTS",
+            )
+            .await?,
             get_message: prepare(q::GET_MESSAGE).await?,
             history: prepare(q::HISTORY).await?,
             edit_message: prepare(q::EDIT_MESSAGE).await?,
@@ -108,4 +116,29 @@ pub(super) fn attachment_blobs(m: &Message) -> Option<Vec<Vec<u8>>> {
             })
             .collect()
     })
+}
+
+#[async_trait::async_trait]
+impl super::message_repo::ChannelMessageRepo for ScyllaMessageRepo {
+    async fn insert_channel_message(&self, message: &Message) -> Result<bool, RepoError> {
+        let rows = self
+            .session
+            .execute_unpaged(
+                &self.insert_channel_message,
+                (
+                    message.conversation_id,
+                    bucket_of(message.id),
+                    message.id,
+                    message.seq,
+                    message.author_id,
+                    &message.content,
+                    message.encryption,
+                ),
+            )
+            .await
+            .context("insert channel message")?
+            .into_rows_result()
+            .context("insert channel message")?;
+        Ok(lwt_applied(&rows).context("insert channel message")?)
+    }
 }

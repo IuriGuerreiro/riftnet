@@ -1,11 +1,12 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 
 import { useLogin, useRegister } from "../api/auth";
 import { Button, Card, ErrorText, Input } from "../components/ui";
 import { type Credentials, credentialsSchema } from "../schemas/auth";
+import { readWorkspaceSearch } from "../schemas/workspace";
 
 export function LoginPage() {
   const [mode, setMode] = useState<"login" | "register">("login");
@@ -13,11 +14,13 @@ export function LoginPage() {
   const register = useRegister();
   const action = mode === "login" ? login : register;
   const navigate = useNavigate();
+  const { invite } = useSearch({ from: "__root__", select: readWorkspaceSearch });
 
   const form = useForm<Credentials>({ resolver: zodResolver(credentialsSchema) });
   const onSubmit = form.handleSubmit((values) =>
     action.mutate(values, {
-      onSuccess: (s) => void navigate({ to: s.user.username ? "/" : "/username" }),
+      onSuccess: (s) =>
+        void navigate({ to: s.user.username ? "/" : "/username", search: { invite } }),
     }),
   );
 
