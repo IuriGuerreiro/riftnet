@@ -3,7 +3,7 @@
 Open source Discord alternative. Rust backend, Tauri + React client.
 Screen share at 60fps in source quality, a light app, no file size limits.
 
-> Name not final. Docs: [docs/README.md](docs/README.md)
+> Name not final. See the [project idea](docs/product/README.md), [feature map](docs/features/README.md), and [documentation index](docs/README.md).
 
 ## Layout
 
@@ -42,12 +42,14 @@ pnpm mock                   # ws://127.0.0.1:7101/ws
 pnpm dev                    # web UI on http://localhost:7104
 pnpm desktop                # same UI in the Tauri window
 
-# Real API (needs the docker stack below; run from the repo root)
-cargo run -p api            # http://127.0.0.1:7100: /auth/*, /me, /health, /metrics
-scripts/smoke-auth.sh       # end-to-end auth checks
-
-# Databases (Postgres, Scylla, NATS, Redis, Zitadel)
+# Dependencies for the real API (run from the repo root)
 docker compose -f infra/docker-compose.yml up -d --wait
+
+# Real API (once Zitadel writes infra/.secrets/api.pat)
+cargo run -p api            # http://127.0.0.1:7100: /auth/*, /me, /health, /metrics
+
+# In another terminal
+scripts/smoke-auth.sh       # end-to-end auth checks
 ```
 
 Zitadel console: http://localhost:7102/ui/console (first boot takes ~1 min).
@@ -97,6 +99,10 @@ The UI picks the Tailscale api URL automatically when opened via `*.ts.net`.
 1. Edit a `.proto` file in `proto/`.
 2. `pnpm gen` (TS) and `cargo build` (Rust) regenerate the types.
 3. Both sides fail to compile if they no longer match the contract.
+
+## Verify a feature
+
+Choose a journey from the [feature map](docs/features/README.md). Use the [verification skill](.agents/skills/verify-discord/SKILL.md) for the isolated auth check and evidence instructions.
 
 ## Checks (same as CI)
 

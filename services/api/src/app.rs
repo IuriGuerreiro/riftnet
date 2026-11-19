@@ -106,6 +106,14 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
         std::time::Duration::from_secs(60 * 60),
     );
 
+    let calls = Arc::new(CallService::new(
+        Arc::new(MemoryCallStore::default()),
+        conversation_repo.clone(),
+        Arc::new(NatsMediaClient::connect(&config.nats_url).await?),
+        events.clone(),
+        ids.clone(),
+    ));
+
     let state = AppState {
         attachments: attachment_service.clone(),
         auth: Arc::new(AuthService::new(
@@ -129,18 +137,13 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
             user_repo.clone(),
             events.clone(),
             ids.clone(),
+            calls.clone(),
         )),
         typing: Arc::new(TypingService::new(
             conversation_repo.clone(),
             events.clone(),
         )),
-        calls: Arc::new(CallService::new(
-            Arc::new(MemoryCallStore::default()),
-            conversation_repo.clone(),
-            Arc::new(NatsMediaClient::connect(&config.nats_url).await?),
-            events.clone(),
-            ids,
-        )),
+        calls,
         presence: Arc::new(PresenceService::new(
             presence_store,
             friend_repo.clone(),

@@ -6,8 +6,8 @@ Open source Discord alternative, written in Rust. Name not decided yet (favourit
 
 ## Start here
 
-1. [product/vision.md](product/vision.md): what we're building and why
-2. [product/mvp.md](product/mvp.md): what we build first and who does what
+1. [Project idea and MVP plan](product/README.md) explains what we want to build and why.
+2. [Feature map](features/README.md) describes what the app does today and how to check it.
 3. [architecture/overview.md](architecture/overview.md): how the pieces fit
 4. [decisions.md](decisions.md): what's decided and what's still open
 
