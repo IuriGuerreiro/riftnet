@@ -8,6 +8,7 @@ import { http } from "../api/http";
 import type { Friend, User } from "../api/types";
 import { CallBar, IncomingCall, RemoteScreen } from "../call/CallBar";
 import { Avatar } from "../components/Avatar";
+import { Markdown } from "../components/Markdown";
 import { ProfilePanel } from "../components/ProfilePanel";
 import { StatusDot } from "../components/StatusDot";
 import type { Conversation } from "../gen/v1/conversations_pb";
@@ -627,13 +628,13 @@ function MessageRow({ m, mine }: { m: ChatMessage; mine: boolean }) {
             </button>
           </div>
         )}
-        <p
+        <div
           className={`max-w-[75%] whitespace-pre-wrap break-words rounded-lg px-3 py-1.5 text-sm ${
             mine ? "bg-brand text-zinc-950" : "bg-zinc-800"
           } ${m.pending ? "opacity-50" : ""} ${m.failed ? "ring-2 ring-red-500" : ""}`}
           title={m.pending ? "sending…" : `seq ${m.seq}`}
         >
-          {m.text}
+          <Markdown text={m.text} />
           {m.attachments?.map((a) => (
             <Attachment key={a.id.toString()} a={a} mine={mine} />
           ))}
@@ -645,7 +646,7 @@ function MessageRow({ m, mine }: { m: ChatMessage; mine: boolean }) {
               (edited)
             </span>
           ) : null}
-        </p>
+        </div>
         {!mine && canReact && <ReactionPicker messageId={m.id} />}
       </div>
       {m.reactions?.length ? (
