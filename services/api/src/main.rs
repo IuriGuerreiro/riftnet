@@ -20,6 +20,11 @@ async fn main() -> anyhow::Result<()> {
     let _ = dotenvy::dotenv();
     let mut telemetry = ::common::telemetry::init("api", env!("CARGO_PKG_VERSION"));
     let config = config::Config::from_env()?;
+    if !config.rate_limits {
+        tracing::warn!(
+            "!!! RATE_LIMITS=off: ALL rate limits and the per-user socket cap are DISABLED. Load tests only, never production. !!!"
+        );
+    }
 
     let prometheus = PrometheusBuilder::new()
         .set_buckets_for_metric(
