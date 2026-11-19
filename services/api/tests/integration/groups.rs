@@ -16,6 +16,7 @@ async fn group_of_four() -> (Vec<TestUser>, Vec<Client>, v1::Conversation) {
             .request(Payload::CreateGroup(v1::CreateGroup {
                 name: "Crew".into(),
                 usernames: users[1..3].iter().map(|u| u.username.clone()).collect(),
+                nonce: String::new(),
             }))
             .await,
     );
@@ -48,6 +49,7 @@ async fn group_needs_three_to_five_people() {
         .request(Payload::CreateGroup(v1::CreateGroup {
             name: "Too small".into(),
             usernames: vec![b.username.clone()],
+            nonce: String::new(),
         }))
         .await;
     assert_eq!(error_code(&reply), "bad_group_size");
@@ -140,4 +142,34 @@ async fn rename_pushes_new_name_and_outsiders_cannot_rename() {
         .await;
     assert_eq!(error_code(&reply), "conversation_not_found");
     clients[3].no_push(conversation_update(group.id)).await;
+}
+
+#[tokio::test]
+#[ignore = "needs infra: docker compose up"]
+async fn create_retry_with_same_nonce_returns_same_group() {
+    let (a, b, c) = (seed_user().await, seed_user().await, seed_user().await);
+    let mut alice = Client::connect(&a).await;
+    let create = || {
+        Payload::CreateGroup(v1::CreateGroup {
+            name: "Retry".into(),
+            usernames: vec![b.username.clone(), c.username.clone()],
+            nonce: "group-nonce".into(),
+        })
+    };
+    let first = conversation(alice.request(create()).await);
+    let second = conversation(alice.request(create()).await);
+    assert_eq!(first.id, second.id);
+
+    let reply = alice
+        .request(Payload::ListConversations(v1::ListConversations {}))
+        .await;
+    let Payload::Conversations(list) = reply else {
+        panic!("list failed: {reply:?}");
+    };
+    let groups = list
+        .conversations
+        .iter()
+        .filter(|c| c.name == "Retry")
+        .count();
+    assert_eq!(groups, 1);
 }

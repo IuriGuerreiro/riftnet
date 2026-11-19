@@ -118,12 +118,19 @@ async fn decline_clears_request_for_both() {
 
 #[tokio::test]
 #[ignore = "needs infra: docker compose up"]
-async fn duplicate_self_and_unknown_requests_are_rejected() {
+async fn repeat_request_is_safe_and_self_or_unknown_is_rejected() {
     let http = Http::new();
     let (a, b) = (seed_user().await, seed_user().await);
+    let mut bob = Client::connect(&b).await;
 
     assert_eq!(request(&http, &a, &b).await.status(), StatusCode::OK);
-    assert_eq!(request(&http, &a, &b).await.status(), StatusCode::CONFLICT);
+    assert_eq!(bob.push(friend_update(&a)).await, FriendState::Incoming);
+    let again = request(&http, &a, &b).await;
+    assert_eq!(again.status(), StatusCode::OK);
+    let again: Value = again.json().await.expect("json");
+    assert_eq!(again["state"], "outgoing");
+    assert_eq!(ids(&list(&http, &a).await, "outgoing"), [b.id]);
+    bob.no_push(friend_update(&a)).await;
     assert!(request(&http, &a, &a).await.status().is_client_error());
 
     let res = http
