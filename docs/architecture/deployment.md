@@ -141,9 +141,66 @@ on PATH. Revert any change the build makes to `src-tauri/Cargo.toml`.
 
 ## Update / redeploy
 
-- **Server**: pull the `prod` branch, then the same `up -d --build`.
+- **API**: after the one-time setup below, merge into `prod` to run **Deploy API**.
+- **Web**: pull the `prod` branch. Run the server Compose command with `up -d --build --no-deps web`.
 - **VPS**: repeat step 4 (build image → scp → load → `--force-recreate`).
 - Changing the domain: rebuild `web` and the desktop app (URLs baked in).
+
+### Set up API deployment
+
+After CI passes on `prod`, **Deploy API** publishes the API image to GitHub
+Container Registry. The deploy job reaches the home server over Tailscale,
+pulls the image by digest, and recreates the `api` service. The job checks
+the container's health and the public `/health` endpoint.
+
+1. On the home server, install the deployment files from this checkout.
+   Set `prod_config` to the directory containing the running stack's
+   `compose.yml` and `.env`.
+
+   ```sh
+   prod_config=/path/to/running/infra/prod
+   sudo install -d -m 0755 /etc/discord2-api
+   sudo install -m 0600 "$prod_config/.env" /etc/discord2-api/.env
+   sudo install -m 0644 "$prod_config/compose.yml" infra/prod/compose.api-image.yml /etc/discord2-api/
+   sudo install -m 0755 infra/prod/deploy-api.sh /etc/discord2-api/
+   ```
+
+   Refresh the installed `.env` or Compose file when you change the API's
+   runtime configuration. The installed Compose file uses the existing
+   `discord2-prod` project name and volumes.
+
+2. Create a dedicated SSH user with `sudo useradd --system --create-home
+   --shell /bin/bash discord2-deploy`. Leave it out of the `docker` group.
+   Add the following line with `sudo visudo -f /etc/sudoers.d/discord2-api`.
+
+   ```text
+   discord2-deploy ALL=(root) NOPASSWD: /etc/discord2-api/deploy-api.sh deploy *
+   ```
+
+3. In Tailscale, add `tag:ci-api`. Give it access to port 22 on the home
+   server. Add an `accept` SSH rule from `tag:ci-api` to the home server's
+   `tag:servers` for user `discord2-deploy`. Create an OpenID Connect trust
+   credential for GitHub Actions with **Auth Keys: Write** and `tag:ci-api`.
+   Use subject `repo:IuriGuerreiro/Discord2.0:ref:refs/heads/prod` and add a
+   `workflow_ref` claim matching
+   `IuriGuerreiro/Discord2.0/.github/workflows/deploy-api.yml@refs/heads/prod`.
+   [Tailscale GitHub Action setup](https://tailscale.com/docs/integrations/github/github-action)
+
+4. In GitHub Actions repository variables, set `PROD_API_TAILSCALE_CLIENT_ID`
+   and `PROD_API_TAILSCALE_AUDIENCE` from the trust credential. Set
+   `PROD_API_DEPLOY_HOST` to the home server's Tailscale hostname or IPv4 address.
+   The workflow reuses `PROD_API_HTTP` for its public health check.
+
+### Roll back the API
+
+The deploy script saves the previous healthy image locally. Before rolling
+back, check that the previous API supports any migrations applied at startup.
+Then run the rollback command on the home server and check public health.
+
+```sh
+sudo /etc/discord2-api/deploy-api.sh rollback
+curl -fsS https://api.iuriguerreiro.dev/health
+```
 
 ## Troubleshooting
 
