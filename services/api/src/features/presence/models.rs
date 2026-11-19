@@ -5,6 +5,7 @@ pub enum Status {
     Offline,
     Online,
     Idle,
+    DoNotDisturb,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -45,6 +46,7 @@ impl From<Status> for v1::PresenceStatus {
             Status::Offline => Self::Offline,
             Status::Online => Self::Online,
             Status::Idle => Self::Idle,
+            Status::DoNotDisturb => Self::DoNotDisturb,
         }
     }
 }

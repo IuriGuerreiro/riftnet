@@ -134,7 +134,13 @@ export function FriendsPanel({ onDm }: { onDm: (username: string) => void }) {
             </FriendRow>
           ))}
           {list.friends.map((f) => (
-            <FriendRow key={f.user.id} label={name(f)} avatarId={f.user.id} userId={f.user.id}>
+            <FriendRow
+              key={f.user.id}
+              label={name(f)}
+              avatarId={f.user.id}
+              userId={f.user.id}
+              hint={profiles[f.user.id]?.customStatus ?? f.user.custom_status ?? undefined}
+            >
               <RowButton
                 onClick={() => f.user.username && onDm(f.user.username)}
                 className="text-brand"

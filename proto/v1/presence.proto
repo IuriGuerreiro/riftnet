@@ -12,6 +12,7 @@ enum PresenceStatus {
   PRESENCE_STATUS_OFFLINE = 0;
   PRESENCE_STATUS_ONLINE = 1;
   PRESENCE_STATUS_IDLE = 2;
+  PRESENCE_STATUS_DO_NOT_DISTURB = 3;
 }
 
 // Push (id 0): someone you can see changed status.

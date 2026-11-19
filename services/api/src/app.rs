@@ -35,7 +35,8 @@ use crate::features::friends::service::FriendService;
 use crate::features::messages::repository::{ScyllaMessageRepo, ScyllaReactionRepo};
 use crate::features::messages::service::MessageService;
 use crate::features::presence::service::PresenceService;
-use crate::features::presence::store::RedisPresenceStore;
+use crate::features::presence::store::{PreferencePresenceStore, RedisPresenceStore};
+use crate::features::settings::{self, SettingsRepository};
 use crate::features::typing::service::TypingService;
 use crate::features::users::repository::{PgUserRepo, UserRepo};
 use crate::features::users::service::UserService;
@@ -43,6 +44,7 @@ use crate::features::{attachments, auth, bots, friends, gateway, health, users};
 
 #[derive(Clone)]
 pub struct AppState {
+    pub settings: Arc<SettingsRepository>,
     pub bots: Arc<BotService>,
     pub attachments: Arc<AttachmentService>,
     pub auth: Arc<AuthService>,
@@ -139,7 +141,14 @@ pub async fn build(
     ));
 
     let state = AppState {
-        bots: Arc::new(BotService::new(Arc::new(PgBotRepo::new(pool)), ids.clone())),
+        settings: Arc::new(SettingsRepository::new(
+            pool.clone(),
+            conversation_repo.clone(),
+        )),
+        bots: Arc::new(BotService::new(
+            Arc::new(PgBotRepo::new(pool.clone())),
+            ids.clone(),
+        )),
         attachments: attachment_service.clone(),
         auth: Arc::new(AuthService::new(
             identity,
@@ -172,7 +181,7 @@ pub async fn build(
         )),
         calls,
         presence: Arc::new(PresenceService::new(
-            presence_store,
+            Arc::new(PreferencePresenceStore::new(presence_store, pool.clone())),
             friend_repo.clone(),
             conversation_repo.clone(),
             events.clone(),
@@ -222,6 +231,7 @@ pub async fn build(
         .merge(auth::routes())
         .merge(bots::routes())
         .merge(users::routes())
+        .merge(settings::routes())
         .merge(friends::routes())
         .merge(attachments::routes())
         .merge(gateway::routes())

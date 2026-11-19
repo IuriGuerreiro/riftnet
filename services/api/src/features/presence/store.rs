@@ -280,3 +280,64 @@ mod redis_tests {
         store.apply(user, 4, Op::Drop).await.unwrap();
     }
 }
+
+pub struct PreferencePresenceStore {
+    inner: std::sync::Arc<dyn PresenceStore>,
+    pool: sqlx::PgPool,
+}
+
+impl PreferencePresenceStore {
+    pub fn new(inner: std::sync::Arc<dyn PresenceStore>, pool: sqlx::PgPool) -> Self {
+        Self { inner, pool }
+    }
+}
+
+fn preferred_status(status: Status, preference: &str) -> Status {
+    if status == Status::Offline {
+        return Status::Offline;
+    }
+    match preference {
+        "invisible" => Status::Offline,
+        "idle" => Status::Idle,
+        "do_not_disturb" => Status::DoNotDisturb,
+        _ => status,
+    }
+}
+
+#[async_trait]
+impl PresenceStore for PreferencePresenceStore {
+    async fn apply(&self, user_id: i64, connection_id: u64, op: Op) -> anyhow::Result<Change> {
+        let preference: String =
+            sqlx::query_scalar("SELECT presence_preference FROM users WHERE id = $1")
+                .bind(user_id)
+                .fetch_one(&self.pool)
+                .await?;
+        let change = self.inner.apply(user_id, connection_id, op).await?;
+        Ok(Change {
+            before: preferred_status(change.before, &preference),
+            after: preferred_status(change.after, &preference),
+        })
+    }
+
+    async fn statuses(&self, user_ids: &[i64]) -> anyhow::Result<Vec<Status>> {
+        let preferences: Vec<(i64, String)> =
+            sqlx::query_as("SELECT id, presence_preference FROM users WHERE id = ANY($1)")
+                .bind(user_ids)
+                .fetch_all(&self.pool)
+                .await?;
+        let preferences: HashMap<_, _> = preferences.into_iter().collect();
+        Ok(self
+            .inner
+            .statuses(user_ids)
+            .await?
+            .into_iter()
+            .zip(user_ids)
+            .map(|(status, id)| {
+                preferred_status(
+                    status,
+                    preferences.get(id).map_or("invisible", String::as_str),
+                )
+            })
+            .collect())
+    }
+}

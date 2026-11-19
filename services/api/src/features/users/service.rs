@@ -29,6 +29,7 @@ const AVATARS_IN_FLIGHT: usize = 2;
 pub struct ProfileChanges {
     pub display_name: Option<String>,
     pub bio: Option<String>,
+    pub custom_status: Option<String>,
 }
 
 pub struct UserService {
@@ -95,12 +96,18 @@ impl UserService {
             .map(|raw| clean_text(raw, MAX_BIO_CHARS, true, "invalid_bio"))
             .transpose()?;
 
+        let custom_status = changes
+            .custom_status
+            .as_deref()
+            .map(|raw| clean_text(raw, 128, false, "invalid_custom_status"))
+            .transpose()?;
         let user = self
             .repo
             .set_profile(
                 me,
                 display_name.as_ref().map(Option::as_deref),
                 bio.as_ref().map(Option::as_deref),
+                custom_status.as_ref().map(Option::as_deref),
             )
             .await?
             .ok_or(ApiError::NotFound)?;
@@ -409,6 +416,7 @@ mod tests {
             id: i64,
             display_name: Option<Option<&str>>,
             bio: Option<Option<&str>>,
+            custom_status: Option<Option<&str>>,
         ) -> Result<Option<User>, RepoError> {
             let mut users = self.0.lock().unwrap();
             Ok(users.get_mut(&id).map(|u| {
@@ -417,6 +425,9 @@ mod tests {
                 }
                 if let Some(v) = bio {
                     u.bio = v.map(String::from);
+                }
+                if let Some(v) = custom_status {
+                    u.custom_status = v.map(String::from);
                 }
                 u.clone()
             }))
@@ -584,6 +595,7 @@ mod tests {
             username: Some(format!("u{id}")),
             display_name: None,
             bio: None,
+            custom_status: None,
             avatar_hash: None,
             created_at: Utc::now(),
         }
@@ -668,6 +680,7 @@ mod tests {
         let changes = |name: Option<&str>, bio: Option<&str>| ProfileChanges {
             display_name: name.map(String::from),
             bio: bio.map(String::from),
+            custom_status: None,
         };
         t.svc
             .update_profile(ANA, changes(Some("Ana"), None))
@@ -696,6 +709,7 @@ mod tests {
                 ProfileChanges {
                     display_name: Some("  Ana B  ".into()),
                     bio: Some("hi\nthere".into()),
+                    custom_status: None,
                 },
             )
             .await
@@ -720,6 +734,7 @@ mod tests {
                 ProfileChanges {
                     display_name: None,
                     bio: Some("".into()),
+                    custom_status: None,
                 },
             )
             .await
@@ -735,18 +750,22 @@ mod tests {
             ProfileChanges {
                 display_name: Some("a".repeat(33)),
                 bio: None,
+                custom_status: None,
             },
             ProfileChanges {
                 display_name: Some("two\nlines".into()),
                 bio: None,
+                custom_status: None,
             },
             ProfileChanges {
                 display_name: None,
                 bio: Some("b".repeat(191)),
+                custom_status: None,
             },
             ProfileChanges {
                 display_name: None,
                 bio: Some("bell\u{7}".into()),
+                custom_status: None,
             },
         ] {
             assert!(t.svc.update_profile(ANA, changes).await.is_err());

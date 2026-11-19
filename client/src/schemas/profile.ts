@@ -17,6 +17,12 @@ export const profileSchema = z.object({
     .trim()
     .max(MAX_DISPLAY_NAME, `At most ${MAX_DISPLAY_NAME} characters`)
     .refine((s) => !controlChars.test(s), "No special control characters"),
+  custom_status: z
+    .string()
+    .trim()
+    .max(128, "At most 128 characters")
+    .refine((s) => !controlChars.test(s), "No special control characters")
+    .optional(),
   bio: z
     .string()
     .trim()

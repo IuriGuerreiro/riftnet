@@ -8,6 +8,17 @@ describe("profileSchema", () => {
     expect(r).toEqual({ display_name: "Ana B", bio: "hi\nthere" });
   });
 
+  it("validates and trims custom status", () => {
+    const base = { display_name: "", bio: "" };
+    expect(profileSchema.parse({ ...base, custom_status: "  Building  " }).custom_status).toBe(
+      "Building",
+    );
+    expect(profileSchema.safeParse({ ...base, custom_status: "" }).success).toBe(true);
+    for (const custom_status of ["x".repeat(129), "two\nlines", "bell\u0007"]) {
+      expect(profileSchema.safeParse({ ...base, custom_status }).success).toBe(false);
+    }
+  });
+
   it("allows empty (clears the field)", () => {
     expect(profileSchema.safeParse({ display_name: "", bio: "" }).success).toBe(true);
   });

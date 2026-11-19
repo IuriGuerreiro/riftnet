@@ -358,6 +358,7 @@ mod tests {
             _: i64,
             _: Option<Option<&str>>,
             _: Option<Option<&str>>,
+            _: Option<Option<&str>>,
         ) -> Result<Option<User>, RepoError> {
             unimplemented!()
         }
@@ -401,6 +402,7 @@ mod tests {
             username: Some(name.into()),
             display_name: None,
             bio: None,
+            custom_status: None,
             avatar_hash: None,
             created_at: Utc::now(),
         }

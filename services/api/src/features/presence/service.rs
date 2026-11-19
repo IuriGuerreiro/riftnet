@@ -84,6 +84,24 @@ impl PresenceService {
         Ok(ids.into_iter().zip(statuses).collect())
     }
 
+    pub async fn preference_changed(&self, user_id: i64) {
+        match self.store.statuses(&[user_id]).await {
+            Ok(statuses) => {
+                if let Some(&status) = statuses.first() {
+                    self.announce(
+                        user_id,
+                        Change {
+                            before: status,
+                            after: status,
+                        },
+                    )
+                    .await;
+                }
+            }
+            Err(err) => tracing::warn!(error = %err, "presence preference push failed"),
+        }
+    }
+
     async fn apply(&self, user_id: i64, connection_id: u64, op: Op) {
         match self.store.apply(user_id, connection_id, op).await {
             Ok(change) if change.changed() => self.announce(user_id, change).await,

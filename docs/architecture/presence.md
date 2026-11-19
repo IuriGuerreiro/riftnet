@@ -1,6 +1,8 @@
 # Presence
 
-Who is online. Three states: **online**, **idle**, **offline**.
+Who is online. Visible states: **online**, **idle**, **do not disturb**, **offline**.
+
+Saved [presence preferences](user-settings.md) override socket activity while connected. Invisible appears offline. With no live socket, every preference appears offline.
 
 ## Rules
 
