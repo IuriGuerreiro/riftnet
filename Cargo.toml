@@ -7,6 +7,7 @@ members = [
     "libs/common",
     "libs/protocol",
     "client/src-tauri",
+    "tools/loadtest",
 ]
 
 [workspace.package]

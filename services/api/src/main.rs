@@ -1,16 +1,12 @@
-mod app;
-mod common;
-mod config;
-mod features;
-
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
 use metrics_exporter_prometheus::{Matcher, PrometheusBuilder};
 
-use crate::common::middleware::http_metrics;
-use crate::common::shutdown::Shutdown;
+use api::common::middleware::http_metrics;
+use api::common::shutdown::Shutdown;
+use api::{app, config};
 
 const DRAIN_LIMIT: Duration = Duration::from_secs(10);
 

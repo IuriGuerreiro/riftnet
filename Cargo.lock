@@ -123,6 +123,7 @@ dependencies = [
  "sqlx",
  "thiserror 2.0.21",
  "tokio",
+ "tokio-tungstenite",
  "tower-http",
  "tracing",
 ]
@@ -3182,6 +3183,22 @@ name = "litemap"
 version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "47d9d19d1d6efa0109d2f65ff4c85cddd50bd572e5a00127ab10987290bcefae"
+
+[[package]]
+name = "loadtest"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "api",
+ "chrono",
+ "futures",
+ "protocol",
+ "rand 0.8.8",
+ "scylla",
+ "sqlx",
+ "tokio",
+ "tokio-tungstenite",
+]
 
 [[package]]
 name = "lock_api"

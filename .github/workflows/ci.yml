@@ -29,6 +29,30 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
 
+  integration:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Start Postgres, Scylla, NATS, Redis, MinIO
+        run: docker compose -f infra/docker-compose.yml up -d postgres scylla nats redis minio
+      - name: Wait for Postgres and Scylla
+        run: |
+          for i in $(seq 1 90); do
+            docker compose -f infra/docker-compose.yml exec -T postgres pg_isready -U app >/dev/null 2>&1 \
+              && docker compose -f infra/docker-compose.yml exec -T scylla cqlsh -e 'SELECT now() FROM system.local' >/dev/null 2>&1 \
+              && exit 0
+            sleep 2
+          done
+          docker compose -f infra/docker-compose.yml logs scylla | tail -50
+          exit 1
+      - name: Integration tests
+        run: cargo test -p api --test integration -- --ignored
+      - name: Service logs on failure
+        if: failure()
+        run: docker compose -f infra/docker-compose.yml logs --tail 100 postgres scylla nats
+
   client:
     runs-on: ubuntu-24.04
     steps:
