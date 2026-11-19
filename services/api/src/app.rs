@@ -29,13 +29,15 @@ use crate::features::messages::repository::ScyllaMessageRepo;
 use crate::features::messages::service::MessageService;
 use crate::features::presence::service::PresenceService;
 use crate::features::presence::store::RedisPresenceStore;
+use crate::features::servers::ServerService;
 use crate::features::typing::service::TypingService;
 use crate::features::users::repository::{PgUserRepo, UserRepo};
 use crate::features::users::service::UserService;
-use crate::features::{attachments, auth, friends, gateway, health, users};
+use crate::features::{attachments, auth, friends, gateway, health, servers, users};
 
 #[derive(Clone)]
 pub struct AppState {
+    pub servers: Arc<ServerService>,
     pub attachments: Arc<AttachmentService>,
     pub auth: Arc<AuthService>,
     pub users: Arc<UserService>,
@@ -106,6 +108,7 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
     );
 
     let state = AppState {
+        servers: Arc::new(ServerService::new(pool, ids.clone())),
         attachments: attachment_service.clone(),
         auth: Arc::new(AuthService::new(
             identity,
@@ -187,6 +190,7 @@ pub async fn build(config: &Config, prometheus: PrometheusHandle) -> anyhow::Res
         .merge(auth::routes())
         .merge(users::routes())
         .merge(friends::routes())
+        .merge(servers::routes())
         .merge(attachments::routes())
         .merge(gateway::routes())
         .layer(middleware::from_fn(http_metrics::track))
