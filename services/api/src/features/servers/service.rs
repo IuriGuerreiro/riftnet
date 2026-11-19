@@ -3,9 +3,9 @@ use common::snowflake::Snowflake;
 use rand::{RngCore, rngs::OsRng};
 use std::sync::Arc;
 
-use super::models::{CreatedServer, Server, ServerMembership};
+use super::models::{ChannelWrite, CreatedServer, Server, ServerMember, ServerMembership};
 use super::repository::ServerRepo;
-use crate::common::error::ApiError;
+use crate::common::error::{ApiError, RepoError};
 
 const DEFAULT_CHANNEL_NAME: &str = "general";
 
@@ -42,6 +42,54 @@ impl ServerService {
             },
         })
     }
+    pub async fn create_channel(
+        &self,
+        user_id: i64,
+        server_id: i64,
+        name: &str,
+    ) -> Result<Server, ApiError> {
+        let name = channel_name(name)?;
+        match self
+            .repo
+            .create_channel(user_id, server_id, self.ids.next_id() as i64, name)
+            .await
+            .map_err(channel_error)?
+        {
+            ChannelWrite::Saved(channel) => Ok(channel),
+            ChannelWrite::NotFound => Err(ApiError::NotFound),
+            ChannelWrite::LimitReached => Err(ApiError::conflict(
+                "channel_limit",
+                "A server can have up to 100 text channels",
+            )),
+        }
+    }
+    pub async fn rename_channel(
+        &self,
+        user_id: i64,
+        server_id: i64,
+        channel_id: i64,
+        name: &str,
+    ) -> Result<Server, ApiError> {
+        self.repo
+            .rename_channel(user_id, server_id, channel_id, channel_name(name)?)
+            .await
+            .map_err(channel_error)?
+            .ok_or(ApiError::NotFound)
+    }
+    pub async fn list_members(
+        &self,
+        user_id: i64,
+        server_id: i64,
+        after_id: i64,
+    ) -> Result<Vec<ServerMember>, ApiError> {
+        if after_id < 0 {
+            return Err(ApiError::bad_request("bad_cursor", "Invalid member cursor"));
+        }
+        self.repo
+            .list_members(user_id, server_id, after_id)
+            .await?
+            .ok_or(ApiError::NotFound)
+    }
     pub async fn list(&self, user_id: i64) -> Result<Vec<ServerMembership>, ApiError> {
         Ok(self.repo.list(user_id).await?)
     }
@@ -74,5 +122,26 @@ impl ServerService {
         self.repo.join(user_id, token).await?.ok_or_else(|| {
             ApiError::bad_request("invalid_invite", "This invite link is invalid or revoked")
         })
+    }
+}
+
+fn channel_name(name: &str) -> Result<&str, ApiError> {
+    let name = name.trim();
+    if !(1..=100).contains(&name.chars().count()) || name.contains('\0') {
+        return Err(ApiError::bad_request(
+            "invalid_channel_name",
+            "Channel name must be 1 to 100 characters and contain no null characters",
+        ));
+    }
+    Ok(name)
+}
+
+fn channel_error(error: RepoError) -> ApiError {
+    match error {
+        RepoError::Conflict => ApiError::conflict(
+            "channel_name_taken",
+            "A channel with that name already exists",
+        ),
+        other => other.into(),
     }
 }

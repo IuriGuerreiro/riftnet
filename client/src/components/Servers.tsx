@@ -14,6 +14,7 @@ import { platform } from "../platform";
 import { readWorkspaceSearch } from "../schemas/workspace";
 import { useAuth } from "../stores/auth";
 import { ChannelChat } from "./ChannelChat";
+import { ChannelControls, ServerMembers } from "./ServerManagement";
 import { Button, ErrorText, Input } from "./ui";
 
 function useMyServers() {
@@ -191,8 +192,14 @@ function ServerWorkspace({ serverId }: { serverId: string }) {
             ))}
           </select>
         )}
-        {server?.is_owner && <InviteControls serverId={serverId} />}
+        {server?.is_owner && (
+          <>
+            <ChannelControls serverId={serverId} selected={selected} />
+            <InviteControls serverId={serverId} />
+          </>
+        )}
       </header>
+      {channels.isSuccess && <ServerMembers serverId={serverId} />}
       {selected && !channels.isError ? (
         <ChannelChat key={selected.id} channelId={selected.id} name={selected.name} />
       ) : (

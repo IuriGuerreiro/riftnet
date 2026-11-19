@@ -1,5 +1,6 @@
 use super::dto::{
-    CreateServer, CreatedServerDto, JoinServer, NamedResource, ServerInvite, ServerSummaryDto,
+    ChannelNameBody, CreateServer, CreatedServerDto, JoinServer, MembersPage, MembersQuery,
+    NamedResource, ServerInvite, ServerSummaryDto,
 };
 use crate::{
     app::AppState,
@@ -7,7 +8,7 @@ use crate::{
 };
 use axum::{
     Json,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
 };
 use std::time::Duration;
@@ -88,5 +89,61 @@ pub async fn join(
     )?;
     Ok(Json(
         state.servers.join(auth.user_id, &body.token).await?.into(),
+    ))
+}
+
+pub async fn create_channel(
+    auth: AuthUser,
+    State(state): State<AppState>,
+    Path(server_id): Path<i64>,
+    Json(body): Json<ChannelNameBody>,
+) -> Result<(StatusCode, Json<NamedResource>), ApiError> {
+    state.limiter.check(
+        &format!("channel_create:user:{}", auth.user_id),
+        30,
+        Duration::from_secs(60),
+    )?;
+    Ok((
+        StatusCode::CREATED,
+        Json(
+            state
+                .servers
+                .create_channel(auth.user_id, server_id, &body.name)
+                .await?
+                .into(),
+        ),
+    ))
+}
+pub async fn rename_channel(
+    auth: AuthUser,
+    State(state): State<AppState>,
+    Path((server_id, channel_id)): Path<(i64, i64)>,
+    Json(body): Json<ChannelNameBody>,
+) -> Result<Json<NamedResource>, ApiError> {
+    state.limiter.check(
+        &format!("channel_rename:user:{}", auth.user_id),
+        30,
+        Duration::from_secs(60),
+    )?;
+    Ok(Json(
+        state
+            .servers
+            .rename_channel(auth.user_id, server_id, channel_id, &body.name)
+            .await?
+            .into(),
+    ))
+}
+pub async fn list_members(
+    auth: AuthUser,
+    State(state): State<AppState>,
+    Path(server_id): Path<i64>,
+    Query(query): Query<MembersQuery>,
+) -> Result<Json<MembersPage>, ApiError> {
+    Ok(Json(
+        state
+            .servers
+            .list_members(auth.user_id, server_id, query.after_id)
+            .await?
+            .into(),
     ))
 }

@@ -32,3 +32,32 @@ export async function joinServer(token: string) {
     await http<unknown>("/servers/join", { method: "POST", body: { token } }),
   );
 }
+
+export async function createChannel(serverId: string, name: string) {
+  return namedResource.parse(
+    await http<unknown>(`/servers/${serverId}/channels`, {
+      method: "POST",
+      body: { name },
+    }),
+  );
+}
+
+export async function renameChannel(serverId: string, channelId: string, name: string) {
+  return namedResource.parse(
+    await http<unknown>(`/servers/${serverId}/channels/${channelId}`, {
+      method: "PATCH",
+      body: { name },
+    }),
+  );
+}
+
+const membersPage = z.object({
+  members: z.array(namedResource.extend({ is_owner: z.boolean() })),
+  next_after_id: z.string().nullable(),
+});
+
+export async function listServerMembers(serverId: string, afterId: string) {
+  return membersPage.parse(
+    await http<unknown>(`/servers/${serverId}/members?after_id=${encodeURIComponent(afterId)}`),
+  );
+}
