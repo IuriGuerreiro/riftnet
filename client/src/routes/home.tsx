@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 
 import { downloadFile, formatSize, previewUrl, uploadFile } from "../api/attachments";
@@ -9,9 +9,11 @@ import type { Friend, User } from "../api/types";
 import { CallBar, IncomingCall, RemoteScreen } from "../call/CallBar";
 import { Avatar } from "../components/Avatar";
 import { ProfilePanel } from "../components/ProfilePanel";
+import { ServerNavigation, ServerPanel } from "../components/Servers";
 import { StatusDot } from "../components/StatusDot";
 import type { Conversation } from "../gen/v1/conversations_pb";
 import type { Attachment as AttachmentInfo } from "../gen/v1/messages_pb";
+import { readWorkspaceSearch } from "../schemas/workspace";
 import { useAuth } from "../stores/auth";
 import { useCalls } from "../stores/calls";
 import { type ChatMessage, isGroup, useChat } from "../stores/chat";
@@ -25,6 +27,7 @@ const dot = { online: "bg-green-500", connecting: "bg-yellow-500", offline: "bg-
 
 export function HomePage() {
   const logout = useLogout();
+  const { server, invite } = useSearch({ from: "__root__", select: readWorkspaceSearch });
   const navigate = useNavigate();
   const { status, error: connError, ws, user: me, connect, disconnect } = useConnection();
   const chat = useChat();
@@ -105,29 +108,32 @@ export function HomePage() {
           </p>
         </header>
 
-        <NewDm disabled={!ws} onOpen={(username) => ws && chat.openDm(ws, username)} />
-        <NewGroup
-          disabled={!ws}
-          onCreate={(name, usernames) => ws && chat.createGroup(ws, name, usernames)}
-        />
-        <FriendsPanel onDm={(username) => ws && chat.openDm(ws, username)} />
+        <ServerNavigation />
+        <div hidden={Boolean(server ?? invite)} className="min-h-0 flex-1 flex-col not-hidden:flex">
+          <NewDm disabled={!ws} onOpen={(username) => ws && chat.openDm(ws, username)} />
+          <NewGroup
+            disabled={!ws}
+            onCreate={(name, usernames) => ws && chat.createGroup(ws, name, usernames)}
+          />
+          <FriendsPanel onDm={(username) => ws && chat.openDm(ws, username)} />
 
-        <nav className="flex-1 overflow-y-auto">
-          {chat.conversations.map((c) => (
-            <button
-              key={c.id.toString()}
-              onClick={() => ws && chat.select(ws, c.id)}
-              className={`flex w-full items-center gap-2 px-4 py-2 text-left text-sm hover:bg-zinc-800 ${c.id === chat.selected ? "bg-zinc-800 text-brand" : ""}`}
-            >
-              {!isGroup(c) && <Avatar userId={other(c)?.id} size="xs" />}
-              {!isGroup(c) && <StatusDot userId={other(c)?.id} />}
-              <span className="truncate">{title(c)}</span>
-            </button>
-          ))}
-          {chat.conversations.length === 0 && (
-            <p className="p-4 text-xs text-zinc-500">No conversations yet.</p>
-          )}
-        </nav>
+          <nav className="flex-1 overflow-y-auto">
+            {chat.conversations.map((c) => (
+              <button
+                key={c.id.toString()}
+                onClick={() => ws && chat.select(ws, c.id)}
+                className={`flex w-full items-center gap-2 px-4 py-2 text-left text-sm hover:bg-zinc-800 ${c.id === chat.selected ? "bg-zinc-800 text-brand" : ""}`}
+              >
+                {!isGroup(c) && <Avatar userId={other(c)?.id} size="xs" />}
+                {!isGroup(c) && <StatusDot userId={other(c)?.id} />}
+                <span className="truncate">{title(c)}</span>
+              </button>
+            ))}
+            {chat.conversations.length === 0 && (
+              <p className="p-4 text-xs text-zinc-500">No conversations yet.</p>
+            )}
+          </nav>
+        </div>
 
         <button
           className="border-t border-zinc-800 p-3 text-sm text-zinc-400 hover:text-zinc-100"
@@ -141,42 +147,46 @@ export function HomePage() {
       </aside>
 
       {}
-      <section className="flex min-w-0 flex-1 flex-col">
-        {selected ? (
-          <>
-            {isGroup(selected) ? (
-              <GroupHeader
-                group={selected}
-                onAdd={(username) => ws && chat.addMember(ws, username)}
-                onRename={(name) => ws && chat.renameGroup(ws, name)}
-                onLeave={() => ws && chat.leaveGroup(ws)}
+      {(server ?? invite) ? (
+        <ServerPanel />
+      ) : (
+        <section className="flex min-w-0 flex-1 flex-col">
+          {selected ? (
+            <>
+              {isGroup(selected) ? (
+                <GroupHeader
+                  group={selected}
+                  onAdd={(username) => ws && chat.addMember(ws, username)}
+                  onRename={(name) => ws && chat.renameGroup(ws, name)}
+                  onLeave={() => ws && chat.leaveGroup(ws)}
+                />
+              ) : (
+                <header className="flex items-center justify-between border-b border-zinc-800 p-4 font-semibold">
+                  <span className="flex items-center gap-2">
+                    <Avatar userId={other(selected)?.id} />
+                    <StatusDot userId={other(selected)?.id} />
+                    {title(selected)}
+                  </span>
+                  <CallBar ws={ws} conversationId={selected.id} />
+                </header>
+              )}
+              <Messages conversationId={selected.id} myId={me?.id} />
+              <TypingIndicator conversation={selected} />
+              <Composer
+                conversationId={selected.id}
+                disabled={!ws}
+                onType={() => ws && useTyping.getState().typed(ws, selected.id)}
+                onSend={(text, ids) => ws && me && chat.send(ws, me.id, text, ids)}
               />
-            ) : (
-              <header className="flex items-center justify-between border-b border-zinc-800 p-4 font-semibold">
-                <span className="flex items-center gap-2">
-                  <Avatar userId={other(selected)?.id} />
-                  <StatusDot userId={other(selected)?.id} />
-                  {title(selected)}
-                </span>
-                <CallBar ws={ws} conversationId={selected.id} />
-              </header>
-            )}
-            <Messages conversationId={selected.id} myId={me?.id} />
-            <TypingIndicator conversation={selected} />
-            <Composer
-              conversationId={selected.id}
-              disabled={!ws}
-              onType={() => ws && useTyping.getState().typed(ws, selected.id)}
-              onSend={(text, ids) => ws && me && chat.send(ws, me.id, text, ids)}
-            />
-          </>
-        ) : (
-          <p className="m-auto text-sm text-zinc-500">
-            Pick a conversation, or start a DM or a group.
-          </p>
-        )}
-        {chat.error && <p className="px-4 pb-2 text-xs text-red-400">{chat.error}</p>}
-      </section>
+            </>
+          ) : (
+            <p className="m-auto text-sm text-zinc-500">
+              Pick a conversation, or start a DM or a group.
+            </p>
+          )}
+          {chat.error && <p className="px-4 pb-2 text-xs text-red-400">{chat.error}</p>}
+        </section>
+      )}
     </div>
   );
 }
