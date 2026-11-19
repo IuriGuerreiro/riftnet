@@ -12,12 +12,14 @@ services/api/src/
 │   ├── error.rs         ApiError → JSON { code, message }; RepoError
 │   ├── db.rs            Postgres pool + migrations
 │   ├── redis.rs         Redis connection (presence, caches later)
+│   ├── user_limits.rs   per-user rate limits + sockets-per-user cap, in Redis
+│   ├── shutdown.rs      graceful shutdown: stop signal + live socket count
 │   └── middleware/
 │       ├── auth.rs      AuthUser extractor (Bearer access token)
 │       └── rate_limit.rs
 └── features/
     ├── auth/            register, login, refresh, logout
-    ├── users/           /me, /me/username, /users/search
+    ├── users/           /me, profile + avatar, /users/{id}, /users/search (see profiles.md)
     ├── friends/         /friends: requests, accept, remove (see friends.md)
     ├── presence/        online / idle / offline, Redis (see presence.md)
     ├── health/          /health, /metrics
@@ -64,3 +66,14 @@ flowchart LR
 2. Add a migration in `services/api/migrations/` if it needs tables.
 3. Expose `routes()` and merge it in `app.rs`.
 4. Unit-test the service with fake repos; add checks to a `scripts/smoke-*.sh`.
+
+## Shutdown and limits
+
+- **Graceful shutdown** (`main.rs`, `common/shutdown.rs`). On SIGTERM or Ctrl-C:
+  1. `axum::serve` stops accepting and lets in-flight HTTP requests finish.
+  2. `Shutdown::trigger()` signals active gateway sessions through a Tokio `watch` channel. They send close code 1012 so clients reconnect.
+  3. Axum does not track upgraded sockets. Each socket holds a `SocketGuard` that lowers the live count when dropped. After HTTP drains, `main` waits up to 10s for the count to reach zero.
+- **Body size.** Axum body extractors such as `Json` enforce a 1 MiB default. Upload handlers read the raw body with their own caps. Whole attachments are capped by `ATTACHMENT_MAX_BYTES`.
+- **Rate limits.**
+  - `middleware/rate_limit.rs` keeps per-instance limits in memory and keys them by IP or user.
+  - `user_limits.rs` shares per-user limits across instances. A Redis Lua script updates each counter and its expiry atomically. When a limit is reached, HTTP returns `429` with `Retry-After` and WebSockets return `retry_after_ms`. See [protocol.md](protocol.md#rate-limits).

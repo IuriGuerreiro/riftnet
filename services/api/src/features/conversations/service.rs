@@ -13,6 +13,7 @@ use super::models::{
 use super::repository::{ConversationRepo, ReadStateRepo, UnreadCounter};
 use crate::common::error::ApiError;
 use crate::common::events::EventBus;
+use crate::features::calls::service::CallService;
 use crate::features::users::models::User;
 use crate::features::users::repository::UserRepo;
 use crate::features::users::service::normalize_username;
@@ -26,6 +27,7 @@ pub struct ConversationService {
     users: Arc<dyn UserRepo>,
     events: Arc<dyn EventBus>,
     ids: Arc<Snowflake>,
+    calls: Arc<CallService>,
 }
 
 impl ConversationService {
@@ -36,6 +38,7 @@ impl ConversationService {
         users: Arc<dyn UserRepo>,
         events: Arc<dyn EventBus>,
         ids: Arc<Snowflake>,
+        calls: Arc<CallService>,
     ) -> Self {
         Self {
             repo,
@@ -44,6 +47,7 @@ impl ConversationService {
             users,
             events,
             ids,
+            calls,
         }
     }
 
@@ -259,11 +263,19 @@ impl ConversationService {
                 .filter(|id| *id != me)
                 .collect();
 
-            if self
+            let changed = self
                 .repo
                 .set_members(conversation_id, &group.member_ids, &new_members)
-                .await?
-            {
+                .await;
+            let left = match &changed {
+                Ok(applied) => *applied,
+                Err(_) => matches!(self.repo.get(conversation_id).await,
+                    Ok(current) if current.as_ref().is_none_or(|c| !c.member_ids.contains(&me))),
+            };
+            if left {
+                self.calls.member_left(conversation_id, me).await;
+            }
+            if changed? {
                 let notify = group.member_ids.clone();
                 let group = ConversationRecord {
                     member_ids: new_members,
@@ -549,6 +561,33 @@ mod tests {
         async fn set_username(&self, _: i64, _: &str) -> Result<Option<User>, RepoError> {
             unimplemented!()
         }
+        async fn set_profile(
+            &self,
+            _: i64,
+            _: Option<Option<&str>>,
+            _: Option<Option<&str>>,
+        ) -> Result<Option<User>, RepoError> {
+            unimplemented!()
+        }
+        async fn set_avatar(
+            &self,
+            _: i64,
+            _: Option<&[u8]>,
+        ) -> Result<Option<(User, Option<Vec<u8>>)>, RepoError> {
+            unimplemented!()
+        }
+    }
+
+    struct NoMedia;
+
+    #[async_trait]
+    impl crate::features::calls::media::MediaClient for NoMedia {
+        async fn join(&self, _: i64, _: String) -> anyhow::Result<(u64, String)> {
+            unimplemented!()
+        }
+        async fn leave(&self, _: u64) -> anyhow::Result<()> {
+            Ok(())
+        }
     }
 
     #[derive(Default)]
@@ -579,6 +618,8 @@ mod tests {
             zitadel_id: format!("z{id}"),
             username: Some(name.into()),
             display_name: None,
+            bio: None,
+            avatar_hash: None,
             created_at: Utc::now(),
         }
     }
@@ -599,6 +640,13 @@ mod tests {
             Arc::new(FakeUsers),
             events.clone(),
             Arc::new(Snowflake::new(1)),
+            Arc::new(crate::features::calls::service::CallService::new(
+                Arc::new(crate::features::calls::store::MemoryCallStore::default()),
+                repo.clone(),
+                Arc::new(NoMedia),
+                events.clone(),
+                Arc::new(Snowflake::new(1)),
+            )),
         );
         Setup {
             service,

@@ -58,8 +58,20 @@ impl CallService {
         };
         let call = match self.store.insert_if_none(call).await {
             Ok(new) => new,
-            Err(existing) => return Ok(existing),
+            Err(existing) => return self.member_call(me, existing.id).await,
         };
+
+        let current = self.conversations.get(conversation_id).await;
+        if !matches!(&current, Ok(Some(group)) if group.member_ids == call.member_ids) {
+            self.end(call.id, EndReason::Hangup).await;
+            return Err(current.err().map_or_else(not_found, Into::into));
+        }
+        let call = self
+            .store
+            .get(call.id)
+            .await
+            .filter(|call| call.member_ids.contains(&me))
+            .ok_or_else(not_found)?;
 
         let others: Vec<i64> = call
             .member_ids
@@ -91,8 +103,16 @@ impl CallService {
         self.member_call(me, call_id).await?;
         let call = self
             .store
-            .update(call_id, Box::new(|c| c.state = CallState::Active))
+            .update(
+                call_id,
+                Box::new(move |c| {
+                    if c.member_ids.contains(&me) {
+                        c.state = CallState::Active;
+                    }
+                }),
+            )
             .await
+            .filter(|c| c.member_ids.contains(&me))
             .ok_or_else(not_found)?;
         self.push_updated(&call).await;
         Ok(call)
@@ -102,8 +122,12 @@ impl CallService {
     pub async fn decline(&self, me: i64, call_id: i64) -> Result<Call, ApiError> {
         let call = self.member_call(me, call_id).await?;
         if call.caller_id != me {
-            self.end_if(call_id, EndReason::Declined, Box::new(still_ringing))
-                .await;
+            self.end_if(
+                call_id,
+                EndReason::Declined,
+                Box::new(move |c| still_ringing(c) && c.member_ids.contains(&me)),
+            )
+            .await;
         }
         Ok(call)
     }
@@ -206,6 +230,34 @@ impl CallService {
         }
     }
 
+    pub async fn member_left(&self, conversation_id: i64, user_id: i64) {
+        let Some((call, participant)) = self.store.withdraw_member(conversation_id, user_id).await
+        else {
+            return;
+        };
+        let removed_participant = participant.is_some();
+        if let Some(participant) = participant
+            && let Err(error) = self.media.leave(participant.peer_id).await
+        {
+            tracing::warn!(%error, peer_id = participant.peer_id, "call peer removal failed");
+        }
+
+        self.push_ended(&call, &[user_id], EndReason::Hangup).await;
+        self.end_if(
+            call.id,
+            EndReason::Hangup,
+            Box::new(move |c| {
+                c.member_ids.len() < 2
+                    || (still_ringing(c) && !c.member_ids.contains(&c.caller_id))
+                    || (removed_participant
+                        && c.state == CallState::Active
+                        && c.participants.len() < 2)
+            }),
+        )
+        .await;
+        self.push_updated(&call).await;
+    }
+
     async fn remove_connection(&self, call_id: i64, connection_id: u64) -> Option<Call> {
         let (tx, rx) = std::sync::mpsc::channel();
         let call = self
@@ -249,25 +301,39 @@ impl CallService {
             let _ = self.media.leave(p.peer_id).await;
         }
         tracing::info!(call.id = call_id, ?reason, "call ended");
+        self.push_ended(&call, &call.member_ids, reason).await;
+    }
+
+    async fn push_ended(&self, call: &Call, user_ids: &[i64], reason: EndReason) {
         let ended = v1::CallEnded {
             call_id: call.id as u64,
             conversation_id: call.conversation_id as u64,
             reason: reason as i32,
         };
-        self.push(&call.member_ids, Payload::CallEnded(ended)).await;
+        self.push(user_ids, Payload::CallEnded(ended)).await;
     }
 
     async fn member_call(&self, me: i64, call_id: i64) -> Result<Call, ApiError> {
-        self.store
+        let call = self
+            .store
             .get(call_id)
             .await
             .filter(|c| c.member_ids.contains(&me))
-            .ok_or_else(not_found)
+            .ok_or_else(not_found)?;
+        self.conversations
+            .get(call.conversation_id)
+            .await?
+            .filter(|c| c.member_ids.contains(&me))
+            .ok_or_else(not_found)?;
+        Ok(call)
     }
 
     async fn push_updated(&self, call: &Call) {
+        let Some(call) = self.store.get(call.id).await else {
+            return;
+        };
         let payload = Payload::CallUpdated(v1::CallUpdated {
-            call: Some(call.into()),
+            call: Some((&call).into()),
         });
         self.push(&call.member_ids, payload).await;
     }
@@ -302,6 +368,7 @@ fn not_found() -> ApiError {
 #[cfg(test)]
 mod tests {
     use std::sync::Mutex;
+    use std::sync::atomic::{AtomicU64, Ordering};
 
     use async_trait::async_trait;
     use futures::stream::BoxStream;
@@ -316,7 +383,7 @@ mod tests {
     const EVE: i64 = 3;
     const DM: i64 = 100;
 
-    struct FakeConversations;
+    struct FakeConversations(Vec<i64>);
     #[async_trait]
     impl ConversationRepo for FakeConversations {
         async fn get_or_create_dm(
@@ -353,7 +420,7 @@ mod tests {
                 kind: Kind::Dm,
                 last_seq: 0,
                 name: String::new(),
-                member_ids: vec![ALICE, BOB],
+                member_ids: self.0.clone(),
                 last_message_at: 0,
             }))
         }
@@ -364,12 +431,14 @@ mod tests {
 
     #[derive(Default)]
     struct FakeMedia {
+        next_peer: AtomicU64,
         left: Mutex<Vec<u64>>,
     }
     #[async_trait]
     impl MediaClient for FakeMedia {
-        async fn join(&self, room_id: i64, _: String) -> anyhow::Result<(u64, String)> {
-            Ok((room_id as u64 + 1, "answer".into()))
+        async fn join(&self, _: i64, _: String) -> anyhow::Result<(u64, String)> {
+            let peer = self.next_peer.fetch_add(1, Ordering::Relaxed) + 1;
+            Ok((peer, "answer".into()))
         }
         async fn leave(&self, peer_id: u64) -> anyhow::Result<()> {
             self.left.lock().unwrap().push(peer_id);
@@ -401,11 +470,17 @@ mod tests {
     }
 
     fn setup() -> (Arc<CallService>, Arc<FakeEvents>, Arc<FakeMedia>) {
+        setup_with_members(vec![ALICE, BOB])
+    }
+
+    fn setup_with_members(
+        members: Vec<i64>,
+    ) -> (Arc<CallService>, Arc<FakeEvents>, Arc<FakeMedia>) {
         let events = Arc::new(FakeEvents::default());
         let media = Arc::new(FakeMedia::default());
         let svc = Arc::new(CallService::new(
             Arc::new(MemoryCallStore::default()),
-            Arc::new(FakeConversations),
+            Arc::new(FakeConversations(members)),
             media.clone(),
             events.clone(),
             Arc::new(Snowflake::new(1)),
@@ -459,6 +534,15 @@ mod tests {
                 .await
                 .is_err()
         );
+    }
+
+    #[tokio::test]
+    async fn stale_call_membership_does_not_authorize_accept() {
+        let (svc, events, _) = setup_with_members(vec![ALICE]);
+        let call = svc.store.insert_if_none(test_call()).await.unwrap();
+
+        assert!(svc.accept(BOB, call.id).await.is_err());
+        assert!(pushes(&events, ALICE).is_empty());
     }
 
     #[tokio::test]
@@ -564,6 +648,31 @@ mod tests {
         svc.leave(BOB, 20, call.id).await.unwrap();
         assert_eq!(pushes(&events, ALICE).last().unwrap(), "ended");
         assert_eq!(media.left.lock().unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn departing_member_loses_media_and_call_updates() {
+        let (svc, events, media) = setup_with_members(vec![ALICE, BOB, EVE]);
+        let call = svc.start(ALICE, DM).await.unwrap();
+        for user in [ALICE, BOB, EVE] {
+            svc.join(user, user, user as u64, call.id, "offer".into())
+                .await
+                .unwrap();
+        }
+
+        svc.member_left(DM, EVE).await;
+        svc.member_left(DM, EVE).await;
+
+        assert_eq!(*media.left.lock().unwrap(), [3]);
+        assert_eq!(pushes(&events, EVE).last().unwrap(), "ended");
+        let departed_pushes = pushes(&events, EVE);
+        let call = svc
+            .screen_share(BOB, BOB as u64, call.id, true)
+            .await
+            .unwrap();
+        assert_eq!(call.participant_user_ids(), [ALICE, BOB]);
+        assert_eq!(pushes(&events, EVE), departed_pushes);
+        assert_eq!(pushes(&events, BOB).last().unwrap(), "updated");
     }
 
     #[tokio::test]

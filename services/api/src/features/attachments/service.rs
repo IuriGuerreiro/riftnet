@@ -746,6 +746,12 @@ mod tests {
             self.deleted.lock().unwrap().push(key.into());
             Ok(())
         }
+        async fn put_object(&self, _: &str, _: &str, _: Bytes) -> anyhow::Result<()> {
+            unimplemented!()
+        }
+        async fn view_url(&self, _: &str, _: Duration) -> anyhow::Result<String> {
+            unimplemented!()
+        }
         async fn download_url(&self, key: &str, _: &str, _: Duration) -> anyhow::Result<String> {
             Ok(format!("https://files.test/{key}"))
         }

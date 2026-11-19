@@ -8,19 +8,18 @@ Servers (nodes) come later. The MVP proves the core promise in DMs and small gro
 
 The MVP sends everything through our servers: calls via our SFU, files via our relay. **No P2P in the MVP.**
 P2P comes after, one feature at a time (calls 1-on-1 → group calls → files), behind the same transport traits.
-This replaces "P2P" in the steps below until then.
 
 ## Scope, in order
 
 1. Accounts and login (Zitadel)
 2. Friends + DMs + group DMs (max 5), real-time text
-3. Voice calls (P2P WebRTC)
-4. Screen share 1080p60 / source (P2P), **the demo that sells it**
-5. Files P2P with relay fallback
+3. Voice calls over WebRTC through the SFU
+4. Screen sharing through the SFU, with 1080p60 at source quality as a target
+5. File sharing through the relay
 
 ## Out of scope for the MVP
 
-- Servers / nodes / SFU
+- Community servers and independently hosted nodes
 - E2E for text (planned, see [dms.md](../architecture/dms.md))
 - Plugins, SDKs, marketplace
 - Mobile

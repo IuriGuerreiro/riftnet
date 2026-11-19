@@ -35,7 +35,10 @@ message Envelope {
     StartTyping start_typing = 21; // fire-and-forget: send with id 0, no reply
     SetIdle set_idle = 24;
     GetPresence get_presence = 25;
-    MarkRead mark_read = 26;
+    AddReaction add_reaction = 26;
+    RemoveReaction remove_reaction = 27;
+    GetReactors get_reactors = 28;
+    MarkRead mark_read = 29;
 
     Pong pong = 50;
     Error error = 51;
@@ -48,6 +51,8 @@ message Envelope {
     EditMessageAck edit_message_ack = 63;
     DeleteMessageAck delete_message_ack = 64;
     Presences presences = 67;
+    ReactionAck reaction_ack = 69;
+    Reactors reactors = 70;
 
     MessageCreated message_created = 54;
     UserUpdated user_updated = 55;
@@ -57,7 +62,8 @@ message Envelope {
     MessageDeleted message_deleted = 66;
     TypingStarted typing_started = 62;
     PresenceUpdated presence_updated = 68;
-    ReadStateUpdated read_state_updated = 69; // reply to MarkRead, and a push to your own sockets
+    ReactionUpdated reaction_updated = 71;
+    ReadStateUpdated read_state_updated = 72; // reply to MarkRead, and a push to your own sockets
 
     // calls: field numbers 100-139 are reserved for them
     CallStart call_start = 100;
@@ -80,6 +86,8 @@ message Pong {}
 message Error {
   string code = 1;
   string message = 2;
+  // Set on "rate_limited": wait this long before retrying.
+  uint64 retry_after_ms = 3;
 }
 
 message Authenticate {

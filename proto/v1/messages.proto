@@ -11,6 +11,18 @@ message Message {
   Encryption encryption = 6;
   uint64 edited_at = 7; // unix ms of the last edit, 0 = never edited
   repeated Attachment attachments = 8; // fixed once sent; edits don't change them
+  // Filled in History, Sync and ReactionAck, for the user asking (`me`).
+  // Empty in MessageCreated/MessageUpdated pushes and EditMessageAck:
+  // keep the reactions you already have and apply ReactionUpdated pushes.
+  repeated Reaction reactions = 9;
+  uint64 reply_to = 10; // id of the message this replies to (same conversation), 0 = not a reply
+}
+
+// One emoji on a message: how many people used it, and whether you did.
+message Reaction {
+  string emoji = 1; // a Unicode emoji, max 32 bytes
+  uint32 count = 2;
+  bool me = 3;
 }
 
 // A file on a message. Upload it first over HTTP (POST /attachments, chunks,
@@ -42,6 +54,8 @@ message SendMessage {
   // Finished uploads (max 10) from this sender, in this conversation, not on
   // another message yet. content may be empty when this isn't.
   repeated uint64 attachment_ids = 4;
+  // Optional: a message in this conversation to reply to. 0 = not a reply.
+  uint64 reply_to = 5;
 }
 
 message MessageAck {
@@ -129,4 +143,52 @@ message StartTyping {
 message TypingStarted {
   uint64 conversation_id = 1;
   uint64 user_id = 2;
+}
+
+// Reactions. Any member can react. Max 20 different emojis per message
+// (adding to one already there always works). Max 10 adds/removes per 10s
+// per user ("rate_limited"). Adding twice or removing one you don't have is
+// fine: seq = 0 and no push. Each real change takes a seq (like an edit), so
+// Sync returns the message in `edited` with its current reactions.
+message AddReaction {
+  uint64 conversation_id = 1;
+  uint64 message_id = 2;
+  string emoji = 3;
+}
+
+message RemoveReaction {
+  uint64 conversation_id = 1;
+  uint64 message_id = 2;
+  string emoji = 3;
+}
+
+// Reply to AddReaction and RemoveReaction: the message's reactions now.
+message ReactionAck {
+  uint64 conversation_id = 1;
+  uint64 message_id = 2;
+  uint64 seq = 3;
+  repeated Reaction reactions = 4;
+}
+
+// Push to every member (you too): someone added or removed a reaction.
+// `count` is the new total for that emoji (0 = remove the chip).
+message ReactionUpdated {
+  uint64 conversation_id = 1;
+  uint64 message_id = 2;
+  string emoji = 3;
+  uint64 user_id = 4;
+  bool added = 5;
+  uint32 count = 6;
+  uint64 seq = 7;
+}
+
+// Who reacted with this emoji (for the tooltip). Max 100 ids.
+message GetReactors {
+  uint64 conversation_id = 1;
+  uint64 message_id = 2;
+  string emoji = 3;
+}
+
+message Reactors {
+  repeated uint64 user_ids = 1;
 }
