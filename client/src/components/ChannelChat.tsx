@@ -2,13 +2,24 @@ import { useInfiniteQuery, useMutation } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
 import { channelHistory, onChannelMessage, sendChannelMessage } from "../api/channel-messages";
+import { isServerUnavailable } from "../api/server-access";
 import type { ChannelMessage } from "../gen/v1/messages_pb";
 import { useAuth } from "../stores/auth";
 import { useConnection } from "../stores/connection";
 import { MessageBubble } from "./MessageBubble";
 import { ErrorText, Input } from "./ui";
 
-export function ChannelChat({ channelId: id, name }: { channelId: string; name: string }) {
+export function ChannelChat({
+  channelId: id,
+  serverId,
+  name,
+  onUnavailable,
+}: {
+  channelId: string;
+  serverId: string;
+  name: string;
+  onUnavailable: () => void;
+}) {
   const channelId = BigInt(id);
   const userId = useAuth((state) => state.user?.id);
   const ws = useConnection((state) => state.ws);
@@ -25,7 +36,7 @@ export function ChannelChat({ channelId: id, name }: { channelId: string; name: 
   const [nonce, setNonce] = useState(newNonce);
   const bottom = useRef<HTMLDivElement>(null);
   const history = useInfiniteQuery({
-    queryKey: ["channel-history", userId, id],
+    queryKey: ["channel-history", userId, serverId, id],
     enabled: ws !== null,
     initialPageParam: 0n,
     queryFn: ({ pageParam }) => {
@@ -63,6 +74,11 @@ export function ChannelChat({ channelId: id, name }: { channelId: string; name: 
     },
   });
 
+  const unavailable = isServerUnavailable(history.error) || isServerUnavailable(send.error);
+  useEffect(() => {
+    if (unavailable) onUnavailable();
+  }, [unavailable, onUnavailable]);
+
   const messages = new Map(live.connection === ws ? live.messages : []);
   for (const page of history.data?.pages ?? []) {
     for (const message of page.messages) messages.set(message.id, message);
@@ -73,6 +89,13 @@ export function ChannelChat({ channelId: id, name }: { channelId: string; name: 
   useEffect(() => {
     if (newest !== undefined) bottom.current?.scrollIntoView({ block: "nearest" });
   }, [newest]);
+
+  if (unavailable)
+    return (
+      <p className="m-auto p-4" role="status">
+        This server is no longer available.
+      </p>
+    );
 
   return (
     <>
