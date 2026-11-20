@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 
 import { useLogin, useRegister } from "../api/auth";
+import { AuthLayout } from "../components/AuthLayout";
 import { Button, Card, ErrorText, Input } from "../components/ui";
 import { type Credentials, credentialsSchema } from "../schemas/auth";
 
@@ -22,34 +23,50 @@ export function LoginPage() {
   );
 
   return (
-    <Card>
-      <h1 className="text-2xl font-bold">
-        {mode === "login" ? "Welcome back" : "Create an account"}
-      </h1>
-      <form onSubmit={onSubmit} className="space-y-3">
-        <Input
-          placeholder="Email"
-          type="email"
-          {...form.register("email")}
-          error={form.formState.errors.email?.message}
-        />
-        <Input
-          placeholder="Password"
-          type="password"
-          {...form.register("password")}
-          error={form.formState.errors.password?.message}
-        />
-        <ErrorText error={action.error} />
-        <Button type="submit" block size="lg" disabled={action.isPending}>
-          {mode === "login" ? "Log in" : "Create account"}
-        </Button>
-      </form>
-      <button
-        className="text-sm text-fg-muted hover:text-fg"
-        onClick={() => setMode(mode === "login" ? "register" : "login")}
-      >
-        {mode === "login" ? "New here? Create an account" : "Already have an account? Log in"}
-      </button>
-    </Card>
+    <AuthLayout>
+      <Card>
+        <h1 className="text-2xl font-bold">
+          {mode === "login" ? "Welcome back" : "Create an account"}
+        </h1>
+        <form onSubmit={onSubmit} className="space-y-3">
+          <Input
+            label="Email"
+            autoComplete="email"
+            type="email"
+            {...form.register("email")}
+            error={form.formState.errors.email?.message}
+          />
+          <Input
+            label="Password"
+            autoComplete={mode === "login" ? "current-password" : "new-password"}
+            type="password"
+            {...form.register("password")}
+            error={form.formState.errors.password?.message}
+          />
+          <ErrorText error={action.error} />
+          <Button type="submit" block size="lg" disabled={action.isPending}>
+            {action.isPending
+              ? mode === "login"
+                ? "Logging in…"
+                : "Creating account…"
+              : mode === "login"
+                ? "Log in"
+                : "Create account"}
+          </Button>
+        </form>
+        <button
+          type="button"
+          className="text-sm text-brand hover:underline"
+          onClick={() => {
+            login.reset();
+            register.reset();
+            form.clearErrors();
+            setMode(mode === "login" ? "register" : "login");
+          }}
+        >
+          {mode === "login" ? "New here? Create an account" : "Already have an account? Log in"}
+        </button>
+      </Card>
+    </AuthLayout>
   );
 }

@@ -8,11 +8,9 @@ import { jumpTo } from "./jumpTo";
 export function ReplyQuote({
   conversationId,
   replyTo,
-  mine,
 }: {
   conversationId: bigint;
   replyTo: bigint;
-  mine: boolean;
 }) {
   const ws = useConnection((s) => s.ws);
   const k = conversationId.toString();
@@ -22,7 +20,7 @@ export function ReplyQuote({
   const profiles = useProfiles((s) => s.byId);
   const [gone, setGone] = useState(false);
   const target = gone ? ({ state: "deleted" } as const) : replyTarget(messages, deleted, replyTo);
-  const muted = mine ? "text-on-brand/70" : "text-fg-muted";
+  const muted = "text-fg-muted";
 
   if (target.state === "deleted")
     return <span className={`mb-1 block text-xs italic ${muted}`}>↪ Original message deleted</span>;
@@ -35,7 +33,7 @@ export function ReplyQuote({
         if (await loadUntil(ws, conversationId, replyTo)) setTimeout(() => jumpTo(replyTo), 50);
         else setGone(true);
       }}
-      className={`mb-1 block max-w-full truncate border-l-2 border-current pl-2 text-left text-xs hover:underline ${muted}`}
+      className={`relative mb-1 ml-[-2.25rem] block max-w-full truncate pl-9 text-left text-xs before:absolute before:left-[0.9rem] before:top-1/2 before:h-2.5 before:w-5 before:rounded-tl-md before:border-l-2 before:border-t-2 before:border-line-strong hover:text-fg ${muted}`}
     >
       {target.state === "loaded" ? (
         <>

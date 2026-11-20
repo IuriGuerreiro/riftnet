@@ -1,32 +1,45 @@
+import { RotateCcw } from "lucide-react";
 import { useState } from "react";
 
 import { Avatar } from "../../components/Avatar";
 import { Markdown } from "../../components/Markdown";
+import { ConfirmDialog } from "../../components/ui";
+import { cn } from "../../components/ui/cn";
+import { formatClock, formatStamp } from "../../lib/time";
 import { type ChatMessage, useChat } from "../../stores/chat";
 import { useConnection } from "../../stores/connection";
+import { useProfiles } from "../../stores/profiles";
 import { Attachment } from "../attachments/Attachment";
 import { ReactionChipButton } from "../reactions/ReactionChipButton";
-import { ReactionPicker } from "../reactions/ReactionPicker";
+import { useNameFor } from "../session/useRealtime";
 import { messageDomId } from "./jumpTo";
+import { MessageEditor } from "./MessageEditor";
+import { MessageToolbar } from "./MessageToolbar";
 import { ReplyQuote } from "./ReplyQuote";
 
 export function MessageRow({
   m,
   mine,
+  header,
+  time,
   conversationId,
 }: {
   m: ChatMessage;
   mine: boolean;
+  header: boolean;
+  time: Date;
   conversationId: bigint;
 }) {
   const ws = useConnection((s) => s.ws);
   const { edit, remove, setReplyingTo } = useChat();
+  const nameFor = useNameFor();
+  const hasProfile = useProfiles((s) => !!s.byId[m.authorId.toString()]);
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState("");
-  const canChange = mine && !m.pending && m.id !== 0n && !!ws;
-  const canReact = !m.pending && m.id !== 0n && !!ws;
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const live = !m.pending && m.id !== 0n && !!ws;
+  const canChange = mine && live;
 
-  async function save() {
+  async function save(draft: string) {
     if (!ws) return;
     const text = draft.trim();
     if (!text || text === m.text) {
@@ -36,100 +49,115 @@ export function MessageRow({
     if (await edit(ws, m.id, text)) setEditing(false);
   }
 
-  if (editing) {
-    return (
-      <div className="flex justify-end">
-        <div className="w-[75%] space-y-1">
-          <textarea
-            autoFocus
-            value={draft}
-            maxLength={4000}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                void save();
-              } else if (e.key === "Escape") {
-                setEditing(false);
-              }
-            }}
-            className="w-full resize-none rounded-lg bg-surface-2 px-3 py-1.5 text-sm outline-none ring-2 ring-brand"
-          />
-          <p className="text-right text-xs text-fg-subtle">Enter to save · Esc to cancel</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className={`group flex flex-col ${mine ? "items-end" : "items-start"}`}>
-      <div className={`flex w-full items-center gap-2 ${mine ? "justify-end" : ""}`}>
-        {!mine && <Avatar userId={m.authorId} size="xs" />}
-        {mine && canReact && <ReactionPicker messageId={m.id} />}
-        {canReact && (
-          <div className="hidden gap-1 text-xs text-fg-muted group-hover:flex">
-            <button
-              onClick={() => setReplyingTo(m.id)}
-              className="rounded px-1.5 py-0.5 hover:bg-surface-2 hover:text-fg"
-            >
-              Reply
-            </button>
-            {canChange && (
-              <>
-                <button
-                  onClick={() => {
-                    setDraft(m.text);
-                    setEditing(true);
-                  }}
-                  className="rounded px-1.5 py-0.5 hover:bg-surface-2 hover:text-fg"
-                >
-                  Edit
-                </button>
-                <button
-                  onClick={() =>
-                    window.confirm("Delete this message? This can't be undone.") &&
-                    void remove(ws, m.id)
-                  }
-                  className="rounded px-1.5 py-0.5 hover:bg-surface-2 hover:text-danger"
-                >
-                  Delete
-                </button>
-              </>
+    <div
+      id={m.id !== 0n ? messageDomId(m.id) : undefined}
+      className={cn(
+        "group relative flex gap-4 px-4 py-0.5 transition-colors hover:bg-surface-2",
+        header && "mt-4",
+        editing && "bg-surface-2",
+      )}
+    >
+      <div className="w-10 shrink-0">
+        {header ? (
+          <span className={m.replyTo !== undefined ? "mt-6 block" : "mt-0.5 block"}>
+            <Avatar userId={m.authorId} size="md" />
+          </span>
+        ) : (
+          <time
+            dateTime={time.toISOString()}
+            title={formatStamp(time)}
+            className="block pt-1 text-right text-[11px] text-fg-subtle opacity-0 group-hover:opacity-100"
+          >
+            {formatClock(time)}
+          </time>
+        )}
+      </div>
+
+      <div className="min-w-0 flex-1">
+        {m.replyTo !== undefined && (
+          <ReplyQuote conversationId={conversationId} replyTo={m.replyTo} />
+        )}
+        {header && (
+          <p className="flex items-baseline gap-2">
+            <span className={cn("font-semibold", hasProfile ? "text-fg" : "text-fg-muted")}>
+              {nameFor(m.authorId)}
+            </span>
+            <time dateTime={time.toISOString()} className="text-xs text-fg-subtle">
+              {formatStamp(time)}
+            </time>
+          </p>
+        )}
+
+        {editing ? (
+          <MessageEditor
+            initial={m.text}
+            onSave={(t) => void save(t)}
+            onCancel={() => setEditing(false)}
+          />
+        ) : (
+          <div
+            className={cn(
+              "whitespace-pre-wrap break-words text-[15px] leading-relaxed text-fg",
+              m.pending && "text-fg-subtle",
+              m.failed && "text-danger",
             )}
+          >
+            <Markdown text={m.text} />
+            {m.editedAt ? (
+              <span
+                className="ml-1 text-[11px] text-fg-subtle"
+                title={new Date(Number(m.editedAt)).toLocaleString()}
+              >
+                (edited)
+              </span>
+            ) : null}
           </div>
         )}
-        <div
-          id={m.id !== 0n ? messageDomId(m.id) : undefined}
-          className={`max-w-[75%] whitespace-pre-wrap break-words rounded-lg px-3 py-1.5 text-sm ${
-            mine ? "bg-brand text-on-brand" : "bg-surface-2"
-          } ${m.pending ? "opacity-50" : ""} ${m.failed ? "ring-2 ring-danger" : ""}`}
-          title={m.pending ? "Sending…" : `Message #${m.seq}`}
-        >
-          {m.replyTo !== undefined && (
-            <ReplyQuote conversationId={conversationId} replyTo={m.replyTo} mine={mine} />
-          )}
-          <Markdown text={m.text} />
-          {m.attachments?.map((a) => (
-            <Attachment key={a.id.toString()} a={a} mine={mine} />
-          ))}
-          {m.editedAt ? (
-            <span
-              className={`ml-1.5 text-[10px] ${mine ? "text-on-brand/70" : "text-fg-subtle"}`}
-              title={new Date(Number(m.editedAt)).toLocaleString()}
-            >
-              (edited)
-            </span>
-          ) : null}
-        </div>
-        {!mine && canReact && <ReactionPicker messageId={m.id} />}
+
+        {m.attachments?.length ? (
+          <div className="max-w-md">
+            {m.attachments.map((a) => (
+              <Attachment key={a.id.toString()} a={a} mine={false} />
+            ))}
+          </div>
+        ) : null}
+
+        {m.failed && (
+          <p className="mt-0.5 flex items-center gap-1 text-xs text-danger">
+            <RotateCcw size={12} /> Message failed to send.
+          </p>
+        )}
+
+        {m.reactions?.length ? (
+          <div className="mt-1 flex flex-wrap gap-1">
+            {m.reactions.map((r) => (
+              <ReactionChipButton key={r.emoji} messageId={m.id} r={r} disabled={!live} />
+            ))}
+          </div>
+        ) : null}
       </div>
-      {m.reactions?.length ? (
-        <div className={`mt-0.5 flex flex-wrap gap-1 ${mine ? "justify-end" : "pl-8"}`}>
-          {m.reactions.map((r) => (
-            <ReactionChipButton key={r.emoji} messageId={m.id} r={r} disabled={!canReact} />
-          ))}
-        </div>
-      ) : null}
+
+      {live && !editing && (
+        <MessageToolbar
+          messageId={m.id}
+          canChange={canChange}
+          onReply={() => setReplyingTo(m.id)}
+          onEdit={() => setEditing(true)}
+          onDelete={() => setConfirmDelete(true)}
+        />
+      )}
+
+      <ConfirmDialog
+        open={confirmDelete}
+        title="Delete message"
+        confirmLabel="Delete"
+        danger
+        onConfirm={() => ws && void remove(ws, m.id)}
+        onClose={() => setConfirmDelete(false)}
+      >
+        Are you sure you want to delete this message? This can't be undone.
+      </ConfirmDialog>
     </div>
   );
 }

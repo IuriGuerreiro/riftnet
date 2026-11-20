@@ -3,26 +3,37 @@ import { useState } from "react";
 import { IncomingCall, RemoteScreen } from "../call/CallBar";
 import { ProfilePanel } from "../components/ProfilePanel";
 import { ChatPane } from "../features/chat/ChatPane";
+import { FriendsPage } from "../features/friends/FriendsPage";
 import { useKnownUsers, useNameFor, useRealtime } from "../features/session/useRealtime";
+import {
+  type NewConversation,
+  NewConversationDialog,
+} from "../features/sidebar/NewConversationDialogs";
+import { ServerRail } from "../features/sidebar/ServerRail";
 import { Sidebar } from "../features/sidebar/Sidebar";
 import { useConnection } from "../stores/connection";
+import { useUi } from "../stores/ui";
 
 export function HomePage() {
   useRealtime();
   useKnownUsers();
   const { ws, user: me } = useConnection();
+  const view = useUi((s) => s.view);
   const nameFor = useNameFor();
   const [editingProfile, setEditingProfile] = useState(false);
+  const [creating, setCreating] = useState<NewConversation | null>(null);
 
   return (
-    <div className="flex h-full w-full max-w-5xl overflow-hidden rounded-xl bg-surface-1 shadow-lg">
+    <div className="flex h-full w-full overflow-hidden bg-surface-0 text-fg">
       <RemoteScreen />
       <IncomingCall ws={ws} callerName={(id) => nameFor(id)} />
       {editingProfile && me && (
         <ProfilePanel myId={me.id.toString()} onClose={() => setEditingProfile(false)} />
       )}
-      <Sidebar onEditProfile={() => setEditingProfile(true)} />
-      <ChatPane />
+      {creating && <NewConversationDialog kind={creating} onClose={() => setCreating(null)} />}
+      <ServerRail onCreateGroup={() => setCreating("group")} />
+      <Sidebar onEditProfile={() => setEditingProfile(true)} onNew={setCreating} />
+      {view === "friends" ? <FriendsPage /> : <ChatPane />}
     </div>
   );
 }

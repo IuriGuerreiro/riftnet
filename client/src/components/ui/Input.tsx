@@ -3,7 +3,7 @@ import { type InputHTMLAttributes, type Ref, type TextareaHTMLAttributes, useId 
 import { cn } from "./cn";
 
 export const fieldClass =
-  "w-full min-w-0 rounded-control border border-transparent bg-surface-0 px-3 py-2 text-sm text-fg placeholder:text-fg-subtle outline-none transition-colors focus:border-brand disabled:opacity-50";
+  "w-full min-w-0 rounded-control border border-surface-0 bg-surface-0 px-3 py-2 text-sm text-fg placeholder:text-fg-subtle outline-none transition-colors focus:border-brand disabled:opacity-50";
 
 interface FieldExtras {
   label?: string;

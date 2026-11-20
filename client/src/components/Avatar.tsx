@@ -3,7 +3,12 @@ import { useState } from "react";
 import { type AvatarSize, useAvatarUrl } from "../api/profile";
 import { nameOf, useProfile } from "../stores/profiles";
 
-const px = { xs: "size-6 text-[10px]", sm: "size-8 text-xs", lg: "size-24 text-3xl" } as const;
+const px = {
+  xs: "size-6 text-[10px]",
+  sm: "size-8 text-xs",
+  md: "size-10 text-sm",
+  lg: "size-24 text-3xl",
+} as const;
 const colors = ["bg-sky-600", "bg-emerald-600", "bg-violet-600", "bg-amber-600", "bg-rose-600"];
 
 export function Avatar({

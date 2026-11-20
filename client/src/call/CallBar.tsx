@@ -71,7 +71,7 @@ export function IncomingCall({
       <span className="text-sm">{callerName(incoming.callerId)} is calling…</span>
       <Button
         size="sm"
-        className="bg-success text-white hover:bg-success"
+        className="bg-success text-surface-0 hover:brightness-110"
         onClick={() => accept(ws)}
       >
         Accept

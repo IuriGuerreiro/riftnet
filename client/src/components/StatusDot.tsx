@@ -6,14 +6,20 @@ const look: Record<PresenceStatus, { color: string; label: string }> = {
   [PresenceStatus.OFFLINE]: { color: "bg-surface-4", label: "Offline" },
 };
 
-export function StatusDot({ userId }: { userId: bigint | string | undefined }) {
+export function StatusDot({
+  userId,
+  className = "",
+}: {
+  userId: bigint | string | undefined;
+  className?: string;
+}) {
   const status =
     usePresence((s) => (userId === undefined ? undefined : s.statuses[userId.toString()])) ??
     PresenceStatus.OFFLINE;
   const { color, label } = look[status];
   return (
     <span
-      className={`inline-block size-2 shrink-0 rounded-full ${color}`}
+      className={`inline-block size-2 shrink-0 rounded-full ${color} ${className}`}
       title={label}
       aria-label={label}
     />

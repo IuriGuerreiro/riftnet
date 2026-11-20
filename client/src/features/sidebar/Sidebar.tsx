@@ -1,39 +1,53 @@
-import { useNavigate } from "@tanstack/react-router";
+import { Users } from "lucide-react";
 
-import { useLogout } from "../../api/auth";
-import { useChat } from "../../stores/chat";
-import { useConnection } from "../../stores/connection";
-import { FriendsPanel } from "../friends/FriendsPanel";
+import { Badge } from "../../components/ui";
+import { cn } from "../../components/ui/cn";
+import { useFriends } from "../../stores/friends";
+import { useUi } from "../../stores/ui";
 import { ConversationList } from "./ConversationList";
-import { NewDm } from "./NewDm";
-import { NewGroup } from "./NewGroup";
-import { UserHeader } from "./UserHeader";
+import type { NewConversation } from "./NewConversationDialogs";
+import { UserPanel } from "./UserPanel";
 
-export function Sidebar({ onEditProfile }: { onEditProfile: () => void }) {
-  const logout = useLogout();
-  const navigate = useNavigate();
-  const { ws, disconnect } = useConnection();
-  const { openDm, createGroup } = useChat();
+export function Sidebar({
+  onEditProfile,
+  onNew,
+}: {
+  onEditProfile: () => void;
+  onNew: (kind: NewConversation) => void;
+}) {
+  const pending = useFriends((s) => s.list.incoming.length);
+  const { view, showFriends } = useUi();
 
   return (
-    <aside className="flex w-64 shrink-0 flex-col border-r border-line">
-      <UserHeader onEditProfile={onEditProfile} />
-      <NewDm disabled={!ws} onOpen={(username) => ws && openDm(ws, username)} />
-      <NewGroup
-        disabled={!ws}
-        onCreate={(name, usernames) => ws && createGroup(ws, name, usernames)}
-      />
-      <FriendsPanel onDm={(username) => ws && openDm(ws, username)} />
-      <ConversationList />
-      <button
-        className="border-t border-line p-3 text-sm text-fg-muted hover:text-fg"
-        onClick={() => {
-          disconnect();
-          logout.mutate(undefined, { onSettled: () => void navigate({ to: "/login" }) });
-        }}
-      >
-        Log out
-      </button>
+    <aside className="flex w-60 shrink-0 flex-col bg-surface-1">
+      <div className="flex h-12 shrink-0 items-center border-b border-surface-0 px-2.5 shadow-sm">
+        <button
+          type="button"
+          onClick={() => onNew("dm")}
+          className="h-7 w-full rounded-md bg-surface-0 px-2 text-left text-sm text-fg-subtle hover:text-fg-muted"
+        >
+          Find or start a conversation
+        </button>
+      </div>
+      <div className="px-2 pt-2">
+        <button
+          type="button"
+          aria-current={view === "friends" ? "page" : undefined}
+          onClick={showFriends}
+          className={cn(
+            "flex h-10 w-full items-center gap-3 rounded-control px-3 text-[15px] font-medium transition-colors",
+            view === "friends"
+              ? "bg-surface-4 text-fg"
+              : "text-fg-muted hover:bg-surface-3 hover:text-fg",
+          )}
+        >
+          <Users size={20} />
+          <span className="flex-1 text-left">Friends</span>
+          {pending > 0 && <Badge>{pending}</Badge>}
+        </button>
+      </div>
+      <ConversationList onNew={onNew} />
+      <UserPanel onEditProfile={onEditProfile} />
     </aside>
   );
 }
