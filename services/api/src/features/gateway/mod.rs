@@ -1,3 +1,4 @@
+mod activity;
 mod connection;
 mod controller;
 mod handlers;

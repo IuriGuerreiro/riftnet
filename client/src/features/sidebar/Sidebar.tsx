@@ -5,6 +5,7 @@ import { ServerNavigation } from "../../components/Servers";
 import { readWorkspaceSearch } from "../../schemas/workspace";
 import { useChat } from "../../stores/chat";
 import { useConnection } from "../../stores/connection";
+import { ActivityPanel } from "../friends/ActivityPanel";
 import { FriendsPanel } from "../friends/FriendsPanel";
 import { ConversationList } from "./ConversationList";
 import { NewDm } from "./NewDm";
@@ -21,6 +22,7 @@ export function Sidebar({ onEditProfile }: { onEditProfile: () => void }) {
   return (
     <aside className="flex w-64 shrink-0 flex-col border-r border-zinc-800">
       <UserHeader onEditProfile={onEditProfile} />
+      <ActivityPanel />
       <ServerNavigation />
       <div className={(server ?? invite) ? "hidden" : "flex min-h-0 flex-1 flex-col"}>
         <NewDm disabled={!ws} onOpen={(username) => ws && openDm(ws, username)} />
