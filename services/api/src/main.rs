@@ -27,6 +27,10 @@ async fn main() -> anyhow::Result<()> {
             Matcher::Full(http_metrics::REQUEST_DURATION.into()),
             http_metrics::DURATION_BUCKETS,
         )?
+        .set_buckets_for_metric(
+            Matcher::Prefix("auth_".into()),
+            http_metrics::DURATION_BUCKETS,
+        )?
         .build_recorder();
     let prometheus_handle = prometheus.handle();
     telemetry.install_metrics(prometheus)?;
