@@ -44,7 +44,7 @@ message Envelope {
     SetActivity set_activity = 32;
     GetActivities get_activities = 33;
     JoinFriendCall join_friend_call = 34;
-    Activities activities = 75;
+    Activities activities = 76;
 
     Pong pong = 50;
     Error error = 51;
