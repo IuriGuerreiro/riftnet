@@ -186,10 +186,16 @@ Not done yet: native video *rendering* in Tauri, macOS (untested, no Mac), Wayla
 
 A viewer drives the sharer's keyboard and mouse. Windows and X11 hosts only (Wayland: issue #56).
 
-- **State** (api, `Call.control`): one `{host, controller, granted}` per call. Viewer requests, host grants or denies, either side revokes. Dropped automatically when the host stops sharing or either side leaves (`Call::settle_control`).
-- **Who can be controlled:** `CallScreenShare.controllable` — desktop app, supported OS, full-monitor share. Shown to viewers as `Call.controllable_user_ids`.
-- **Input path:** two WebRTC data channels opened by every client at join: `input` (reliable, ordered: keys, clicks, wheel) and `input-move` (unordered, no retransmits: pointer, latest wins). The SFU relays `input*` channels to the other peers in the room, prefixed with the sender's user id (8 bytes, big endian), so the host can check the sender.
-- **Host:** the webview forwards events to the Tauri `share_play` module. One input thread owns the grant, applies events with enigo, blocks the Win key and Ctrl+Alt+Del, and releases every held key/button on revoke. Revoke hotkey: Ctrl+Shift+F12 (global).
+- **State** (api, `Call.control`): one control per call. A request binds the viewer's joined connection and media peer, and the host's sharing connection, media peer and share instance (`share_id`). Only that sharing connection may grant or deny; each grant gets a fresh `grant_id`. Either user may revoke. `Call::settle_control` drops it when any bound piece changes.
+- **Who can be controlled:** `CallScreenShare.controllable`: the desktop app on a supported OS, sharing a whole monitor.
+- **Input path:** data channels `input` (reliable, ordered: keys, clicks with position, wheel with position, ping) and `input-move` (lossy pointer). The api tells the SFU the one allowed route (`media.route`: controller peer → host peer). The SFU drops all other input. It also enforces 256 bytes per message and 200 msg/s (burst 400). A reliable message that is too big, over the rate, or not written (str0m `Err` or `Ok(false)`) breaks the route.
+- **SFU → api** (`media.event`): `PEER_GONE` (a peer dropped on its own) removes that participant; `ROUTE_FAILED` clears control. Both push `CallUpdated`, so the host releases input.
+- **Host** (Tauri `share_play`):
+  - Approve needs a local click on the sharing desktop, with the shared monitor picked there. It is refused unless the revoke hotkey (Ctrl+Shift+F12) registered.
+  - Each `grant_id` arms once and consumes that approval, so a stale update can't re-arm.
+  - One input thread runs control messages before queued input. The input queue is bounded at 256; overflow revokes.
+  - A 2 s lease is renewed by viewer pings every 500 ms. It also ends on transport loss.
+  - Strict key allowlist. Delete is always blocked; Backspace and F-keys are blocked while Ctrl+Alt are held. Clicks only land after the cursor is confirmed at their position.
 
 ## 9. Risks / open questions
 

@@ -29,10 +29,10 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
-    let sfu = sfu::start(socket)?;
+    let (sfu, notices) = sfu::start(socket)?;
     let nats = common::nats::connect(&nats_url).await?;
     tracing::info!("media ready");
-    control::serve(nats, sfu).await
+    control::serve(nats, sfu, notices).await
 }
 
 fn env_or(key: &str, default: &str) -> String {

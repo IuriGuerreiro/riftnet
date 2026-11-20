@@ -2,7 +2,7 @@ import { type RefObject, useEffect } from "react";
 
 import type { Call } from "../gen/v1/calls_pb";
 import { sendInput } from "../stores/calls";
-import { type InputEvent, normalizePointer, sendable, wheelLines } from "./sharePlayWire";
+import { type InputEvent, normalizePointer, PING_MS, sendable, wheelLines } from "./sharePlayWire";
 
 export function controlView(call: Call | null, me: bigint | undefined) {
   const c = call?.control;
@@ -21,10 +21,12 @@ export function useControlInput(video: RefObject<HTMLVideoElement | null>, activ
     const buttons = new Set<number>();
     let pending: InputEvent | null = null;
     let frame = 0;
+    let last = { x: 0.5, y: 0.5 };
+    const ping = setInterval(() => sendInput({ t: "ping" }), PING_MS);
 
     const releaseAll = () => {
       for (const code of keys) sendInput({ t: "key", code, down: false });
-      for (const b of buttons) sendInput({ t: "button", b, down: false });
+      for (const b of buttons) sendInput({ t: "button", b, down: false, ...last });
       keys.clear();
       buttons.clear();
     };
@@ -39,6 +41,7 @@ export function useControlInput(video: RefObject<HTMLVideoElement | null>, activ
     const move = (e: PointerEvent) => {
       const p = at(e);
       if (!p) return;
+      last = p;
       pending = { t: "move", ...p };
       frame ||= requestAnimationFrame(() => {
         frame = 0;
@@ -49,14 +52,14 @@ export function useControlInput(video: RefObject<HTMLVideoElement | null>, activ
     const button = (down: boolean) => (e: PointerEvent) => {
       if (e.button > 2) return;
       e.preventDefault();
+      const p = at(e);
       if (down) {
         el.focus();
-        const p = at(e);
         if (!p) return;
-        sendInput({ t: "move", ...p });
+        last = p;
         buttons.add(e.button);
       } else if (!buttons.delete(e.button)) return;
-      sendInput({ t: "button", b: e.button, down });
+      sendInput({ t: "button", b: e.button, down, ...(p ?? last) });
     };
     const key = (down: boolean) => (e: KeyboardEvent) => {
       if (!sendable(e.code)) return;
@@ -67,8 +70,11 @@ export function useControlInput(video: RefObject<HTMLVideoElement | null>, activ
     };
     const wheel = (e: WheelEvent) => {
       e.preventDefault();
+      const p = at(e);
+      if (!p) return;
       sendInput({
         t: "wheel",
+        ...p,
         dx: wheelLines(e.deltaX, e.deltaMode),
         dy: wheelLines(e.deltaY, e.deltaMode),
       });
@@ -90,6 +96,7 @@ export function useControlInput(video: RefObject<HTMLVideoElement | null>, activ
     el.addEventListener("blur", releaseAll);
     return () => {
       cancelAnimationFrame(frame);
+      clearInterval(ping);
       releaseAll();
       el.removeEventListener("pointermove", move);
       el.removeEventListener("pointerdown", down);

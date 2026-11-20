@@ -595,6 +595,9 @@ mod tests {
         async fn leave(&self, _: u64) -> anyhow::Result<()> {
             Ok(())
         }
+        async fn route(&self, _: i64, _: Option<(u64, u64)>) -> anyhow::Result<()> {
+            Ok(())
+        }
     }
 
     #[derive(Default)]

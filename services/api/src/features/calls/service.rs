@@ -5,7 +5,7 @@ use common::snowflake::Snowflake;
 use protocol::Message as _;
 use protocol::v1::{self, Envelope, envelope::Payload};
 
-use super::media::MediaClient;
+use super::media::{MediaClient, MediaNotice};
 use super::models::{
     Call, CallState, ControlAction, ControlError, EndReason, Participant, RING_TIMEOUT,
 };
@@ -161,6 +161,7 @@ impl CallService {
             peer_id,
             sharing_screen: false,
             controllable: false,
+            share_id: 0,
         };
         let activate = call.caller_id != me;
         let call = match self
@@ -209,6 +210,7 @@ impl CallService {
                 "this connection is not in the call",
             ));
         }
+        let new_share = self.ids.next_id() as i64;
         let call = self
             .store
             .update(
@@ -219,6 +221,11 @@ impl CallService {
                         .iter_mut()
                         .filter(|p| p.connection_id == connection_id)
                     {
+                        if !sharing {
+                            p.share_id = 0;
+                        } else if !p.sharing_screen {
+                            p.share_id = new_share;
+                        }
                         p.sharing_screen = sharing;
                         p.controllable = sharing && controllable;
                     }
@@ -236,17 +243,19 @@ impl CallService {
     pub async fn control(
         &self,
         me: i64,
+        connection_id: u64,
         call_id: i64,
         action: ControlAction,
     ) -> Result<Call, ApiError> {
         self.member_call(me, call_id).await?;
+        let grant_id = self.ids.next_id() as i64;
         let (tx, rx) = std::sync::mpsc::channel();
         let call = self
             .store
             .update(
                 call_id,
                 Box::new(move |c| {
-                    let _ = tx.send(c.apply_control(me, action));
+                    let _ = tx.send(c.apply_control(me, connection_id, action, grant_id));
                 }),
             )
             .await
@@ -263,6 +272,29 @@ impl CallService {
     pub async fn connection_closed(&self, connection_id: u64) {
         for call in self.store.with_connection(connection_id).await {
             self.remove_connection(call.id, connection_id).await;
+        }
+    }
+
+    /// The SFU dropped a peer or broke an input route on its own.
+    pub async fn media_notice(&self, notice: MediaNotice) {
+        match notice {
+            MediaNotice::PeerGone { peer_id } => {
+                tracing::info!(peer_id, "media peer lost");
+                for call in self.store.with_peer(peer_id).await {
+                    self.remove_where(call.id, Box::new(move |p| p.peer_id == peer_id))
+                        .await;
+                }
+            }
+            MediaNotice::RouteFailed { room_id } => {
+                tracing::warn!(call.id = room_id, "share play input route failed");
+                if let Some(call) = self
+                    .store
+                    .update(room_id, Box::new(|c| c.control = None))
+                    .await
+                {
+                    self.push_updated(&call).await;
+                }
+            }
         }
     }
 
@@ -295,20 +327,25 @@ impl CallService {
     }
 
     pub(crate) async fn remove_connection(&self, call_id: i64, connection_id: u64) -> Option<Call> {
+        self.remove_where(call_id, Box::new(move |p| p.connection_id == connection_id))
+            .await
+    }
+
+    async fn remove_where(
+        &self,
+        call_id: i64,
+        gone: Box<dyn Fn(&Participant) -> bool + Send>,
+    ) -> Option<Call> {
         let (tx, rx) = std::sync::mpsc::channel();
         let call = self
             .store
             .update(
                 call_id,
                 Box::new(move |c| {
-                    for p in c
-                        .participants
-                        .iter()
-                        .filter(|p| p.connection_id == connection_id)
-                    {
+                    for p in c.participants.iter().filter(|p| gone(p)) {
                         let _ = tx.send(p.peer_id);
                     }
-                    c.participants.retain(|p| p.connection_id != connection_id);
+                    c.participants.retain(|p| !gone(p));
                     c.settle_control();
                 }),
             )
@@ -337,6 +374,7 @@ impl CallService {
         for p in &call.participants {
             let _ = self.media.leave(p.peer_id).await;
         }
+        let _ = self.media.route(call_id, None).await;
         tracing::info!(call.id = call_id, ?reason, "call ended");
         self.push_ended(&call, &call.member_ids, reason).await;
     }
@@ -393,6 +431,9 @@ impl CallService {
         let Some(call) = self.store.get(call.id).await else {
             return;
         };
+        if let Err(e) = self.media.route(call.id, call.control_route()).await {
+            tracing::warn!(error = %e, "share play route update failed");
+        }
         let payload = Payload::CallUpdated(v1::CallUpdated {
             call: Some((&call).into()),
         });
@@ -509,7 +550,9 @@ mod tests {
     struct FakeMedia {
         next_peer: AtomicU64,
         left: Mutex<Vec<u64>>,
+        routes: Mutex<Vec<RouteLog>>,
     }
+    type RouteLog = (i64, Option<(u64, u64)>);
     #[async_trait]
     impl MediaClient for FakeMedia {
         async fn join(&self, _: i64, _: i64, _: String) -> anyhow::Result<(u64, String)> {
@@ -518,6 +561,10 @@ mod tests {
         }
         async fn leave(&self, peer_id: u64) -> anyhow::Result<()> {
             self.left.lock().unwrap().push(peer_id);
+            Ok(())
+        }
+        async fn route(&self, room: i64, route: Option<(u64, u64)>) -> anyhow::Result<()> {
+            self.routes.lock().unwrap().push((room, route));
             Ok(())
         }
     }
@@ -700,6 +747,7 @@ mod tests {
             peer_id: 1,
             sharing_screen: false,
             controllable: false,
+            share_id: 0,
         };
         assert!(store.add_participant(call.id, p(20), true).await.is_ok());
         assert_eq!(
@@ -831,77 +879,157 @@ mod tests {
         assert_eq!(pushes(&events, BOB).last().unwrap(), "ended");
     }
 
-    async fn share_play_call() -> (Arc<CallService>, i64) {
-        let (svc, _, _) = setup();
+    // Peers are handed out in join order: Alice = 1, Bob = 2, Eve = 3.
+    // Connection ids: Alice 10, Bob 20, Eve 30.
+    async fn share_play_call() -> (Arc<CallService>, Arc<FakeMedia>, i64) {
+        let (svc, _, media) = setup_with_members(vec![ALICE, BOB, EVE]);
         let call = svc.start(ALICE, DM).await.unwrap();
-        svc.join(ALICE, 10, 10, call.id, "offer".into())
-            .await
-            .unwrap();
-        svc.join(BOB, 20, 20, call.id, "offer".into())
-            .await
-            .unwrap();
+        for (user, conn) in [(ALICE, 10), (BOB, 20), (EVE, 30)] {
+            svc.join(user, conn as i64, conn, call.id, "offer".into())
+                .await
+                .unwrap();
+        }
         svc.screen_share(ALICE, 10, call.id, true, true)
             .await
             .unwrap();
-        (svc, call.id)
+        (svc, media, call.id)
+    }
+
+    async fn grant_bob(svc: &CallService, id: i64) -> Call {
+        svc.control(BOB, 20, id, ControlAction::Request { host_id: ALICE })
+            .await
+            .unwrap();
+        svc.control(ALICE, 10, id, ControlAction::Grant { viewer_id: BOB })
+            .await
+            .unwrap()
+    }
+
+    fn last_route(media: &FakeMedia) -> Option<(u64, u64)> {
+        media.routes.lock().unwrap().last().unwrap().1
     }
 
     #[tokio::test]
     async fn share_play_request_grant_and_errors() {
-        let (svc, id) = share_play_call().await;
+        let (svc, media, id) = share_play_call().await;
         let err = svc
-            .control(BOB, id, ControlAction::Grant { viewer_id: BOB })
+            .control(BOB, 20, id, ControlAction::Grant { viewer_id: BOB })
             .await
             .unwrap_err();
         assert_eq!(err.describe().1, "control_not_allowed");
-        svc.control(BOB, id, ControlAction::Request { host_id: ALICE })
-            .await
-            .unwrap();
-        let call = svc
-            .control(ALICE, id, ControlAction::Grant { viewer_id: BOB })
-            .await
-            .unwrap();
-        assert!(call.control.unwrap().granted);
-        let err = svc
-            .control(EVE, id, ControlAction::Revoke)
-            .await
-            .unwrap_err();
+        let call = grant_bob(&svc, id).await;
+        let control = call.control.unwrap();
+        assert!(control.granted);
+        assert_ne!(control.grant_id, 0);
         assert_eq!(
-            err.describe().1,
-            "call_not_found",
-            "outsiders can't touch it"
+            last_route(&media),
+            Some((2, 1)),
+            "SFU relays Bob -> Alice only"
         );
-    }
-
-    #[tokio::test]
-    async fn share_play_needs_a_controllable_share() {
-        let (svc, id) = share_play_call().await;
-        svc.screen_share(ALICE, 10, id, true, false).await.unwrap();
         let err = svc
-            .control(BOB, id, ControlAction::Request { host_id: ALICE })
+            .control(BOB, 20, id, ControlAction::Request { host_id: EVE })
             .await
             .unwrap_err();
         assert_eq!(err.describe().1, "control_unavailable");
     }
 
     #[tokio::test]
-    async fn share_play_ends_when_share_stops_or_viewer_disconnects() {
-        let (svc, id) = share_play_call().await;
-        svc.control(BOB, id, ControlAction::Request { host_id: ALICE })
+    async fn share_play_second_login_cannot_approve() {
+        let (svc, _, id) = share_play_call().await;
+        svc.control(BOB, 20, id, ControlAction::Request { host_id: ALICE })
             .await
             .unwrap();
-        svc.control(ALICE, id, ControlAction::Grant { viewer_id: BOB })
+        let err = svc
+            .control(ALICE, 11, id, ControlAction::Grant { viewer_id: BOB })
             .await
-            .unwrap();
+            .unwrap_err();
+        assert_eq!(err.describe().1, "control_not_allowed");
+        assert!(!svc.store.get(id).await.unwrap().control.unwrap().granted);
+    }
+
+    #[tokio::test]
+    async fn share_play_needs_a_controllable_share() {
+        let (svc, _, id) = share_play_call().await;
+        svc.screen_share(ALICE, 10, id, true, false).await.unwrap();
+        let err = svc
+            .control(BOB, 20, id, ControlAction::Request { host_id: ALICE })
+            .await
+            .unwrap_err();
+        assert_eq!(err.describe().1, "control_unavailable");
+    }
+
+    #[tokio::test]
+    async fn share_play_ends_when_share_stops() {
+        let (svc, media, id) = share_play_call().await;
+        grant_bob(&svc, id).await;
         let call = svc.screen_share(ALICE, 10, id, false, true).await.unwrap();
         assert_eq!(call.control, None);
+        assert_eq!(last_route(&media), None);
+    }
 
-        svc.screen_share(ALICE, 10, id, true, true).await.unwrap();
-        svc.control(BOB, id, ControlAction::Request { host_id: ALICE })
+    #[tokio::test]
+    async fn share_play_active_grant_ends_when_viewer_disconnects_and_call_stays() {
+        let (svc, media, id) = share_play_call().await;
+        let first = grant_bob(&svc, id).await.control.unwrap();
+        svc.connection_closed(20).await;
+
+        let call = svc
+            .store
+            .get(id)
+            .await
+            .expect("call stays open with Alice and Eve");
+        assert_eq!(call.participant_user_ids(), [ALICE, EVE]);
+        assert_eq!(call.control, None);
+        assert_eq!(last_route(&media), None, "SFU route cleared");
+
+        // A stale grant from before the disconnect can't come back.
+        let err = svc
+            .control(ALICE, 10, id, ControlAction::Grant { viewer_id: BOB })
+            .await
+            .unwrap_err();
+        assert_eq!(err.describe().1, "control_not_allowed");
+        // Bob rejoins and asks again: a new grant gets a new id.
+        svc.join(BOB, 21, 21, id, "offer".into()).await.unwrap();
+        svc.control(BOB, 21, id, ControlAction::Request { host_id: ALICE })
             .await
             .unwrap();
-        svc.join(EVE, 30, 30, id, "offer".into()).await.ok();
-        svc.connection_closed(20).await;
-        assert!(svc.store.get(id).await.is_none_or(|c| c.control.is_none()));
+        let again = svc
+            .control(ALICE, 10, id, ControlAction::Grant { viewer_id: BOB })
+            .await
+            .unwrap()
+            .control
+            .unwrap();
+        assert_ne!(again.grant_id, first.grant_id);
+    }
+
+    #[tokio::test]
+    async fn share_play_sfu_peer_loss_revokes() {
+        let (svc, media, id) = share_play_call().await;
+        grant_bob(&svc, id).await;
+        svc.media_notice(MediaNotice::PeerGone { peer_id: 2 }).await;
+        let call = svc.store.get(id).await.unwrap();
+        assert_eq!(call.control, None);
+        assert_eq!(call.participant_user_ids(), [ALICE, EVE]);
+        assert_eq!(last_route(&media), None);
+    }
+
+    #[tokio::test]
+    async fn share_play_route_failure_revokes() {
+        let (svc, media, id) = share_play_call().await;
+        grant_bob(&svc, id).await;
+        svc.media_notice(MediaNotice::RouteFailed { room_id: id })
+            .await;
+        let call = svc.store.get(id).await.unwrap();
+        assert_eq!(call.control, None);
+        assert_eq!(call.participant_user_ids(), [ALICE, BOB, EVE]);
+        assert_eq!(last_route(&media), None);
+    }
+
+    #[tokio::test]
+    async fn share_play_restarted_share_drops_old_grant() {
+        let (svc, _, id) = share_play_call().await;
+        grant_bob(&svc, id).await;
+        svc.screen_share(ALICE, 10, id, false, true).await.unwrap();
+        let call = svc.screen_share(ALICE, 10, id, true, true).await.unwrap();
+        assert_eq!(call.control, None);
     }
 }

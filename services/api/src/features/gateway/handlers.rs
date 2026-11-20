@@ -455,7 +455,12 @@ async fn call_control(
     call_result(
         state
             .calls
-            .control(session.user_id, req.call_id as i64, action)
+            .control(
+                session.user_id,
+                session.connection_id,
+                req.call_id as i64,
+                action,
+            )
             .await,
     )
 }

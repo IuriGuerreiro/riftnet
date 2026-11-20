@@ -22,6 +22,76 @@ pub struct Sfu {
     cmds: Sender<Cmd>,
 }
 
+/// Things the SFU decided on its own that the api must know about.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Notice {
+    PeerGone { peer_id: u64 },
+    RouteFailed { room: u64 },
+}
+
+/// Share Play limits on relayed input.
+const MAX_INPUT_BYTES: usize = 256;
+const INPUT_RATE_PER_S: f64 = 200.0;
+const INPUT_BURST: f64 = 400.0;
+const RELIABLE: &str = "input";
+const LATEST: &str = "input-move";
+
+/// Token bucket for one peer's input messages.
+struct RateLimit {
+    tokens: f64,
+    at: Instant,
+}
+
+impl RateLimit {
+    fn new(now: Instant) -> Self {
+        Self {
+            tokens: INPUT_BURST,
+            at: now,
+        }
+    }
+
+    fn allow(&mut self, now: Instant) -> bool {
+        let dt = now.saturating_duration_since(self.at).as_secs_f64();
+        self.at = now;
+        self.tokens = (self.tokens + dt * INPUT_RATE_PER_S).min(INPUT_BURST);
+        if self.tokens < 1.0 {
+            return false;
+        }
+        self.tokens -= 1.0;
+        true
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum Relay {
+    /// Send to this host peer.
+    To(u64),
+    /// Ignore (lossy channel, or not part of the active grant).
+    Drop,
+    /// A reliable input message must not be lost: break the route.
+    Fail,
+}
+
+/// Only the granted controller's input reaches only its host.
+fn relay_decision(
+    route: Option<(u64, u64)>,
+    from: u64,
+    label: &str,
+    len: usize,
+    allowed: bool,
+) -> Relay {
+    let Some((_, host)) = route.filter(|(c, _)| *c == from) else {
+        return Relay::Drop;
+    };
+    let ok = len <= MAX_INPUT_BYTES && allowed;
+    match label {
+        RELIABLE if ok => Relay::To(host),
+        RELIABLE => Relay::Fail,
+        LATEST if ok => Relay::To(host),
+        _ => Relay::Drop,
+    }
+}
+
 enum Cmd {
     Add {
         peer_id: u64,
@@ -33,6 +103,10 @@ enum Cmd {
     Remove {
         peer_id: u64,
     },
+    Route {
+        room: u64,
+        route: Option<(u64, u64)>,
+    },
 }
 
 struct Peer {
@@ -42,6 +116,7 @@ struct Peer {
     rtc: Rtc,
     /// Open data channels by label. Only `input*` labels are relayed.
     channels: HashMap<String, ChannelId>,
+    limiter: RateLimit,
     audio: Option<Mid>,
     video: Option<Mid>,
     /// When `media.join` arrived. Cleared once the first media is seen.
@@ -100,13 +175,16 @@ fn tag(user_id: u64, data: &[u8]) -> Vec<u8> {
 
 static NEXT_PEER: AtomicU64 = AtomicU64::new(1);
 
-pub fn start(socket: UdpSocket) -> anyhow::Result<Sfu> {
+pub fn start(
+    socket: UdpSocket,
+) -> anyhow::Result<(Sfu, tokio::sync::mpsc::UnboundedReceiver<Notice>)> {
     let addr = socket.local_addr()?;
     let (cmds, rx) = mpsc::channel();
+    let (notices, notices_rx) = tokio::sync::mpsc::unbounded_channel();
     std::thread::Builder::new()
         .name("sfu".into())
-        .spawn(move || run(socket, rx))?;
-    Ok(Sfu { addr, cmds })
+        .spawn(move || run(socket, rx, notices))?;
+    Ok((Sfu { addr, cmds }, notices_rx))
 }
 
 impl Sfu {
@@ -133,9 +211,19 @@ impl Sfu {
     pub fn remove(&self, peer_id: u64) {
         let _ = self.cmds.send(Cmd::Remove { peer_id });
     }
+
+    /// Share Play: the one input route of a room (controller peer, host peer).
+    pub fn route(&self, room: u64, route: Option<(u64, u64)>) {
+        let _ = self.cmds.send(Cmd::Route { room, route });
+    }
 }
 
-fn run(socket: UdpSocket, cmds: Receiver<Cmd>) {
+fn run(
+    socket: UdpSocket,
+    cmds: Receiver<Cmd>,
+    notices: tokio::sync::mpsc::UnboundedSender<Notice>,
+) {
+    let mut routes: HashMap<u64, (u64, u64)> = HashMap::new();
     let local = socket.local_addr().expect("socket address");
     let mut peers: Vec<Peer> = Vec::new();
     let mut buf = vec![0u8; 2000];
@@ -184,6 +272,7 @@ fn run(socket: UdpSocket, cmds: Receiver<Cmd>) {
                         user_id,
                         rtc: *rtc,
                         channels: HashMap::new(),
+                        limiter: RateLimit::new(requested_at),
                         audio: None,
                         video: None,
                         awaiting_media: Some(requested_at),
@@ -198,6 +287,14 @@ fn run(socket: UdpSocket, cmds: Receiver<Cmd>) {
                         p.end("left");
                     }
                 }
+                Cmd::Route { room, route } => match route {
+                    Some(r) => {
+                        routes.insert(room, r);
+                    }
+                    None => {
+                        routes.remove(&room);
+                    }
+                },
             }
         }
         if joined {
@@ -206,8 +303,9 @@ fn run(socket: UdpSocket, cmds: Receiver<Cmd>) {
 
         let mut forward: Vec<(u64, u64, MediaKind, MediaData)> = Vec::new();
         let mut keyframes: Vec<(u64, u64, KeyframeRequestKind)> = Vec::new();
-        // (from peer, room, label, payload tagged with the sender's user id)
+        // (room, host peer, label, payload tagged with the sender's user id)
         let mut relay: Vec<(u64, u64, String, Vec<u8>)> = Vec::new();
+        let mut failed_rooms: Vec<u64> = Vec::new();
         let mut next_timeout = Instant::now() + Duration::from_millis(100);
         for p in &mut peers {
             while p.rtc.is_alive() {
@@ -289,14 +387,24 @@ fn run(socket: UdpSocket, cmds: Receiver<Cmd>) {
                         }
                         Event::ChannelClose(id) => p.channels.retain(|_, c| *c != id),
                         Event::ChannelData(d) => {
-                            if let Some(label) = p
+                            let Some(label) = p
                                 .channels
                                 .iter()
                                 .find(|(_, c)| **c == d.id)
                                 .map(|(l, _)| l.clone())
                                 .filter(|l| is_relayed(l))
-                            {
-                                relay.push((p.id, p.room, label, tag(p.user_id, &d.data)));
+                            else {
+                                continue;
+                            };
+                            let route = routes.get(&p.room).copied();
+                            let allowed = route.is_some_and(|(c, _)| c == p.id)
+                                && p.limiter.allow(Instant::now());
+                            match relay_decision(route, p.id, &label, d.data.len(), allowed) {
+                                Relay::To(host) => {
+                                    relay.push((p.room, host, label, tag(p.user_id, &d.data)))
+                                }
+                                Relay::Drop => {}
+                                Relay::Fail => failed_rooms.push(p.room),
                             }
                         }
                         Event::Connected => tracing::info!(peer.id = p.id, "peer connected"),
@@ -360,19 +468,29 @@ fn run(socket: UdpSocket, cmds: Receiver<Cmd>) {
             }
         }
 
-        for (from, room, label, data) in &relay {
-            for p in peers
+        for (room, host, label, data) in &relay {
+            if failed_rooms.contains(room) {
+                continue;
+            }
+            let written = peers
                 .iter_mut()
-                .filter(|p| p.id != *from && p.room == *room)
-            {
-                let Some(&id) = p.channels.get(label) else {
-                    continue;
-                };
-                if let Some(mut ch) = p.rtc.channel(id)
-                    && let Err(e) = ch.write(true, data)
-                {
-                    tracing::debug!(peer.id = p.id, error = ?e, "relay failed");
-                }
+                .find(|p| p.id == *host && p.room == *room)
+                .and_then(|p| {
+                    let id = *p.channels.get(label)?;
+                    // Ok(false) = str0m couldn't buffer it: as bad as an error.
+                    p.rtc.channel(id)?.write(true, data).ok()
+                })
+                .unwrap_or(false);
+            if !written && label == RELIABLE {
+                failed_rooms.push(*room);
+            }
+        }
+        failed_rooms.sort_unstable();
+        failed_rooms.dedup();
+        for room in failed_rooms {
+            if routes.remove(&room).is_some() {
+                tracing::warn!(room.id = room, "share play route failed");
+                let _ = notices.send(Notice::RouteFailed { room });
             }
         }
 
@@ -383,6 +501,10 @@ fn run(socket: UdpSocket, cmds: Receiver<Cmd>) {
             for p in gone {
                 let reason = p.end_reason.unwrap_or("closed");
                 tracing::info!(peer.id = p.id, reason, "peer removed");
+                routes.retain(|_, (c, h)| *c != p.id && *h != p.id);
+                if reason != "left" {
+                    let _ = notices.send(Notice::PeerGone { peer_id: p.id });
+                }
                 metrics::counter!(m::PEER_SESSIONS_ENDED, "reason" => reason).increment(1);
                 if !peers.iter().any(|o| o.room == p.room)
                     && let Some(started) = rooms.remove(&p.room)
@@ -443,6 +565,66 @@ mod tests {
         assert!(is_relayed("input"));
         assert!(is_relayed("input-move"));
         assert!(!is_relayed("chat"));
+    }
+
+    const NOW_ROUTE: Option<(u64, u64)> = Some((2, 1));
+
+    #[test]
+    fn only_the_granted_controller_reaches_only_its_host() {
+        assert_eq!(
+            relay_decision(NOW_ROUTE, 2, RELIABLE, 30, true),
+            Relay::To(1)
+        );
+        assert_eq!(relay_decision(NOW_ROUTE, 2, LATEST, 30, true), Relay::To(1));
+        assert_eq!(
+            relay_decision(NOW_ROUTE, 3, RELIABLE, 30, true),
+            Relay::Drop,
+            "bystander"
+        );
+        assert_eq!(
+            relay_decision(NOW_ROUTE, 1, RELIABLE, 30, true),
+            Relay::Drop,
+            "host"
+        );
+        assert_eq!(
+            relay_decision(None, 2, RELIABLE, 30, true),
+            Relay::Drop,
+            "pending/no grant"
+        );
+        assert_eq!(
+            relay_decision(NOW_ROUTE, 2, "input-x", 30, true),
+            Relay::Drop
+        );
+    }
+
+    #[test]
+    fn oversize_or_rate_limited_input_breaks_the_reliable_route() {
+        assert_eq!(
+            relay_decision(NOW_ROUTE, 2, RELIABLE, MAX_INPUT_BYTES + 1, true),
+            Relay::Fail
+        );
+        assert_eq!(
+            relay_decision(NOW_ROUTE, 2, RELIABLE, 30, false),
+            Relay::Fail
+        );
+        assert_eq!(
+            relay_decision(NOW_ROUTE, 2, LATEST, 30, false),
+            Relay::Drop,
+            "moves are lossy"
+        );
+    }
+
+    #[test]
+    fn rate_limit_refills() {
+        let t0 = Instant::now();
+        let mut r = RateLimit::new(t0);
+        let sent = (0..1000).filter(|_| r.allow(t0)).count();
+        assert_eq!(sent, INPUT_BURST as usize);
+        assert!(!r.allow(t0));
+        assert!(
+            r.allow(t0 + Duration::from_millis(10)),
+            "2 tokens after 10 ms"
+        );
     }
 
     #[test]

@@ -23,8 +23,8 @@ fn dir(down: bool) -> Direction {
     }
 }
 
-fn to_enigo(code: &str) -> Option<Key> {
-    Some(match keymap::to_key(code)? {
+fn to_enigo(key: keymap::Key) -> Key {
+    match key {
         keymap::Key::Char(c) => Key::Unicode(c),
         keymap::Key::Named(n) => match n {
             Named::Shift => Key::Shift,
@@ -61,16 +61,18 @@ fn to_enigo(code: &str) -> Option<Key> {
                 Key::F12,
             ][usize::from(n - 1)],
         },
-    })
+    }
 }
 
 impl Backend for Enigo {
-    fn key(&mut self, code: &str, down: bool) {
-        if let Some(k) = to_enigo(code)
-            && let Err(e) = self.0.key(k, dir(down))
-        {
-            log::debug!("key {code}: {e}");
+    fn key(&mut self, key: keymap::Key, down: bool) {
+        if let Err(e) = self.0.key(to_enigo(key), dir(down)) {
+            log::debug!("key {key:?}: {e}");
         }
+    }
+
+    fn location(&self) -> Option<(i32, i32)> {
+        self.0.location().ok()
     }
 
     fn button(&mut self, b: u8, down: bool) {

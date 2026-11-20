@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { decodeTagged, encode, normalizePointer, sendable, wheelLines } from "./sharePlayWire";
+import {
+  decodeTagged,
+  encode,
+  type HostState,
+  hostStep,
+  normalizePointer,
+  sendable,
+  wheelLines,
+} from "./sharePlayWire";
 
 describe("normalizePointer", () => {
   const box = { left: 100, top: 50, width: 800, height: 450 };
@@ -47,5 +55,42 @@ describe("wire format", () => {
     buf.set(body, 8);
     expect(decodeTagged(buf.buffer)).toEqual({ sender: 123456789012345678n, json });
     expect(decodeTagged(new ArrayBuffer(4))).toBeNull();
+  });
+});
+
+describe("hostStep", () => {
+  const me = 1n;
+  const grant = { hostId: me, controllerId: 2n, granted: true, grantId: 900n };
+  const fresh = (): HostState => ({ armed: null, seen: new Set() });
+
+  it("arms a new grant once", () => {
+    expect(hostStep(fresh(), grant, me, true)).toEqual({
+      kind: "arm",
+      grantId: 900n,
+      controllerId: 2n,
+    });
+    expect(hostStep({ armed: 900n, seen: new Set([900n]) }, grant, me, true)).toEqual({
+      kind: "none",
+    });
+  });
+
+  it("never re-arms a grant id it has seen (stale update after revoke)", () => {
+    expect(hostStep({ armed: null, seen: new Set([900n]) }, grant, me, true)).toEqual({
+      kind: "none",
+    });
+  });
+
+  it("revokes when the grant goes away, changes, or the share stops", () => {
+    const armed = { armed: 900n, seen: new Set([900n]) };
+    expect(hostStep(armed, undefined, me, true)).toEqual({ kind: "revoke" });
+    expect(hostStep(armed, { ...grant, grantId: 901n }, me, true)).toEqual({ kind: "revoke" });
+    expect(hostStep(armed, grant, me, false)).toEqual({ kind: "revoke" });
+  });
+
+  it("ignores pending requests and other hosts", () => {
+    expect(hostStep(fresh(), { ...grant, granted: false, grantId: 0n }, me, true)).toEqual({
+      kind: "none",
+    });
+    expect(hostStep(fresh(), { ...grant, hostId: 3n }, me, true)).toEqual({ kind: "none" });
   });
 });

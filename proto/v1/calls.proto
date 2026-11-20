@@ -26,6 +26,8 @@ message CallControlState {
   uint64 controller_id = 2;
   // false = the viewer asked and the host hasn't answered yet.
   bool granted = 3;
+  // Unique per approval, 0 while pending. The host arms each id at most once.
+  uint64 grant_id = 4;
 }
 
 message CallStart {

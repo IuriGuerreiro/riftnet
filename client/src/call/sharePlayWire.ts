@@ -1,8 +1,58 @@
 export type InputEvent =
   | { t: "move"; x: number; y: number }
-  | { t: "button"; b: number; down: boolean }
-  | { t: "wheel"; dx: number; dy: number }
-  | { t: "key"; code: string; down: boolean };
+  | { t: "button"; b: number; down: boolean; x: number; y: number }
+  | { t: "wheel"; dx: number; dy: number; x: number; y: number }
+  | { t: "key"; code: string; down: boolean }
+  | { t: "ping" };
+
+export const PING_MS = 500;
+
+export interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface MonitorInfo {
+  name: string;
+  rect: Rect;
+}
+
+interface ControlLike {
+  hostId: bigint;
+  controllerId: bigint;
+  granted: boolean;
+  grantId: bigint;
+}
+
+export interface HostState {
+  armed: bigint | null;
+  seen: Set<bigint>;
+}
+
+export type HostStep =
+  { kind: "none" } | { kind: "revoke" } | { kind: "arm"; grantId: bigint; controllerId: bigint };
+
+export function hostStep(
+  s: HostState,
+  control: ControlLike | undefined,
+  me: bigint | undefined,
+  sharing: boolean,
+): HostStep {
+  const want =
+    control?.granted &&
+    control.grantId !== 0n &&
+    me !== undefined &&
+    control.hostId === me &&
+    sharing
+      ? control
+      : null;
+  if (s.armed !== null && want?.grantId !== s.armed) return { kind: "revoke" };
+  if (s.armed === null && want && !s.seen.has(want.grantId))
+    return { kind: "arm", grantId: want.grantId, controllerId: want.controllerId };
+  return { kind: "none" };
+}
 
 export const RELIABLE = "input";
 export const LATEST = "input-move";
