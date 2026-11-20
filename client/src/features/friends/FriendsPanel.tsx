@@ -1,7 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import type { Friend } from "../../api/types";
 import { fieldClass as field } from "../../components/ui";
+import { useActivity } from "../../stores/activity";
+import { useCalls } from "../../stores/calls";
+import { useChat } from "../../stores/chat";
+import { useConnection } from "../../stores/connection";
 import { useFriends } from "../../stores/friends";
 import { fromJson, nameOf, useProfiles } from "../../stores/profiles";
 import { FriendRow, RowButton } from "./FriendRow";
@@ -9,6 +13,20 @@ import { useAddFriend, useUserSearch } from "./useUserSearch";
 
 export function FriendsPanel({ onDm }: { onDm: (username: string) => void }) {
   const { list, error, accept, deleteRequest, removeFriend } = useFriends();
+  const ws = useConnection((s) => s.ws);
+  const activities = useActivity((s) => s.byId);
+  const { current: call, error: callError, joinFriend } = useCalls();
+  const friendIds = list.friends
+    .map((f) => f.user.id)
+    .sort()
+    .join(",");
+  useEffect(() => {
+    if (!ws) {
+      useActivity.getState().clear();
+      return;
+    }
+    return useActivity.getState().watch(ws, friendIds ? friendIds.split(",") : []);
+  }, [ws, friendIds]);
   const [open, setOpen] = useState(true);
   const [username, setUsername] = useState("");
   const { query, valid: validQuery, ready: searchReady, search } = useUserSearch(username, open);
@@ -58,6 +76,11 @@ export function FriendsPanel({ onDm }: { onDm: (username: string) => void }) {
               Add
             </button>
           </form>
+          {callError && (
+            <p role="alert" className="text-xs text-red-400">
+              {callError}
+            </p>
+          )}
           {error && <p className="text-xs text-red-400">{error}</p>}
           {query && !validQuery && (
             <p className="text-xs text-zinc-400">Use 1–32 letters, numbers, underscores or dots.</p>
@@ -134,7 +157,31 @@ export function FriendsPanel({ onDm }: { onDm: (username: string) => void }) {
             </FriendRow>
           ))}
           {list.friends.map((f) => (
-            <FriendRow key={f.user.id} label={name(f)} avatarId={f.user.id} userId={f.user.id}>
+            <FriendRow
+              key={f.user.id}
+              label={name(f)}
+              avatarId={f.user.id}
+              userId={f.user.id}
+              hint={
+                activities[f.user.id]?.label
+                  ? `${activities[f.user.id]?.streaming ? "Streaming" : "Playing"} ${activities[f.user.id]?.label}`
+                  : undefined
+              }
+            >
+              {activities[f.user.id]?.joinable && !call && ws && (
+                <RowButton
+                  onClick={() =>
+                    void (async () => {
+                      await joinFriend(ws, BigInt(f.user.id));
+                      const joined = useCalls.getState().current;
+                      if (joined) await useChat.getState().select(ws, joined.conversationId);
+                    })()
+                  }
+                  className="text-green-400"
+                >
+                  Join call
+                </RowButton>
+              )}
               <RowButton
                 onClick={() => f.user.username && onDm(f.user.username)}
                 className="text-brand"

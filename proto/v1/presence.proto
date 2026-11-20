@@ -36,3 +36,25 @@ message GetPresence {
 message Presences {
   repeated PresenceUpdated presences = 1;
 }
+
+// Activity is opt-in and visible only to accepted friends.
+message SetActivity {
+  string label = 1; // Empty clears this connection's activity.
+}
+message GetActivities {
+  repeated uint64 user_ids = 1;
+}
+message FriendActivity {
+  uint64 user_id = 1;
+  string label = 2;
+  bool streaming = 3;
+  bool joinable = 4;
+}
+message Activities {
+  repeated FriendActivity activities = 1;
+}
+// Resolve the friend's current call again during admission.
+message JoinFriendCall {
+  uint64 friend_id = 1;
+  string sdp_offer = 2;
+}

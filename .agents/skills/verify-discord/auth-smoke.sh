@@ -94,6 +94,9 @@ for ((attempt = 0; attempt < 90; attempt++)); do
   if curl -fsS --max-time 2 "$api_url/health" >"$evidence/doctor.log" 2>/dev/null &&
     kill -0 "$api_pid" 2>/dev/null; then
     bash "$repo/scripts/smoke-auth.sh" "$api_url" 2>&1 | tee "$evidence/auth.log"
+    if (($#)); then
+      (cd "$repo"; API_HTTP="$api_url" "$@")
+    fi
     exit 0
   fi
   sleep 1

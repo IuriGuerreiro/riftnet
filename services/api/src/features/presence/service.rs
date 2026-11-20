@@ -84,6 +84,75 @@ impl PresenceService {
         Ok(ids.into_iter().zip(statuses).collect())
     }
 
+    pub async fn set_activity(
+        &self,
+        user_id: i64,
+        connection_id: u64,
+        label: &str,
+    ) -> Result<(), ApiError> {
+        let label = label.trim();
+        if label.len() > 100 || label.chars().any(char::is_control) {
+            return Err(ApiError::bad_request(
+                "invalid_activity",
+                "Use at most 100 bytes without control characters",
+            ));
+        }
+        self.store
+            .set_activity(user_id, connection_id, label)
+            .await
+            .map_err(|err| ApiError::Internal(err.context("activity store")))
+    }
+
+    pub async fn require_friend(&self, me: i64, friend: i64) -> Result<(), ApiError> {
+        use crate::features::friends::models::FriendshipStatus;
+        self.friends
+            .find(me, friend)
+            .await?
+            .filter(|f| f.status == FriendshipStatus::Accepted)
+            .ok_or(ApiError::NotFound)?;
+        Ok(())
+    }
+
+    pub async fn friend_activities(
+        &self,
+        me: i64,
+        user_ids: &[u64],
+    ) -> Result<Vec<(i64, Vec<(u64, String)>)>, ApiError> {
+        use crate::features::friends::models::FriendshipStatus;
+        if user_ids.len() > MAX_PRESENCE_IDS {
+            return Err(ApiError::bad_request(
+                "too_many_ids",
+                "at most 200 users per request",
+            ));
+        }
+        let friends: HashSet<i64> = self
+            .friends
+            .list_for_user(me)
+            .await?
+            .iter()
+            .filter(|f| f.status == FriendshipStatus::Accepted)
+            .map(|f| f.other(me))
+            .collect();
+        let mut ids: Vec<i64> = user_ids
+            .iter()
+            .filter_map(|id| i64::try_from(*id).ok())
+            .filter(|id| friends.contains(id))
+            .collect();
+        ids.sort_unstable();
+        ids.dedup();
+        let mut result = Vec::new();
+        for id in ids {
+            let mut activities = self
+                .store
+                .activities(id)
+                .await
+                .map_err(|err| ApiError::Internal(err.context("activity store")))?;
+            activities.sort_by_key(|(conn, _)| std::cmp::Reverse(*conn));
+            result.push((id, activities));
+        }
+        Ok(result)
+    }
+
     async fn apply(&self, user_id: i64, connection_id: u64, op: Op) {
         match self.store.apply(user_id, connection_id, op).await {
             Ok(change) if change.changed() => self.announce(user_id, change).await,
@@ -151,8 +220,13 @@ mod tests {
 
     #[async_trait]
     impl FriendRepo for FakeFriends {
-        async fn find(&self, _: i64, _: i64) -> Result<Option<Friendship>, RepoError> {
-            unimplemented!()
+        async fn find(&self, a: i64, b: i64) -> Result<Option<Friendship>, RepoError> {
+            let (low, high) = ordered_pair(a, b);
+            Ok(self
+                .0
+                .iter()
+                .find(|f| f.user_low == low && f.user_high == high)
+                .cloned())
         }
         async fn list_for_user(&self, user_id: i64) -> Result<Vec<Friendship>, RepoError> {
             Ok(self
@@ -295,6 +369,85 @@ mod tests {
             store,
             events,
         }
+    }
+
+    #[tokio::test]
+    async fn activity_is_opt_in_and_only_accepted_friends_can_read_it() {
+        let t = setup();
+        t.service.connected(ANA, 1).await;
+        assert!(
+            t.service
+                .friend_activities(BOB, &[ANA as u64])
+                .await
+                .unwrap()[0]
+                .1
+                .is_empty()
+        );
+        t.service.set_activity(ANA, 1, " Minecraft ").await.unwrap();
+        assert_eq!(
+            t.service
+                .friend_activities(BOB, &[ANA as u64])
+                .await
+                .unwrap(),
+            vec![(ANA, vec![(1, "Minecraft".into())])]
+        );
+        for outsider in [CAT, DAN] {
+            assert!(
+                t.service
+                    .friend_activities(outsider, &[ANA as u64])
+                    .await
+                    .unwrap()
+                    .is_empty()
+            );
+            assert!(t.service.require_friend(outsider, ANA).await.is_err());
+        }
+        assert!(t.service.require_friend(BOB, ANA).await.is_ok());
+        assert!(
+            t.service
+                .friend_activities(BOB, &vec![ANA as u64; 201])
+                .await
+                .is_err()
+        );
+        assert!(
+            t.service
+                .set_activity(ANA, 1, &"x".repeat(101))
+                .await
+                .is_err()
+        );
+        assert!(t.service.set_activity(ANA, 1, "bad\nlabel").await.is_err());
+    }
+
+    #[tokio::test]
+    async fn activity_follows_connection_expiry_clear_and_disconnect() {
+        let t = setup();
+        t.service.connected(ANA, 1).await;
+        t.service.connected(ANA, 2).await;
+        t.service.set_activity(ANA, 1, "First").await.unwrap();
+        t.service.set_activity(ANA, 2, "Second").await.unwrap();
+        assert_eq!(
+            t.service
+                .friend_activities(BOB, &[ANA as u64])
+                .await
+                .unwrap()[0]
+                .1[0]
+                .1,
+            "Second"
+        );
+        t.service.set_activity(ANA, 2, "").await.unwrap();
+        assert_eq!(
+            t.store.activities(ANA).await.unwrap(),
+            vec![(1, "First".into())]
+        );
+        t.service.disconnected(ANA, 1).await;
+        assert!(t.store.activities(ANA).await.unwrap().is_empty());
+        t.service.set_activity(ANA, 2, "Second").await.unwrap();
+        t.store.set_clock(1_100_000);
+        assert!(t.store.activities(ANA).await.unwrap().is_empty());
+        t.service.heartbeat(ANA, 2).await;
+        assert!(
+            t.store.activities(ANA).await.unwrap().is_empty(),
+            "Expired activity must not return after a heartbeat"
+        );
     }
 
     use v1::PresenceStatus as P;

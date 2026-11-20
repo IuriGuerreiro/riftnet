@@ -32,6 +32,7 @@ pub trait CallStore: Send + Sync {
         user_id: i64,
     ) -> Option<(Call, Option<Participant>)>;
     async fn with_connection(&self, connection_id: u64) -> Vec<Call>;
+    async fn with_user(&self, user_id: i64) -> Vec<Call>;
 }
 
 #[derive(Default)]
@@ -109,6 +110,19 @@ impl CallStore for MemoryCallStore {
             .position(|p| p.user_id == user_id)
             .map(|index| call.participants.remove(index));
         Some((call.clone(), participant))
+    }
+
+    async fn with_user(&self, user_id: i64) -> Vec<Call> {
+        let mut calls: Vec<_> = self
+            .calls
+            .lock()
+            .unwrap()
+            .values()
+            .filter(|c| c.participants.iter().any(|p| p.user_id == user_id))
+            .cloned()
+            .collect();
+        calls.sort_by_key(|c| std::cmp::Reverse(c.id));
+        calls
     }
 
     async fn with_connection(&self, connection_id: u64) -> Vec<Call> {
