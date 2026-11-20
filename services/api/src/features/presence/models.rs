@@ -1,4 +1,5 @@
 use protocol::v1;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Status {
@@ -12,12 +13,21 @@ pub enum Status {
 pub struct Change {
     pub before: Status,
     pub after: Status,
+    pub revision: u64,
+    pub preference_loaded: bool,
 }
 
 impl Change {
     pub fn changed(&self) -> bool {
         self.before != self.after
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Snapshot {
+    pub status: Status,
+    pub revision: u64,
+    pub preference_loaded: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -72,5 +82,27 @@ mod tests {
             status_of([conn(20, true), conn(5, false)], 10),
             Status::Idle
         );
+    }
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, Default, sqlx::Type)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(type_name = "text", rename_all = "snake_case")]
+pub enum PresencePreference {
+    #[default]
+    Online,
+    Idle,
+    DoNotDisturb,
+    Invisible,
+}
+
+impl PresencePreference {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Online => "online",
+            Self::Idle => "idle",
+            Self::DoNotDisturb => "do_not_disturb",
+            Self::Invisible => "invisible",
+        }
     }
 }

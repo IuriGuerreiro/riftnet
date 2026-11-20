@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { z } from "zod";
 
 import { http } from "../api/http";
+import { watchOwnPresence } from "../api/presence-settings";
 import { useAuth } from "../stores/auth";
 import { ErrorText } from "./ui";
 
@@ -16,14 +18,20 @@ export function PresenceSettings() {
   const queryKey = ["presence-settings", userId];
   const query = useQuery({
     queryKey,
+    refetchOnMount: "always",
     queryFn: async () => presenceSettings.parse(await http<unknown>("/me/settings/presence")),
   });
+  useEffect(() => watchOwnPresence(queryClient, userId), [queryClient, userId]);
+
   const update = useMutation({
     mutationFn: async (settings: Settings) =>
       presenceSettings.parse(
         await http<unknown>("/me/settings/presence", { method: "PUT", body: settings }),
       ),
-    onSuccess: (settings) => queryClient.setQueryData(queryKey, settings),
+    onSuccess: async (settings) => {
+      queryClient.setQueryData(queryKey, settings);
+      await queryClient.invalidateQueries({ queryKey });
+    },
   });
 
   return (

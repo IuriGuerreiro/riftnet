@@ -20,6 +20,7 @@ enum PresenceStatus {
 message PresenceUpdated {
   uint64 user_id = 1;
   PresenceStatus status = 2;
+  uint64 revision = 3;
 }
 
 // This socket went idle (no input for a while, window hidden) or came back.

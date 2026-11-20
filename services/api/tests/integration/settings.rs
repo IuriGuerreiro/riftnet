@@ -267,3 +267,47 @@ async fn manual_presence_overrides_activity_and_survives_reconnect() {
     alice.close().await;
     bob.close().await;
 }
+
+#[tokio::test]
+#[ignore = "needs infra: docker compose up"]
+async fn preference_delivery_queue_preserves_newer_updates_until_acknowledged() {
+    use api::features::presence::models::PresencePreference;
+    use api::features::presence::repository::{PgPreferenceRepository, PreferenceRepository};
+
+    let admin = sqlx::PgPool::connect(&server().database_url).await.unwrap();
+    let name = format!(
+        "api_it_{}_{:08x}",
+        chrono::Utc::now().timestamp(),
+        rand::random::<u32>()
+    );
+    sqlx::query(&format!("CREATE DATABASE {name}"))
+        .execute(&admin)
+        .await
+        .unwrap();
+    let base = server().database_url.rsplit_once('/').unwrap().0;
+    let pool = api::common::db::connect(&format!("{base}/{name}"))
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO users (id, zitadel_id) VALUES (1, 'presence-queue-test')")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let repo = PgPreferenceRepository::new(pool.clone());
+    let older = repo.set(1, PresencePreference::Invisible).await.unwrap();
+    let newer = repo.set(1, PresencePreference::Online).await.unwrap();
+    assert!(newer.version > older.version);
+    repo.acknowledge(1, older.version).await.unwrap();
+    let pending = repo.pending().await.unwrap();
+    assert_eq!(pending.len(), 1);
+    assert_eq!(pending[0].version, newer.version);
+    assert_eq!(pending[0].preference.as_str(), "online");
+    repo.acknowledge(1, newer.version).await.unwrap();
+    assert!(repo.pending().await.unwrap().is_empty());
+    drop(repo);
+    pool.close().await;
+    sqlx::query(&format!("DROP DATABASE {name} WITH (FORCE)"))
+        .execute(&admin)
+        .await
+        .unwrap();
+    admin.close().await;
+}

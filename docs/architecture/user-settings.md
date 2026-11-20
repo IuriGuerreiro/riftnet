@@ -17,10 +17,17 @@ Conversation mutes are permanent until unmuted. Both reads and writes require cu
 
 These endpoints store notification preferences. Desktop, push, sound delivery, and a notification inbox are not implemented. Existing message and call gateway events continue to arrive so clients can keep their state current. Future notification delivery must consult global preferences, conversation mutes, and do-not-disturb status before alerting.
 
-Presence preferences persist in Postgres. The presence store combines them with live socket state: disconnected accounts remain offline, invisible always appears offline, and idle or do-not-disturb overrides socket activity while connected. Online uses automatic idle detection. Changes broadcast through the existing presence audience. Reads apply preferences in bulk. Heartbeats read the saved preference before updating live state, so reconnects and activity cannot reveal an invisible account.
+Presence preferences and their versions persist in Postgres. Redis caches the preference separately from expiring socket state. One Lua script combines preference updates, socket operations, and visible status. A delayed cache fill cannot overwrite a newer saved version. Disconnected accounts remain offline; invisible appears offline; idle and do-not-disturb override socket activity. Online allows automatic idle detection.
+
+Warm heartbeats, disconnects, and presence reads use Redis without querying Postgres for preferences. A missing cache entry stays invisible until the saved preference loads. Database errors during that recovery do not prevent Redis from refreshing or removing sockets.
+
+Presence pushes and snapshots carry a Redis-generated monotonic revision. Clients ignore older revisions, so delayed Online pushes cannot override newer Invisible updates. A self-presence push also refreshes the account's presence selector, including when two different preferences have the same visible status.
+
+The presence service runs each saved preference update and its announcement in a task that survives cancellation of the HTTP caller. Postgres saves the preference and a pending update in one transaction. The endpoint succeeds after Redis applies the update and the event bus accepts its announcement. If either step fails, the pending update remains for recovery every five seconds and after API restarts. Acknowledging an older version cannot delete a newer pending update. Repeated recovery is safe because Redis rejects older saved versions.
 
 Run the backend coverage with local test infrastructure:
 
 ```sh
+cargo test --locked -p api --lib features::presence -- --include-ignored
 cargo test --locked -p api --test integration settings:: -- --ignored
 ```

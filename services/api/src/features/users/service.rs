@@ -18,6 +18,7 @@ use crate::features::friends::repository::FriendRepo;
 
 pub const MAX_DISPLAY_NAME_CHARS: usize = 32;
 pub const MAX_BIO_CHARS: usize = 190;
+pub const MAX_CUSTOM_STATUS_CHARS: usize = 128;
 /// How long an avatar link works once handed out.
 const AVATAR_URL_TTL: Duration = Duration::from_secs(5 * 60);
 /// Avatars processed at once, across all users (CPU + ~150 MiB each).
@@ -99,7 +100,7 @@ impl UserService {
         let custom_status = changes
             .custom_status
             .as_deref()
-            .map(|raw| clean_text(raw, 128, false, "invalid_custom_status"))
+            .map(|raw| clean_text(raw, MAX_CUSTOM_STATUS_CHARS, false, "invalid_custom_status"))
             .transpose()?;
         let user = self
             .repo

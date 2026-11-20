@@ -1,14 +1,12 @@
 mod controller;
 mod repository;
-
-use std::sync::Arc;
+mod service;
+pub use service::SettingsService;
 
 use axum::{Router, routing::get};
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
 
 use crate::app::AppState;
-use crate::features::conversations::repository::ConversationRepo;
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
 pub struct NotificationPreferences {
@@ -23,20 +21,6 @@ pub struct UpdateNotificationPreferences {
     pub messages: Option<bool>,
     pub incoming_calls: Option<bool>,
     pub friend_requests: Option<bool>,
-}
-
-pub struct SettingsRepository {
-    pool: PgPool,
-    conversations: Arc<dyn ConversationRepo>,
-}
-
-impl SettingsRepository {
-    pub fn new(pool: PgPool, conversations: Arc<dyn ConversationRepo>) -> Self {
-        Self {
-            pool,
-            conversations,
-        }
-    }
 }
 
 pub fn routes() -> Router<AppState> {
@@ -55,26 +39,7 @@ pub fn routes() -> Router<AppState> {
         )
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, Default)]
-#[serde(rename_all = "snake_case")]
-pub enum PresencePreference {
-    #[default]
-    Online,
-    Idle,
-    DoNotDisturb,
-    Invisible,
-}
-
-impl PresencePreference {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Online => "online",
-            Self::Idle => "idle",
-            Self::DoNotDisturb => "do_not_disturb",
-            Self::Invisible => "invisible",
-        }
-    }
-}
+pub use crate::features::presence::models::PresencePreference;
 
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]

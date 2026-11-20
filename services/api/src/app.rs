@@ -34,12 +34,13 @@ use crate::features::friends::repository::PgFriendRepo;
 use crate::features::friends::service::FriendService;
 use crate::features::messages::repository::{ScyllaMessageRepo, ScyllaReactionRepo};
 use crate::features::messages::service::MessageService;
+use crate::features::presence::repository::PgPreferenceRepository;
 use crate::features::presence::service::PresenceService;
-use crate::features::presence::store::{PreferencePresenceStore, RedisPresenceStore};
+use crate::features::presence::store::RedisPresenceStore;
 use crate::features::servers::channel_service::ChannelMessageService;
 use crate::features::servers::repository::PgServerRepo;
 use crate::features::servers::service::ServerService;
-use crate::features::settings::{self, SettingsRepository};
+use crate::features::settings::{self, SettingsService};
 use crate::features::typing::service::TypingService;
 use crate::features::users::repository::{PgUserRepo, UserRepo};
 use crate::features::users::service::UserService;
@@ -47,7 +48,7 @@ use crate::features::{attachments, auth, bots, friends, gateway, health, servers
 
 #[derive(Clone)]
 pub struct AppState {
-    pub settings: Arc<SettingsRepository>,
+    pub settings: Arc<SettingsService>,
     pub bots: Arc<BotService>,
     pub servers: Arc<ServerService>,
     pub channel_messages: Arc<ChannelMessageService>,
@@ -146,7 +147,7 @@ pub async fn build(
     ));
 
     let state = AppState {
-        settings: Arc::new(SettingsRepository::new(
+        settings: Arc::new(SettingsService::new(
             pool.clone(),
             conversation_repo.clone(),
         )),
@@ -196,7 +197,8 @@ pub async fn build(
         )),
         calls,
         presence: Arc::new(PresenceService::new(
-            Arc::new(PreferencePresenceStore::new(presence_store, pool.clone())),
+            presence_store,
+            Arc::new(PgPreferenceRepository::new(pool.clone())),
             friend_repo.clone(),
             conversation_repo.clone(),
             events.clone(),
@@ -220,6 +222,8 @@ pub async fn build(
         shutdown,
         events,
     };
+
+    state.presence.spawn_recovery(state.shutdown.clone());
 
     let origins: Vec<HeaderValue> = config
         .cors_origins

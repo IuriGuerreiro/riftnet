@@ -25,7 +25,10 @@ One hash per user, `presence:<user_id>`: `connection_id → "<expires_at_ms>:<id
   return the status before and after. Atomic, so two devices connecting at once
   send exactly one "online" push.
 - The hash expires on its own once every socket is gone.
-- `PresenceStore` trait: `RedisPresenceStore` in real use, `MemoryPresenceStore` in tests.
+- `PresenceStore` trait: `RedisPresenceStore` in real use, `MemoryPresenceStore` in baseline service tests.
+- `presence-preference:<user_id>` stores the saved preference, its Postgres version, and the latest event revision. This key does not expire when sockets disconnect. The same Lua script reads it during socket operations.
+- The service hydrates missing preferences from Postgres. Unknown preferences stay invisible until recovery succeeds. Redis keeps updating socket lifetimes while Postgres is unavailable.
+- Presence snapshots and pushes include revisions so clients can reject updates that arrive out of order.
 - Config: `REDIS_URL` (default `redis://127.0.0.1:6379`).
 
 ## Heartbeat

@@ -23,7 +23,7 @@ pub async fn get_presence(
     auth: AuthUser,
     State(state): State<AppState>,
 ) -> Result<Json<super::PresenceSettings>, ApiError> {
-    Ok(Json(state.settings.presence(auth.user_id).await?))
+    Ok(Json(state.presence.preference(auth.user_id).await?))
 }
 
 pub async fn set_presence(
@@ -31,12 +31,12 @@ pub async fn set_presence(
     State(state): State<AppState>,
     Json(settings): Json<super::PresenceSettings>,
 ) -> Result<Json<super::PresenceSettings>, ApiError> {
-    state
-        .settings
-        .set_presence(auth.user_id, settings.presence)
-        .await?;
-    state.presence.preference_changed(auth.user_id).await;
-    Ok(Json(settings))
+    Ok(Json(
+        state
+            .presence
+            .set_preference(auth.user_id, settings.presence)
+            .await?,
+    ))
 }
 
 pub async fn get_conversation(
