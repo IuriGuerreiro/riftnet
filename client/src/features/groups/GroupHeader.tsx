@@ -1,7 +1,10 @@
 import { useState } from "react";
 
+import { CallBar } from "../../call/CallBar";
 import { fieldClass as field } from "../../components/ui";
 import type { Conversation } from "../../gen/v1/conversations_pb";
+import { useCalls } from "../../stores/calls";
+import { useConnection } from "../../stores/connection";
 import { nameOf, useProfiles } from "../../stores/profiles";
 
 export function GroupHeader({
@@ -15,6 +18,8 @@ export function GroupHeader({
   onRename: (name: string) => void;
   onLeave: () => void;
 }) {
+  const ws = useConnection((s) => s.ws);
+  const inCall = useCalls((s) => s.current?.conversationId === group.id);
   const [username, setUsername] = useState("");
   const profiles = useProfiles((s) => s.byId);
   return (
@@ -35,6 +40,7 @@ export function GroupHeader({
           Leave
         </button>
       </div>
+      {inCall && <CallBar ws={ws} conversationId={group.id} />}
       <p className="text-xs text-zinc-400">
         {group.members.map((m) => nameOf(profiles[m.id.toString()])).join(", ")}
       </p>

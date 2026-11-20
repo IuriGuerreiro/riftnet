@@ -393,6 +393,7 @@ export const useChat = create<ChatState>()((set, get) => {
     },
 
     select: async (ws, conversationId) => {
+      if (!get().conversations.some((c) => c.id === conversationId)) await loadConversations(ws);
       set({ selected: conversationId, replyingTo: null });
       if (get().lastSeq[key(conversationId)] !== undefined) {
         await sync(ws, conversationId);
