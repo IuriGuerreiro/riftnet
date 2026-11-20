@@ -589,7 +589,7 @@ mod tests {
 
     #[async_trait]
     impl crate::features::calls::media::MediaClient for NoMedia {
-        async fn join(&self, _: i64, _: String) -> anyhow::Result<(u64, String)> {
+        async fn join(&self, _: i64, _: i64, _: String) -> anyhow::Result<(u64, String)> {
             unimplemented!()
         }
         async fn leave(&self, _: u64) -> anyhow::Result<()> {

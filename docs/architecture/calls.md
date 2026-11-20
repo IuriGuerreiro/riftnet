@@ -92,6 +92,7 @@ Client ↔ api: `proto/v1/calls.proto`. **Envelope fields 100–139 are reserved
 | 102 | `CallDecline {call_id}` | request → `CallResult` |
 | 103 | `CallJoin {call_id, sdp_offer}` | request → `CallJoined {call, sdp_answer}` |
 | 105 | `CallLeave {call_id}` | request → `CallResult` |
+| 106 | `CallControl {call_id, action, user_id}` | Share Play request/grant/deny/revoke → `CallResult` |
 | 120 | `CallResult {call}` | reply |
 | 121 | `CallJoined {call, sdp_answer}` | reply |
 | 130 | `CallIncoming {call}` | push: ring |
@@ -180,6 +181,15 @@ Not done yet: native video *rendering* in Tauri, macOS (untested, no Mac), Wayla
 - SFU needs: forward video, pick simulcast layer per viewer, react to **PLI/FIR** (viewer asks "send me a full frame"), pass **TWCC** feedback (bandwidth estimate). str0m supports these; we write the layer-picking logic.
 - Desktop: native capture (DXGI / ScreenCaptureKit / PipeWire) → HW encoder → libwebrtc as a custom video source. This is the gate prototype.
 - Contentful mode: set `contentHint = "detail"` / degradation preference "maintain-framerate" for games.
+
+## 8b. Share Play (remote control, v1)
+
+A viewer drives the sharer's keyboard and mouse. Windows and X11 hosts only (Wayland: issue #56).
+
+- **State** (api, `Call.control`): one `{host, controller, granted}` per call. Viewer requests, host grants or denies, either side revokes. Dropped automatically when the host stops sharing or either side leaves (`Call::settle_control`).
+- **Who can be controlled:** `CallScreenShare.controllable` — desktop app, supported OS, full-monitor share. Shown to viewers as `Call.controllable_user_ids`.
+- **Input path:** two WebRTC data channels opened by every client at join: `input` (reliable, ordered: keys, clicks, wheel) and `input-move` (unordered, no retransmits: pointer, latest wins). The SFU relays `input*` channels to the other peers in the room, prefixed with the sender's user id (8 bytes, big endian), so the host can check the sender.
+- **Host:** the webview forwards events to the Tauri `share_play` module. One input thread owns the grant, applies events with enigo, blocks the Win key and Ctrl+Alt+Del, and releases every held key/button on revoke. Revoke hotkey: Ctrl+Shift+F12 (global).
 
 ## 9. Risks / open questions
 

@@ -1,3 +1,5 @@
+mod share_play;
+
 #[tauri::command]
 fn core_ping() -> Vec<u8> {
     client_core::encode_ping(1)
@@ -6,6 +8,8 @@ fn core_ping() -> Vec<u8> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .manage(share_play::SharePlay::start())
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -16,7 +20,13 @@ pub fn run() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![core_ping])
+        .invoke_handler(tauri::generate_handler![
+            core_ping,
+            share_play::share_play_supported,
+            share_play::share_play_grant,
+            share_play::share_play_revoke,
+            share_play::share_play_input,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

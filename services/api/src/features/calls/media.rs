@@ -11,7 +11,12 @@ const TIMEOUT: Duration = Duration::from_secs(5);
 
 #[async_trait]
 pub trait MediaClient: Send + Sync {
-    async fn join(&self, room_id: i64, sdp_offer: String) -> anyhow::Result<(u64, String)>;
+    async fn join(
+        &self,
+        room_id: i64,
+        user_id: i64,
+        sdp_offer: String,
+    ) -> anyhow::Result<(u64, String)>;
     async fn leave(&self, peer_id: u64) -> anyhow::Result<()>;
 }
 
@@ -30,10 +35,16 @@ impl NatsMediaClient {
 #[async_trait]
 impl MediaClient for NatsMediaClient {
     #[tracing::instrument(name = "media join", skip_all, err(Display), fields(otel.kind = "client", messaging.system = "nats", room.id = room_id))]
-    async fn join(&self, room_id: i64, sdp_offer: String) -> anyhow::Result<(u64, String)> {
+    async fn join(
+        &self,
+        room_id: i64,
+        user_id: i64,
+        sdp_offer: String,
+    ) -> anyhow::Result<(u64, String)> {
         let req = MediaJoin {
             room_id: room_id as u64,
             sdp_offer,
+            user_id: user_id as u64,
         };
         let msg = tokio::time::timeout(
             TIMEOUT,

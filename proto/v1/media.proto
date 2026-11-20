@@ -11,6 +11,8 @@ package app.v1;
 message MediaJoin {
   uint64 room_id = 1;
   string sdp_offer = 2;
+  // Tagged onto forwarded data-channel messages so receivers know the sender.
+  uint64 user_id = 3;
 }
 
 message MediaJoinReply {

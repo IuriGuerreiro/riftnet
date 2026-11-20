@@ -109,6 +109,7 @@ impl CallStore for MemoryCallStore {
             .iter()
             .position(|p| p.user_id == user_id)
             .map(|index| call.participants.remove(index));
+        call.settle_control();
         Some((call.clone(), participant))
     }
 

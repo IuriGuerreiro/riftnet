@@ -34,7 +34,7 @@ pub async fn serve(nats: async_nats::Client, sfu: Sfu) -> anyhow::Result<()> {
 
 #[tracing::instrument(name = "media.join", skip_all, fields(room.id = req.room_id))]
 fn join(sfu: &Sfu, req: MediaJoin) -> MediaJoinReply {
-    match sfu.add(req.room_id, &req.sdp_offer) {
+    match sfu.add(req.room_id, req.user_id, &req.sdp_offer) {
         Ok((peer_id, sdp_answer)) => MediaJoinReply {
             peer_id,
             sdp_answer,

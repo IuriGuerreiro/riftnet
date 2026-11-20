@@ -119,9 +119,11 @@ pub async fn dispatch(
                     session.connection_id,
                     req.call_id as i64,
                     req.sharing,
+                    req.controllable,
                 )
                 .await,
         ),
+        Payload::CallControl(req) => call_control(state, session, req).await,
         Payload::CallLeave(req) => call_result(
             state
                 .calls
@@ -428,6 +430,34 @@ async fn call_join(
         call: Some((&call).into()),
         sdp_answer,
     }))
+}
+
+async fn call_control(
+    state: &AppState,
+    session: &Session,
+    req: v1::CallControl,
+) -> Result<Payload, ApiError> {
+    use crate::features::calls::models::ControlAction;
+    use v1::CallControlAction as A;
+    let user = req.user_id as i64;
+    let action = match A::try_from(req.action).unwrap_or(A::Unspecified) {
+        A::Request => ControlAction::Request { host_id: user },
+        A::Grant => ControlAction::Grant { viewer_id: user },
+        A::Deny => ControlAction::Deny { viewer_id: user },
+        A::Revoke => ControlAction::Revoke,
+        A::Unspecified => {
+            return Err(ApiError::bad_request(
+                "bad_request",
+                "unknown control action",
+            ));
+        }
+    };
+    call_result(
+        state
+            .calls
+            .control(session.user_id, req.call_id as i64, action)
+            .await,
+    )
 }
 
 fn call_result(

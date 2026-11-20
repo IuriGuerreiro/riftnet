@@ -81,6 +81,7 @@ message Envelope {
     CallJoin call_join = 103;
     CallScreenShare call_screen_share = 104;
     CallLeave call_leave = 105;
+    CallControl call_control = 106;
     CallResult call_result = 120;
     CallJoined call_joined = 121;
     CallIncoming call_incoming = 130;

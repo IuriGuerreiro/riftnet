@@ -19,6 +19,16 @@ impl From<&Call> for v1::Call {
                 .into_iter()
                 .map(|id| id as u64)
                 .collect(),
+            controllable_user_ids: c
+                .controllable_user_ids()
+                .into_iter()
+                .map(|id| id as u64)
+                .collect(),
+            control: c.control.map(|k| v1::CallControlState {
+                host_id: k.host_id as u64,
+                controller_id: k.controller_id as u64,
+                granted: k.granted,
+            }),
         }
     }
 }

@@ -6,6 +6,7 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::{Duration, Instant};
 
 use str0m::change::SdpOffer;
+use str0m::channel::ChannelId;
 use str0m::media::{KeyframeRequestKind, MediaData, MediaKind, Mid};
 use str0m::net::{Protocol, Receive};
 use str0m::{Candidate, Event, IceConnectionState, Input, Output, Rtc};
@@ -25,6 +26,7 @@ enum Cmd {
     Add {
         peer_id: u64,
         room: u64,
+        user_id: u64,
         rtc: Box<Rtc>,
         requested_at: Instant,
     },
@@ -36,7 +38,10 @@ enum Cmd {
 struct Peer {
     id: u64,
     room: u64,
+    user_id: u64,
     rtc: Rtc,
+    /// Open data channels by label. Only `input*` labels are relayed.
+    channels: HashMap<String, ChannelId>,
     audio: Option<Mid>,
     video: Option<Mid>,
     /// When `media.join` arrived. Cleared once the first media is seen.
@@ -79,6 +84,20 @@ fn record_membership(peers: &[Peer], rooms: &HashMap<u64, Instant>) {
     metrics::gauge!(m::ROOMS).set(rooms.len() as f64);
 }
 
+/// Share Play input channels. Anything else a client opens is ignored.
+fn is_relayed(label: &str) -> bool {
+    label.starts_with("input")
+}
+
+/// Prefix the sender's user id (8 bytes, big endian) so the receiver can
+/// check it against the granted controller.
+fn tag(user_id: u64, data: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(8 + data.len());
+    out.extend_from_slice(&user_id.to_be_bytes());
+    out.extend_from_slice(data);
+    out
+}
+
 static NEXT_PEER: AtomicU64 = AtomicU64::new(1);
 
 pub fn start(socket: UdpSocket) -> anyhow::Result<Sfu> {
@@ -91,7 +110,7 @@ pub fn start(socket: UdpSocket) -> anyhow::Result<Sfu> {
 }
 
 impl Sfu {
-    pub fn add(&self, room: u64, sdp_offer: &str) -> anyhow::Result<(u64, String)> {
+    pub fn add(&self, room: u64, user_id: u64, sdp_offer: &str) -> anyhow::Result<(u64, String)> {
         let requested_at = Instant::now();
         let offer = SdpOffer::from_sdp_string(sdp_offer)?;
         let mut rtc = Rtc::builder()
@@ -104,6 +123,7 @@ impl Sfu {
         self.cmds.send(Cmd::Add {
             peer_id,
             room,
+            user_id,
             rtc: Box::new(rtc),
             requested_at,
         })?;
@@ -152,6 +172,7 @@ fn run(socket: UdpSocket, cmds: Receiver<Cmd>) {
                 Cmd::Add {
                     peer_id,
                     room,
+                    user_id,
                     rtc,
                     requested_at,
                 } => {
@@ -160,7 +181,9 @@ fn run(socket: UdpSocket, cmds: Receiver<Cmd>) {
                     peers.push(Peer {
                         id: peer_id,
                         room,
+                        user_id,
                         rtc: *rtc,
+                        channels: HashMap::new(),
                         audio: None,
                         video: None,
                         awaiting_media: Some(requested_at),
@@ -183,6 +206,8 @@ fn run(socket: UdpSocket, cmds: Receiver<Cmd>) {
 
         let mut forward: Vec<(u64, u64, MediaKind, MediaData)> = Vec::new();
         let mut keyframes: Vec<(u64, u64, KeyframeRequestKind)> = Vec::new();
+        // (from peer, room, label, payload tagged with the sender's user id)
+        let mut relay: Vec<(u64, u64, String, Vec<u8>)> = Vec::new();
         let mut next_timeout = Instant::now() + Duration::from_millis(100);
         for p in &mut peers {
             while p.rtc.is_alive() {
@@ -259,6 +284,21 @@ fn run(socket: UdpSocket, cmds: Receiver<Cmd>) {
                                     .record(rtt.as_secs_f64() * 1000.0);
                             }
                         }
+                        Event::ChannelOpen(id, label) => {
+                            p.channels.insert(label, id);
+                        }
+                        Event::ChannelClose(id) => p.channels.retain(|_, c| *c != id),
+                        Event::ChannelData(d) => {
+                            if let Some(label) = p
+                                .channels
+                                .iter()
+                                .find(|(_, c)| **c == d.id)
+                                .map(|(l, _)| l.clone())
+                                .filter(|l| is_relayed(l))
+                            {
+                                relay.push((p.id, p.room, label, tag(p.user_id, &d.data)));
+                            }
+                        }
                         Event::Connected => tracing::info!(peer.id = p.id, "peer connected"),
                         Event::IceConnectionStateChange(IceConnectionState::Disconnected) => {
                             p.end("ice_disconnected")
@@ -320,6 +360,22 @@ fn run(socket: UdpSocket, cmds: Receiver<Cmd>) {
             }
         }
 
+        for (from, room, label, data) in &relay {
+            for p in peers
+                .iter_mut()
+                .filter(|p| p.id != *from && p.room == *room)
+            {
+                let Some(&id) = p.channels.get(label) else {
+                    continue;
+                };
+                if let Some(mut ch) = p.rtc.channel(id)
+                    && let Err(e) = ch.write(true, data)
+                {
+                    tracing::debug!(peer.id = p.id, error = ?e, "relay failed");
+                }
+            }
+        }
+
         if peers.iter().any(|p| !p.rtc.is_alive()) {
             let (gone, alive): (Vec<Peer>, Vec<Peer>) =
                 peers.into_iter().partition(|p| !p.rtc.is_alive());
@@ -337,7 +393,7 @@ fn run(socket: UdpSocket, cmds: Receiver<Cmd>) {
             }
             record_membership(&peers, &rooms);
         }
-        if !forward.is_empty() || !keyframes.is_empty() {
+        if !forward.is_empty() || !keyframes.is_empty() || !relay.is_empty() {
             continue;
         }
 
@@ -375,5 +431,22 @@ fn run(socket: UdpSocket, cmds: Receiver<Cmd>) {
                 p.end("error");
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn relays_only_input_channels() {
+        assert!(is_relayed("input"));
+        assert!(is_relayed("input-move"));
+        assert!(!is_relayed("chat"));
+    }
+
+    #[test]
+    fn tag_prefixes_sender() {
+        assert_eq!(tag(0x0102, b"hi"), [0, 0, 0, 0, 0, 0, 1, 2, b'h', b'i']);
     }
 }
