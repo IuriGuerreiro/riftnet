@@ -258,7 +258,7 @@ impl CallService {
         self.push_updated(&call).await;
     }
 
-    async fn remove_connection(&self, call_id: i64, connection_id: u64) -> Option<Call> {
+    pub(crate) async fn remove_connection(&self, call_id: i64, connection_id: u64) -> Option<Call> {
         let (tx, rx) = std::sync::mpsc::channel();
         let call = self
             .store
@@ -311,6 +311,30 @@ impl CallService {
             reason: reason as i32,
         };
         self.push(user_ids, Payload::CallEnded(ended)).await;
+    }
+
+    pub async fn friend_call(&self, me: i64, friend: i64) -> Result<Call, ApiError> {
+        let call = self
+            .store
+            .with_user(friend)
+            .await
+            .into_iter()
+            .next()
+            .ok_or_else(not_found)?;
+        self.member_call(friend, call.id).await?;
+        self.member_call(me, call.id).await
+    }
+
+    pub async fn is_streaming(&self, user_id: i64, connection_id: u64) -> bool {
+        self.store
+            .with_connection(connection_id)
+            .await
+            .iter()
+            .any(|c| {
+                c.participants.iter().any(|p| {
+                    p.user_id == user_id && p.connection_id == connection_id && p.sharing_screen
+                })
+            })
     }
 
     async fn member_call(&self, me: i64, call_id: i64) -> Result<Call, ApiError> {
@@ -505,6 +529,36 @@ mod tests {
             .filter(|(u, _)| *u == user)
             .map(|(_, k)| k.clone())
             .collect()
+    }
+
+    #[tokio::test]
+    async fn friend_call_requires_current_membership_and_actual_participation() {
+        let (svc, _, _) = setup();
+        let call = svc.start(ALICE, DM).await.unwrap();
+        assert!(svc.friend_call(BOB, ALICE).await.is_err());
+        svc.join(ALICE, 10, 100, call.id, "offer".into())
+            .await
+            .unwrap();
+        assert_eq!(svc.friend_call(BOB, ALICE).await.unwrap().id, call.id);
+        assert!(svc.friend_call(EVE, ALICE).await.is_err());
+        assert!(!svc.is_streaming(ALICE, 100).await);
+        svc.screen_share(ALICE, 100, call.id, true).await.unwrap();
+        assert!(svc.is_streaming(ALICE, 100).await);
+        assert!(!svc.is_streaming(ALICE, 101).await);
+        svc.screen_share(ALICE, 100, call.id, false).await.unwrap();
+        assert!(!svc.is_streaming(ALICE, 100).await);
+        svc.connection_closed(100).await;
+        assert!(svc.friend_call(BOB, ALICE).await.is_err());
+
+        let (svc, _, _) = setup_with_members(vec![ALICE]);
+        let call = svc.store.insert_if_none(test_call()).await.unwrap();
+        svc.join(ALICE, 10, 100, call.id, "offer".into())
+            .await
+            .unwrap();
+        assert!(
+            svc.friend_call(BOB, ALICE).await.is_err(),
+            "Stale call membership must not authorize discovery"
+        );
     }
 
     #[tokio::test]

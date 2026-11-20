@@ -1,12 +1,15 @@
 import { useNavigate } from "@tanstack/react-router";
-import { LogOut, Settings } from "lucide-react";
+import { Gamepad2, LogOut, Settings } from "lucide-react";
+import { useState } from "react";
 
 import { useLogout } from "../../api/auth";
 import { Avatar } from "../../components/Avatar";
 import { IconButton } from "../../components/ui";
 import { cn } from "../../components/ui/cn";
+import { useActivity } from "../../stores/activity";
 import { useConnection } from "../../stores/connection";
 import { useProfile } from "../../stores/profiles";
+import { ActivityDialog } from "../activity/ActivityDialog";
 import { useNameFor } from "../session/useRealtime";
 
 const statusLook = {
@@ -16,12 +19,14 @@ const statusLook = {
 } as const;
 
 export function UserPanel({ onEditProfile }: { onEditProfile: () => void }) {
-  const { status, error, user: me, disconnect, connect } = useConnection();
+  const { status, error, user: me, ws, disconnect, connect } = useConnection();
   const profile = useProfile(me?.id.toString() ?? "");
   const nameFor = useNameFor();
   const logout = useLogout();
   const navigate = useNavigate();
   const look = statusLook[status];
+  const activity = useActivity((s) => (s.published?.ws === ws ? s.published.label : ""));
+  const [settingActivity, setSettingActivity] = useState(false);
 
   return (
     <div className="flex h-[52px] shrink-0 items-center gap-2 bg-surface-0/60 px-2">
@@ -45,7 +50,13 @@ export function UserPanel({ onEditProfile }: { onEditProfile: () => void }) {
             {me ? nameFor(me.id) : "Loading…"}
           </span>
           <span className="block truncate text-xs text-fg-subtle" title={error ?? undefined}>
-            {status === "online" && profile?.username ? `@${profile.username}` : look.label}
+            {status === "online"
+              ? activity
+                ? `Playing ${activity}`
+                : profile?.username
+                  ? `@${profile.username}`
+                  : look.label
+              : look.label}
           </span>
         </span>
       </button>
@@ -58,6 +69,15 @@ export function UserPanel({ onEditProfile }: { onEditProfile: () => void }) {
           Retry
         </button>
       )}
+      <IconButton
+        label="Set activity"
+        size="sm"
+        icon={<Gamepad2 size={18} />}
+        active={!!activity}
+        disabled={!ws}
+        onClick={() => setSettingActivity(true)}
+      />
+      {settingActivity && <ActivityDialog onClose={() => setSettingActivity(false)} />}
       <IconButton
         label="User settings"
         size="sm"

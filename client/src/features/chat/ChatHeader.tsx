@@ -5,6 +5,7 @@ import { CallBar } from "../../call/CallBar";
 import { AvatarWithStatus } from "../../components/AvatarWithStatus";
 import { ConfirmDialog, IconButton, Menu, PromptDialog } from "../../components/ui";
 import type { Conversation } from "../../gen/v1/conversations_pb";
+import { useCalls } from "../../stores/calls";
 import { isGroup, useChat } from "../../stores/chat";
 import { useConnection } from "../../stores/connection";
 import { useUi } from "../../stores/ui";
@@ -17,6 +18,7 @@ export function ChatHeader({ conversation: c }: { conversation: Conversation }) 
   const { ws, user: me } = useConnection();
   const { addMember, renameGroup, leaveGroup } = useChat();
   const { membersOpen, toggleMembers } = useUi();
+  const inCall = useCalls((s) => s.current?.conversationId === c.id);
   const nameFor = useNameFor();
   const [dialog, setDialog] = useState<"rename" | "add" | "leave" | null>(null);
   const group = isGroup(c);
@@ -43,7 +45,7 @@ export function ChatHeader({ conversation: c }: { conversation: Conversation }) 
       )}
 
       <div className="ml-auto flex items-center gap-1">
-        {!group && <CallBar ws={ws} conversationId={c.id} />}
+        {(!group || inCall) && <CallBar ws={ws} conversationId={c.id} />}
         {group && (
           <>
             <IconButton

@@ -1,15 +1,18 @@
-import { Check, MessageCircle, Users, X } from "lucide-react";
+import { Check, MessageCircle, PhoneCall, Users, X } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
 import type { Friend } from "../../api/types";
 import { AvatarWithStatus } from "../../components/AvatarWithStatus";
 import { ConfirmDialog, IconButton, Tabs } from "../../components/ui";
+import { useActivity } from "../../stores/activity";
+import { useCalls } from "../../stores/calls";
 import { useChat } from "../../stores/chat";
 import { useConnection } from "../../stores/connection";
 import { useFriends } from "../../stores/friends";
 import { PresenceStatus, usePresence } from "../../stores/presence";
 import { fromJson, nameOf, useProfiles } from "../../stores/profiles";
 import { useUi } from "../../stores/ui";
+import { activityText } from "../activity/activity";
 import { AddFriend } from "./AddFriend";
 
 type Tab = "online" | "all" | "pending" | "add";
@@ -21,6 +24,8 @@ export function FriendsPage() {
   const ws = useConnection((s) => s.ws);
   const openDm = useChat((s) => s.openDm);
   const showChat = useUi((s) => s.showChat);
+  const activities = useActivity((s) => s.byId);
+  const { current: call, error: callError, joinFriend } = useCalls();
   const [tab, setTab] = useState<Tab>("online");
   const [removing, setRemoving] = useState<Friend | null>(null);
 
@@ -31,6 +36,15 @@ export function FriendsPage() {
     if (!ws || !f.user.username) return;
     void openDm(ws, f.user.username);
     showChat();
+  };
+  const joinCall = async (f: Friend) => {
+    if (!ws) return;
+    await joinFriend(ws, BigInt(f.user.id));
+    const joined = useCalls.getState().current;
+    if (joined) {
+      await useChat.getState().select(ws, joined.conversationId);
+      showChat();
+    }
   };
 
   const online = list.friends.filter(isOnline);
@@ -69,9 +83,9 @@ export function FriendsPage() {
         />
       </header>
 
-      {error && (
+      {(error ?? callError) && (
         <p role="alert" className="bg-danger/15 px-4 py-2 text-sm text-danger">
-          {error}
+          {error ?? callError}
         </p>
       )}
 
@@ -123,8 +137,17 @@ export function FriendsPage() {
                   (profiles[f.user.id]?.customStatus ?? f.user.custom_status) ??
                   (isOnline(f) ? "Online" : "Offline")
                 }
+                activity={activityText(activities[f.user.id])}
                 onOpen={() => message(f)}
               >
+                {activities[f.user.id]?.joinable && !call && ws && (
+                  <IconButton
+                    label="Join call"
+                    icon={<PhoneCall size={20} />}
+                    className="hover:text-success"
+                    onClick={() => void joinCall(f)}
+                  />
+                )}
                 <IconButton
                   label="Message"
                   icon={<MessageCircle size={20} />}
@@ -180,12 +203,14 @@ function FriendRow({
   f,
   label,
   sub,
+  activity,
   onOpen,
   children,
 }: {
   f: Friend;
   label: string;
   sub: string;
+  activity?: string;
   onOpen?: () => void;
   children: ReactNode;
 }) {
@@ -207,7 +232,12 @@ function FriendRow({
               </span>
             )}
           </span>
-          <span className="block text-xs text-fg-subtle">{sub}</span>
+          <span className="block truncate text-xs text-fg-subtle">{sub}</span>
+          {activity && (
+            <span className="block truncate text-xs font-medium text-success" title={activity}>
+              {activity}
+            </span>
+          )}
         </span>
       </button>
       <div className="flex gap-2 [&>button]:rounded-full [&>button]:bg-surface-1">{children}</div>

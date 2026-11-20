@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import { IncomingCall, RemoteScreen } from "../call/CallBar";
 import { ProfilePanel } from "../components/ProfilePanel";
+import { useFriendActivityWatch } from "../features/activity/activity";
 import { ChatPane } from "../features/chat/ChatPane";
 import { FriendsPage } from "../features/friends/FriendsPage";
 import { ServerPanel } from "../features/servers/ServerView";
@@ -21,6 +22,7 @@ export function HomePage() {
   const { server, invite } = useSearch({ from: "__root__", select: readWorkspaceSearch });
   useRealtime();
   useKnownUsers();
+  useFriendActivityWatch();
   const { ws, user: me } = useConnection();
   const view = useUi((s) => s.view);
   const nameFor = useNameFor();

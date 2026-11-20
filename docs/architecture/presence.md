@@ -70,6 +70,53 @@ sequenceDiagram
 ## Test
 
 - Unit: `cargo test -p api presence` (service with in-memory fakes).
-- Redis script: `cargo test -p api presence -- --ignored` (needs Redis running).
+- Redis script: `cargo test -p api --lib presence -- --ignored` (needs Redis running).
 - End to end: `API_HTTP=http://127.0.0.1:7100 pnpm --filter mock smoke:presence` (registers 3 users).
 - UI: `pnpm --filter mock start`: user 2 flips online/idle every 20s.
+
+## Gaming activity
+
+Activity is separate from online status. It is off by default on every new
+connection. Users enter a game or stream label and choose **Share activity**.
+The API accepts up to 100 UTF-8 bytes without control characters.
+
+`SetActivity {label}` stores the label for the authenticated connection. An empty
+label clears it. Redis stores labels in `activity:<user_id>`, keyed by connection.
+The presence Lua script removes labels with expired or closed connections and
+refreshes the activity hash TTL alongside presence. Reads also filter expired
+connections, so a crashed API cannot leave visible activity behind.
+
+`GetActivities {user_ids}` accepts at most 200 IDs. The server returns activity
+only for accepted friends whose effective presence is visible. Invisible mode
+hides activity and prevents friend-call discovery, including direct Join requests.
+The same restriction applies even when the caller shares a DM or group with someone
+else. It derives Streaming from that connection's active call screen-share state;
+clients cannot claim Streaming with an activity label. A streaming connection wins
+when several devices publish activity; otherwise the highest connection ID wins.
+Connection IDs are random, so this is stable rather than a recency preference.
+
+The client refreshes activity every 10 seconds, replaces the previous results,
+and clears its cache on disconnect or friendship-list changes. A stalled refresh
+clears cached activity 20 seconds after the last successful read. Friendship
+revocation takes effect on the next server read, with no further activity sent to
+the former friend. Previously delivered information cannot be withdrawn.
+
+`JoinFriendCall {friend_id, sdp_offer}` resolves the friend's current call on the
+server. Accepted friendship, actual friend participation, and current conversation
+membership are required. Admission rechecks access after media setup and removes
+the joining connection if it lost access. The response uses the existing
+`CallJoined` message. Activity reads expose only whether joining is allowed, not
+private call IDs or membership lists.
+
+This release supports **Join call** in existing DM/group calls. Server voice
+rooms and View/Connect permissions remain a separate prerequisite for server
+voice channels. The existing media path and its group-call limitations apply.
+Call discovery and Streaming use the existing process-local call state, so they
+have the same single-API-instance limitation as calls today.
+
+Automatic game detection is not implemented on any platform. Browser clients
+cannot enumerate running games. Windows, macOS, and Linux desktop clients use
+manual labels too; native detection needs a separate opt-in adapter and validation
+on each OS. Screen capture still uses the platform/browser picker and never
+publishes its raw window title. A label remains Playing after screen sharing ends
+until the user clears it or its connection closes.

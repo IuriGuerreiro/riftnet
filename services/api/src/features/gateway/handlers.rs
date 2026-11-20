@@ -94,6 +94,9 @@ pub async fn dispatch(
             Ok(Payload::Pong(v1::Pong {}))
         }
         Payload::GetPresence(req) => get_presence(state, session, req).await,
+        Payload::SetActivity(req) => super::activity::set(state, session, req).await,
+        Payload::GetActivities(req) => super::activity::get(state, session, req).await,
+        Payload::JoinFriendCall(req) => super::activity::join(state, session, req).await,
         Payload::CallStart(req) => call_start(state, session, req).await,
         Payload::CallAccept(req) => call_result(
             state

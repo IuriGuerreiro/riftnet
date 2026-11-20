@@ -1,11 +1,14 @@
 import { AvatarWithStatus } from "../../components/AvatarWithStatus";
 import type { Conversation } from "../../gen/v1/conversations_pb";
+import { useActivity } from "../../stores/activity";
 import { PresenceStatus, usePresence } from "../../stores/presence";
+import { activityText } from "../activity/activity";
 import { useNameFor } from "../session/useRealtime";
 
 export function MemberList({ group }: { group: Conversation }) {
   const nameFor = useNameFor();
   const statuses = usePresence((s) => s.statuses);
+  const activities = useActivity((s) => s.byId);
   const online = (id: bigint) =>
     (statuses[id.toString()] ?? PresenceStatus.OFFLINE) !== PresenceStatus.OFFLINE;
   const sorted = [...group.members].sort(
@@ -29,7 +32,16 @@ export function MemberList({ group }: { group: Conversation }) {
           }`}
         >
           <AvatarWithStatus userId={m.id} />
-          <span className="truncate text-sm font-medium text-fg-muted">{nameFor(m.id)}</span>
+          <span className="min-w-0 leading-tight">
+            <span className="block truncate text-sm font-medium text-fg-muted">
+              {nameFor(m.id)}
+            </span>
+            {activityText(activities[m.id.toString()]) && (
+              <span className="block truncate text-xs text-fg-subtle">
+                {activityText(activities[m.id.toString()])}
+              </span>
+            )}
+          </span>
         </div>
       ))}
     </aside>

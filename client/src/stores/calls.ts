@@ -13,6 +13,7 @@ import {
   CallState,
 } from "../gen/v1/calls_pb";
 import type { Envelope } from "../gen/v1/envelope_pb";
+import { JoinFriendCallSchema } from "../gen/v1/presence_pb";
 
 interface CallsState {
   current: Call | null;
@@ -25,6 +26,7 @@ interface CallsState {
 
   attach: (ws: WsClient, myId: bigint | undefined) => void;
   call: (ws: WsClient, conversationId: bigint) => Promise<void>;
+  joinFriend: (ws: WsClient, friendId: bigint) => Promise<void>;
   accept: (ws: WsClient) => Promise<void>;
   decline: (ws: WsClient) => Promise<void>;
   leave: (ws: WsClient) => Promise<void>;
@@ -37,6 +39,7 @@ let mic: MediaStream | null = null;
 let screen: MediaStream | null = null;
 let videoSender: RTCRtpSender | null = null;
 let picking = false;
+let joiningFriend = false;
 let screenIn: MediaStream | null = null;
 let me: bigint | undefined;
 const speaker = new Audio();
@@ -55,7 +58,10 @@ function hangUpMedia() {
 }
 
 export const useCalls = create<CallsState>((set, get) => {
-  async function join(ws: WsClient, call: Call) {
+  async function join(
+    ws: WsClient,
+    target: { kind: "call"; call: Call } | { kind: "friend"; id: bigint },
+  ) {
     mic = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
     });
@@ -83,13 +89,26 @@ export const useCalls = create<CallsState>((set, get) => {
     offer.sdp = offer.sdp?.replace(/(a=fmtp:111 [^\r\n]*)/, "$1;usedtx=1;maxaveragebitrate=64000");
     await pc.setLocalDescription(offer);
 
-    const reply = await ws.request({
-      case: "callJoin",
-      value: createProto(CallJoinSchema, { callId: call.id, sdpOffer: offer.sdp ?? "" }),
-    });
+    const reply = await ws.request(
+      target.kind === "friend"
+        ? {
+            case: "joinFriendCall",
+            value: createProto(JoinFriendCallSchema, {
+              friendId: target.id,
+              sdpOffer: offer.sdp ?? "",
+            }),
+          }
+        : {
+            case: "callJoin",
+            value: createProto(CallJoinSchema, {
+              callId: target.call.id,
+              sdpOffer: offer.sdp ?? "",
+            }),
+          },
+    );
     if (reply.case !== "callJoined") throw new Error("Could not join the call");
     await pc.setRemoteDescription({ type: "answer", sdp: reply.value.sdpAnswer });
-    set({ current: reply.value.call ?? call });
+    set({ current: reply.value.call ?? (target.kind === "friend" ? null : target.call) });
     showScreen(get().current);
   }
 
@@ -205,8 +224,19 @@ export const useCalls = create<CallsState>((set, get) => {
         if (reply.case !== "callResult" || !reply.value.call)
           throw new Error("Could not start the call");
         set({ current: reply.value.call });
-        await join(ws, reply.value.call);
+        await join(ws, { kind: "call", call: reply.value.call });
       }),
+
+    joinFriend: async (ws, friendId) => {
+      if (joiningFriend || get().current || pc || mic) return;
+      joiningFriend = true;
+      try {
+        await run(() => join(ws, { kind: "friend", id: friendId }));
+        if (get().current?.id === get().incoming?.id) set({ incoming: null });
+      } finally {
+        joiningFriend = false;
+      }
+    },
 
     accept: (ws) =>
       run(async () => {
@@ -217,7 +247,7 @@ export const useCalls = create<CallsState>((set, get) => {
           case: "callAccept",
           value: createProto(CallAcceptSchema, { callId: call.id }),
         });
-        await join(ws, call);
+        await join(ws, { kind: "call", call });
       }),
 
     decline: (ws) =>

@@ -21,6 +21,13 @@ pub trait PresenceStore: Send + Sync {
     async fn apply(&self, user_id: i64, connection_id: u64, op: Op) -> anyhow::Result<Change>;
     async fn snapshots(&self, user_ids: &[i64]) -> anyhow::Result<Vec<Snapshot>>;
     async fn set_preference(&self, preference: &SavedPreference) -> anyhow::Result<Change>;
+    async fn set_activity(
+        &self,
+        user_id: i64,
+        connection_id: u64,
+        label: &str,
+    ) -> anyhow::Result<()>;
+    async fn activities(&self, user_id: i64) -> anyhow::Result<Vec<(u64, String)>>;
 }
 
 fn now_ms() -> i64 {
@@ -62,10 +69,11 @@ elseif op ~= 'read' then
   local h = redis.call('HGETALL', key)
   for i = 1, #h, 2 do
     local exp = string.match(h[i + 1], '^(%d+):')
-    if not exp or tonumber(exp) <= now then redis.call('HDEL', key, h[i]) end
+    if not exp or tonumber(exp) <= now then redis.call('HDEL', key, h[i]); redis.call('HDEL', KEYS[3], h[i]) end
   end
   if op == 'drop' then
     redis.call('HDEL', key, conn)
+    redis.call('HDEL', KEYS[3], conn)
   else
     local idle = '0'
     local cur = redis.call('HGET', key, conn)
@@ -73,7 +81,7 @@ elseif op ~= 'read' then
     if op == 'idle' then idle = '1' elseif op == 'active' then idle = '0' end
     redis.call('HSET', key, conn, string.format('%d', now + ttl) .. ':' .. idle)
   end
-  if redis.call('HLEN', key) > 0 then redis.call('PEXPIRE', key, ttl) end
+  if redis.call('HLEN', key) > 0 then redis.call('PEXPIRE', key, ttl); redis.call('PEXPIRE', KEYS[3], ttl) end
 end
 local time = redis.call('TIME')
 local revision = math.max(tonumber(redis.call('HGET', pref, 'revision') or '0') + 1,
@@ -104,6 +112,7 @@ impl RedisPresenceStore {
             .script
             .key(key(user_id))
             .key(preference_key(user_id))
+            .key(format!("activity:{user_id}"))
             .arg(now_ms())
             .arg(op)
             .arg(connection_id.to_string())
@@ -138,6 +147,14 @@ fn from_code(code: i64) -> Status {
     }
 }
 
+fn parse_conn(value: &str) -> Option<Conn> {
+    let (expires, idle) = value.split_once(':')?;
+    Some(Conn {
+        expires_at: expires.parse().ok()?,
+        idle: idle == "1",
+    })
+}
+
 #[async_trait]
 impl PresenceStore for RedisPresenceStore {
     #[tracing::instrument(name = "redis presence apply", skip_all, err(Display), fields(otel.kind = "client", db.system = "redis", op = ?op))]
@@ -152,14 +169,63 @@ impl PresenceStore for RedisPresenceStore {
         self.run(user_id, connection_id, op, None).await
     }
 
+    async fn set_activity(
+        &self,
+        user_id: i64,
+        connection_id: u64,
+        label: &str,
+    ) -> anyhow::Result<()> {
+        let mut redis = self.redis.clone();
+        redis::Script::new(
+            r#"
+local current = redis.call('HGET', KEYS[1], ARGV[1])
+local exp = current and string.match(current, '^(%d+):')
+if not exp or tonumber(exp) <= tonumber(ARGV[3]) then return 0 end
+if ARGV[2] == '' then redis.call('HDEL', KEYS[2], ARGV[1])
+else redis.call('HSET', KEYS[2], ARGV[1], ARGV[2]); redis.call('PEXPIRE', KEYS[2], ARGV[4]) end
+return 1
+"#,
+        )
+        .key(key(user_id))
+        .key(format!("activity:{user_id}"))
+        .arg(connection_id.to_string())
+        .arg(label)
+        .arg(now_ms())
+        .arg(self.ttl.as_millis() as i64)
+        .invoke_async::<i64>(&mut redis)
+        .await?;
+        Ok(())
+    }
+
+    async fn activities(&self, user_id: i64) -> anyhow::Result<Vec<(u64, String)>> {
+        let mut redis = self.redis.clone();
+        let (connections, labels): (HashMap<String, String>, HashMap<String, String>) =
+            redis::pipe()
+                .hgetall(key(user_id))
+                .hgetall(format!("activity:{user_id}"))
+                .query_async(&mut redis)
+                .await?;
+        let now = now_ms();
+        Ok(labels
+            .into_iter()
+            .filter_map(|(id, label)| {
+                let conn = parse_conn(connections.get(&id)?)?;
+                (conn.expires_at > now)
+                    .then(|| id.parse().ok().map(|id| (id, label)))
+                    .flatten()
+            })
+            .collect())
+    }
+
     async fn snapshots(&self, user_ids: &[i64]) -> anyhow::Result<Vec<Snapshot>> {
         let mut pipe = redis::pipe();
         for id in user_ids {
             pipe.cmd("EVAL")
                 .arg(APPLY_LUA)
-                .arg(2)
+                .arg(3)
                 .arg(key(*id))
                 .arg(preference_key(*id))
+                .arg(format!("activity:{id}"))
                 .arg(now_ms())
                 .arg("read")
                 .arg("0")
@@ -188,6 +254,7 @@ impl PresenceStore for RedisPresenceStore {
 #[cfg_attr(not(test), allow(dead_code))]
 pub struct MemoryPresenceStore {
     users: Mutex<HashMap<i64, HashMap<u64, Conn>>>,
+    labels: Mutex<HashMap<(i64, u64), String>>,
     ttl_ms: i64,
     clock: AtomicI64,
 }
@@ -197,6 +264,7 @@ impl MemoryPresenceStore {
     pub fn new(ttl: Duration) -> Self {
         Self {
             users: Mutex::default(),
+            labels: Mutex::default(),
             ttl_ms: ttl.as_millis() as i64,
             clock: AtomicI64::new(0),
         }
@@ -223,6 +291,10 @@ impl PresenceStore for MemoryPresenceStore {
         let conns = users.entry(user_id).or_default();
         let before = status_of(conns.values().copied(), now);
         conns.retain(|_, c| c.expires_at > now);
+        self.labels
+            .lock()
+            .unwrap()
+            .retain(|(user, conn), _| *user != user_id || conns.contains_key(conn));
         if op == Op::Drop {
             conns.remove(&connection_id);
         } else {
@@ -240,6 +312,10 @@ impl PresenceStore for MemoryPresenceStore {
                 },
             );
         }
+        self.labels
+            .lock()
+            .unwrap()
+            .retain(|(user, conn), _| *user != user_id || conns.contains_key(conn));
         let after = status_of(conns.values().copied(), now);
         if conns.is_empty() {
             users.remove(&user_id);
@@ -250,6 +326,42 @@ impl PresenceStore for MemoryPresenceStore {
             revision: 0,
             preference_loaded: true,
         })
+    }
+
+    async fn set_activity(
+        &self,
+        user_id: i64,
+        connection_id: u64,
+        label: &str,
+    ) -> anyhow::Result<()> {
+        let users = self.users.lock().unwrap();
+        let mut labels = self.labels.lock().unwrap();
+        if label.is_empty() {
+            labels.remove(&(user_id, connection_id));
+        } else if users
+            .get(&user_id)
+            .and_then(|c| c.get(&connection_id))
+            .is_some_and(|c| c.expires_at > self.now())
+        {
+            labels.insert((user_id, connection_id), label.to_owned());
+        }
+        Ok(())
+    }
+
+    async fn activities(&self, user_id: i64) -> anyhow::Result<Vec<(u64, String)>> {
+        let users = self.users.lock().unwrap();
+        let labels = self.labels.lock().unwrap();
+        Ok(labels
+            .iter()
+            .filter(|((user, conn), _)| {
+                *user == user_id
+                    && users
+                        .get(user)
+                        .and_then(|c| c.get(conn))
+                        .is_some_and(|c| c.expires_at > self.now())
+            })
+            .map(|((_, conn), label)| (*conn, label.clone()))
+            .collect())
     }
 
     async fn snapshots(&self, user_ids: &[i64]) -> anyhow::Result<Vec<Snapshot>> {
@@ -274,6 +386,39 @@ impl PresenceStore for MemoryPresenceStore {
 #[cfg(test)]
 mod redis_tests {
     use super::*;
+
+    #[tokio::test]
+    #[ignore]
+    async fn redis_activity_expires_and_tracks_each_connection() {
+        let url = std::env::var("REDIS_URL").unwrap_or("redis://127.0.0.1:6379".into());
+        let redis = crate::common::redis::connect(&url).await.unwrap();
+        let store = RedisPresenceStore::new(redis, Duration::from_millis(500));
+        let user = -(rand::random::<u32>() as i64) - 1;
+        store.apply(user, 1, Op::Touch).await.unwrap();
+        store.apply(user, 2, Op::Touch).await.unwrap();
+        store.set_activity(user, 1, "Minecraft").await.unwrap();
+        store.set_activity(user, 2, "Other").await.unwrap();
+        assert_eq!(store.activities(user).await.unwrap().len(), 2);
+        store.set_activity(user, 2, "").await.unwrap();
+        assert_eq!(
+            store.activities(user).await.unwrap(),
+            vec![(1, "Minecraft".into())]
+        );
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        store.apply(user, 1, Op::Touch).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        assert_eq!(
+            store.activities(user).await.unwrap(),
+            vec![(1, "Minecraft".into())]
+        );
+        tokio::time::sleep(Duration::from_millis(700)).await;
+        assert!(store.activities(user).await.unwrap().is_empty());
+        store.apply(user, 1, Op::Touch).await.unwrap();
+        assert!(store.activities(user).await.unwrap().is_empty());
+        store.set_activity(user, 1, "Again").await.unwrap();
+        store.apply(user, 1, Op::Drop).await.unwrap();
+        assert!(store.activities(user).await.unwrap().is_empty());
+    }
 
     #[tokio::test]
     #[ignore]
