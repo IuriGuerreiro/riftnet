@@ -3,11 +3,32 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 use sqlx::PgPool;
 
-use super::models::{Server, ServerMembership};
+use super::models::{ChannelWrite, Server, ServerMember, ServerMembership};
 use crate::common::error::RepoError;
 
 #[async_trait]
 pub trait ServerRepo: Send + Sync {
+    async fn create_channel(
+        &self,
+        user_id: i64,
+        server_id: i64,
+        channel_id: i64,
+        name: &str,
+    ) -> Result<ChannelWrite, RepoError>;
+    async fn rename_channel(
+        &self,
+        user_id: i64,
+        server_id: i64,
+        channel_id: i64,
+        name: &str,
+    ) -> Result<Option<Server>, RepoError>;
+    async fn list_members(
+        &self,
+        user_id: i64,
+        server_id: i64,
+        after_id: i64,
+    ) -> Result<Option<Vec<ServerMember>>, RepoError>;
+
     async fn member_ids(&self, server_id: i64) -> Result<Vec<i64>, RepoError>;
     async fn author_names(&self, ids: &[i64]) -> Result<HashMap<i64, String>, RepoError>;
     async fn member_server(&self, user_id: i64, channel_id: i64) -> Result<Option<i64>, RepoError>;
@@ -46,6 +67,94 @@ impl PgServerRepo {
 
 #[async_trait]
 impl ServerRepo for PgServerRepo {
+    async fn create_channel(
+        &self,
+        user_id: i64,
+        server_id: i64,
+        channel_id: i64,
+        name: &str,
+    ) -> Result<ChannelWrite, RepoError> {
+        let mut tx = self.pool.begin().await?;
+        let owner: Option<i64> = sqlx::query_scalar(
+            "SELECT s.id FROM servers s JOIN server_members m ON m.server_id = s.id
+             WHERE s.id = $1 AND m.user_id = $2 AND m.role = 'owner'
+             FOR UPDATE OF s FOR SHARE OF m",
+        )
+        .bind(server_id)
+        .bind(user_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        if owner.is_none() {
+            return Ok(ChannelWrite::NotFound);
+        }
+        let count: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM server_channels WHERE server_id = $1")
+                .bind(server_id)
+                .fetch_one(&mut *tx)
+                .await?;
+        if count >= 100 {
+            return Ok(ChannelWrite::LimitReached);
+        }
+        sqlx::query("INSERT INTO server_channels (id, server_id, name) VALUES ($1, $2, $3)")
+            .bind(channel_id)
+            .bind(server_id)
+            .bind(name)
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await?;
+        Ok(ChannelWrite::Saved(Server {
+            id: channel_id,
+            name: name.into(),
+        }))
+    }
+
+    async fn rename_channel(
+        &self,
+        user_id: i64,
+        server_id: i64,
+        channel_id: i64,
+        name: &str,
+    ) -> Result<Option<Server>, RepoError> {
+        let row: Option<(i64, String)> = sqlx::query_as(
+            "WITH owner AS (
+                SELECT server_id FROM server_members WHERE server_id = $1 AND user_id = $2 AND role = 'owner' FOR SHARE
+             ) UPDATE server_channels SET name = $4
+             WHERE id = $3 AND server_id IN (SELECT server_id FROM owner) RETURNING id, name",
+        ).bind(server_id).bind(user_id).bind(channel_id).bind(name).fetch_optional(&self.pool).await?;
+        Ok(row.map(|(id, name)| Server { id, name }))
+    }
+
+    async fn list_members(
+        &self,
+        user_id: i64,
+        server_id: i64,
+        after_id: i64,
+    ) -> Result<Option<Vec<ServerMember>>, RepoError> {
+        let mut tx = self.pool.begin().await?;
+        let member: Option<i64> = sqlx::query_scalar(
+            "SELECT user_id FROM server_members WHERE server_id = $1 AND user_id = $2 FOR SHARE",
+        )
+        .bind(server_id)
+        .bind(user_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        if member.is_none() {
+            return Ok(None);
+        }
+        let rows = sqlx::query_as(
+            "SELECT u.id, COALESCE(NULLIF(u.display_name, ''), u.username, 'Unknown user') AS name,
+             m.role = 'owner' AS is_owner
+             FROM server_members m JOIN users u ON u.id = m.user_id
+             WHERE m.server_id = $1 AND m.user_id > $2 ORDER BY m.user_id LIMIT 101",
+        )
+        .bind(server_id)
+        .bind(after_id)
+        .fetch_all(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        Ok(Some(rows))
+    }
+
     async fn create(
         &self,
         user_id: i64,
@@ -219,5 +328,106 @@ impl ServerRepo for PgServerRepo {
                 .fetch_all(&self.pool)
                 .await?,
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::features::servers::service::ServerService;
+    use common::snowflake::Snowflake;
+    use std::sync::Arc;
+
+    #[tokio::test]
+    #[ignore = "requires local Postgres"]
+    async fn channel_management_and_member_visibility() {
+        let admin_url = std::env::var("IT_DATABASE_URL")
+            .unwrap_or_else(|_| "postgres://app:app@127.0.0.1:55432/app".into());
+        let admin = PgPool::connect(&admin_url).await.unwrap();
+        let database = format!("server_management_{}", rand::random::<u32>());
+        sqlx::query(&format!("CREATE DATABASE {database}"))
+            .execute(&admin)
+            .await
+            .unwrap();
+        let base = admin_url.rsplit_once('/').unwrap().0;
+        let pool = PgPool::connect(&format!("{base}/{database}"))
+            .await
+            .unwrap();
+        let result = verify_channel_management(pool.clone()).await;
+        pool.close().await;
+        sqlx::query(&format!("DROP DATABASE {database}"))
+            .execute(&admin)
+            .await
+            .unwrap();
+        admin.close().await;
+        result.unwrap();
+    }
+
+    async fn verify_channel_management(pool: PgPool) -> anyhow::Result<()> {
+        sqlx::migrate!("./migrations").run(&pool).await?;
+        sqlx::query("INSERT INTO users (id, zitadel_id, username) VALUES (1, 'owner', 'owner'), (2, 'member', 'member'), (3, 'outsider', 'outsider')")
+            .execute(&pool).await?;
+        let repo = Arc::new(PgServerRepo::new(pool.clone()));
+        repo.create(1, 10, 11, "First").await?;
+        repo.create(3, 20, 21, "Other").await?;
+        sqlx::query("INSERT INTO server_members VALUES (10, 2, 'member')")
+            .execute(&pool)
+            .await?;
+        let service = ServerService::new(repo.clone(), Arc::new(Snowflake::new(999)));
+        let channel = service.create_channel(1, 10, "  planning  ").await?;
+        assert_eq!(channel.name, "planning");
+        assert!(matches!(
+            service.create_channel(2, 10, "denied").await,
+            Err(crate::common::error::ApiError::NotFound)
+        ));
+        assert!(matches!(
+            service.rename_channel(2, 10, channel.id, "denied").await,
+            Err(crate::common::error::ApiError::NotFound)
+        ));
+        assert!(matches!(
+            service.rename_channel(1, 10, 21, "cross-server").await,
+            Err(crate::common::error::ApiError::NotFound)
+        ));
+        let renamed = service.rename_channel(1, 10, channel.id, "roadmap").await?;
+        assert_eq!(renamed.name, "roadmap");
+        assert!(matches!(
+            service.create_channel(1, 10, "roadmap").await,
+            Err(crate::common::error::ApiError::Conflict {
+                code: "channel_name_taken",
+                ..
+            })
+        ));
+        for name in ["".into(), " ".into(), "a".repeat(101), "bad\0name".into()] {
+            assert!(service.create_channel(1, 10, &name).await.is_err());
+        }
+        assert!(
+            service
+                .create_channel(1, 10, &"é".repeat(100))
+                .await
+                .is_ok()
+        );
+        let members = service.list_members(2, 10, 0).await?;
+        assert_eq!(members.len(), 2);
+        assert_eq!(members[0].name, "owner");
+        assert!(members[0].is_owner);
+        assert!(!members[1].is_owner);
+        assert_eq!(service.list_members(2, 10, 1).await?[0].id, 2);
+        assert!(matches!(
+            service.list_members(3, 10, 0).await,
+            Err(crate::common::error::ApiError::NotFound)
+        ));
+        sqlx::query("INSERT INTO server_channels (id, server_id, name) SELECT 1000 + n, 10, 'channel-' || n FROM generate_series(1, 96) n")
+            .execute(&pool).await?;
+        let (first, second) = tokio::join!(
+            service.create_channel(1, 10, "last-one"),
+            service.create_channel(1, 10, "last-two")
+        );
+        assert_eq!(usize::from(first.is_ok()) + usize::from(second.is_ok()), 1);
+        let count: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM server_channels WHERE server_id = 10")
+                .fetch_one(&pool)
+                .await?;
+        assert_eq!(count, 100);
+        Ok(())
     }
 }

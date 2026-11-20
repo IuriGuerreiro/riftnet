@@ -8,7 +8,7 @@ pub mod service;
 use crate::app::AppState;
 use axum::{
     Router,
-    routing::{get, post},
+    routing::{get, patch, post},
 };
 
 pub fn routes() -> Router<AppState> {
@@ -16,11 +16,19 @@ pub fn routes() -> Router<AppState> {
         .route("/servers", get(controller::list).post(controller::create))
         .route(
             "/servers/{server_id}/channels",
-            get(controller::list_channels),
+            get(controller::list_channels).post(controller::create_channel),
         )
         .route(
             "/servers/{server_id}/invite",
             post(controller::invite).delete(controller::revoke_invite),
+        )
+        .route(
+            "/servers/{server_id}/channels/{channel_id}",
+            patch(controller::rename_channel),
+        )
+        .route(
+            "/servers/{server_id}/members",
+            get(controller::list_members),
         )
         .route("/servers/join", post(controller::join))
 }

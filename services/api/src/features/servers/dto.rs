@@ -64,3 +64,50 @@ impl From<super::models::CreatedServer> for CreatedServerDto {
         }
     }
 }
+
+#[derive(Deserialize)]
+pub struct ChannelNameBody {
+    pub name: String,
+}
+
+#[derive(Deserialize, Default)]
+pub struct MembersQuery {
+    #[serde(default)]
+    pub after_id: i64,
+}
+
+#[derive(Serialize)]
+pub struct MemberDto {
+    pub id: String,
+    pub name: String,
+    pub is_owner: bool,
+}
+
+#[derive(Serialize)]
+pub struct MembersPage {
+    pub members: Vec<MemberDto>,
+    pub next_after_id: Option<String>,
+}
+
+impl From<Vec<super::models::ServerMember>> for MembersPage {
+    fn from(mut rows: Vec<super::models::ServerMember>) -> Self {
+        let has_more = rows.len() > 100;
+        rows.truncate(100);
+        let next_after_id = if has_more {
+            rows.last().map(|row| row.id.to_string())
+        } else {
+            None
+        };
+        Self {
+            next_after_id,
+            members: rows
+                .into_iter()
+                .map(|row| MemberDto {
+                    id: row.id.to_string(),
+                    name: row.name,
+                    is_owner: row.is_owner,
+                })
+                .collect(),
+        }
+    }
+}
