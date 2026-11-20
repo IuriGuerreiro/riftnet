@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { forgetServer, isServerUnavailable } from "../api/server-access";
 import type { listServerChannels } from "../api/servers";
 import { createChannel, listServerMembers, renameChannel } from "../api/servers";
-import { leaveServer, removeServerMember } from "../api/servers";
+import { banServerMember, leaveServer, listServerBans, unbanServerMember } from "../api/servers";
 import { useAuth } from "../stores/auth";
 import { Button, ErrorText, Input } from "./ui";
 
@@ -142,7 +142,7 @@ export function ServerMembers({
                 <span className="truncate">{member.name}</span>
                 {member.is_owner && <span className="text-xs text-brand">Owner</span>}
                 {isOwner && !member.is_owner && (
-                  <RemoveMember serverId={serverId} member={member} onUnavailable={onUnavailable} />
+                  <BanMember serverId={serverId} member={member} onUnavailable={onUnavailable} />
                 )}
               </li>
             ))}
@@ -161,7 +161,7 @@ export function ServerMembers({
   );
 }
 
-function RemoveMember({
+function BanMember({
   serverId,
   member,
   onUnavailable,
@@ -173,10 +173,11 @@ function RemoveMember({
   const [confirming, setConfirming] = useState(false);
   const userId = useAuth((state) => state.user?.id);
   const queryClient = useQueryClient();
-  const remove = useMutation({
-    mutationFn: () => removeServerMember(serverId, member.id),
+  const ban = useMutation({
+    mutationFn: () => banServerMember(serverId, member.id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["server-members", userId, serverId] });
+      void queryClient.invalidateQueries({ queryKey: ["server-bans", userId, serverId] });
       setConfirming(false);
     },
     onError: (error) => {
@@ -185,19 +186,15 @@ function RemoveMember({
   });
   return confirming ? (
     <div className="max-w-xs space-y-2 text-sm">
-      <p>Remove {member.name}? An active invite will let them rejoin.</p>
-      <ErrorText error={remove.error} />
-      <button
-        className="mr-3 text-red-400"
-        disabled={remove.isPending}
-        onClick={() => remove.mutate()}
-      >
-        Confirm removal
+      <p>Ban {member.name}? They will be blocked from rejoining until you unban them.</p>
+      <ErrorText error={ban.error} />
+      <button className="mr-3 text-red-400" disabled={ban.isPending} onClick={() => ban.mutate()}>
+        Confirm ban
       </button>
       <button
-        disabled={remove.isPending}
+        disabled={ban.isPending}
         onClick={() => {
-          remove.reset();
+          ban.reset();
           setConfirming(false);
         }}
       >
@@ -206,7 +203,7 @@ function RemoveMember({
     </div>
   ) : (
     <button className="text-xs text-red-400" onClick={() => setConfirming(true)}>
-      Remove
+      Ban
     </button>
   );
 }
@@ -257,5 +254,70 @@ export function LeaveServer({
     <button className="text-sm text-red-400" onClick={() => setConfirming(true)}>
       Leave server
     </button>
+  );
+}
+
+export function ServerBans({ serverId }: { serverId: string }) {
+  const userId = useAuth((state) => state.user?.id);
+  const queryClient = useQueryClient();
+  const [expanded, setExpanded] = useState(false);
+  const bans = useInfiniteQuery({
+    queryKey: ["server-bans", userId, serverId],
+    queryFn: ({ pageParam }) => listServerBans(serverId, pageParam),
+    initialPageParam: "0",
+    getNextPageParam: (page) => page.next_after_id ?? undefined,
+    enabled: expanded,
+    retry: false,
+  });
+  const unban = useMutation({
+    mutationFn: (userId: string) => unbanServerMember(serverId, userId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["server-bans", userId, serverId] });
+    },
+  });
+  return (
+    <details
+      className="border-b border-zinc-800 px-4 py-3"
+      onToggle={(event) => setExpanded(event.currentTarget.open)}
+    >
+      <summary className="cursor-pointer text-sm font-medium">Banned members</summary>
+      <div className="mt-3 max-h-48 space-y-2 overflow-y-auto">
+        {bans.isPending && <p className="text-sm text-zinc-400">Loading bans…</p>}
+        <ErrorText error={bans.error ?? unban.error} />
+        {bans.isError && (
+          <button className="text-sm text-brand" onClick={() => void bans.refetch()}>
+            Retry
+          </button>
+        )}
+        {bans.isSuccess && bans.data.pages[0]?.members.length === 0 && (
+          <p className="text-sm text-zinc-400">No banned members.</p>
+        )}
+        <ul className="space-y-2">
+          {bans.data?.pages
+            .flatMap((page) => page.members)
+            .map((member) => (
+              <li key={member.id} className="flex items-center justify-between gap-3 text-sm">
+                <span className="truncate">{member.name}</span>
+                <button
+                  className="text-brand"
+                  disabled={unban.isPending}
+                  onClick={() => unban.mutate(member.id)}
+                >
+                  Unban
+                </button>
+              </li>
+            ))}
+        </ul>
+        {bans.hasNextPage && (
+          <button
+            className="text-sm text-brand"
+            disabled={bans.isFetching}
+            onClick={() => void bans.fetchNextPage()}
+          >
+            Load more bans
+          </button>
+        )}
+      </div>
+    </details>
   );
 }

@@ -62,10 +62,20 @@ export async function listServerMembers(serverId: string, afterId: string) {
   );
 }
 
-export function removeServerMember(serverId: string, userId: string) {
-  return http<undefined>(`/servers/${serverId}/members/${userId}`, { method: "DELETE" });
+export function banServerMember(serverId: string, userId: string) {
+  return http<undefined>(`/servers/${serverId}/bans/${userId}`, { method: "POST" });
 }
 
 export function leaveServer(serverId: string) {
   return http<undefined>(`/servers/${serverId}/leave`, { method: "POST" });
+}
+
+export function unbanServerMember(serverId: string, userId: string) {
+  return http<undefined>(`/servers/${serverId}/bans/${userId}`, { method: "DELETE" });
+}
+
+export async function listServerBans(serverId: string, afterId: string) {
+  return membersPage.parse(
+    await http<unknown>(`/servers/${serverId}/bans?after_id=${encodeURIComponent(afterId)}`),
+  );
 }

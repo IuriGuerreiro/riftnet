@@ -53,7 +53,7 @@ async fn denied_channel(client: &mut Client, channel_id: u64) {
 
 #[tokio::test]
 #[ignore = "needs local Postgres, Scylla, Redis, NATS and MinIO"]
-async fn membership_removal_and_leave_revoke_open_connections() {
+async fn bans_and_leave_revoke_open_connections() {
     let owner = seed_user().await;
     let member = seed_user().await;
     let outsider = seed_user().await;
@@ -122,7 +122,7 @@ async fn membership_removal_and_leave_revoke_open_connections() {
         404
     );
     assert_eq!(
-        http.delete(&member, &format!("{base}/members/{}", owner.id))
+        http.post(&member, &format!("{base}/bans/{}", owner.id))
             .send()
             .await
             .unwrap()
@@ -130,7 +130,7 @@ async fn membership_removal_and_leave_revoke_open_connections() {
         404
     );
     assert_eq!(
-        http.delete(&outsider, &format!("{base}/members/{}", member.id))
+        http.post(&outsider, &format!("{base}/bans/{}", member.id))
             .send()
             .await
             .unwrap()
@@ -138,7 +138,7 @@ async fn membership_removal_and_leave_revoke_open_connections() {
         404
     );
     assert_eq!(
-        http.delete(&owner, &format!("{base}/members/{}", owner.id))
+        http.post(&owner, &format!("{base}/bans/{}", owner.id))
             .send()
             .await
             .unwrap()
@@ -166,7 +166,7 @@ async fn membership_removal_and_leave_revoke_open_connections() {
         "before removal"
     );
     outsider_ws.no_push(channel_push(channel_id)).await;
-    http.delete(&owner, &format!("{base}/members/{}", member.id))
+    http.post(&owner, &format!("{base}/bans/{}", member.id))
         .send()
         .await
         .unwrap()
@@ -198,6 +198,56 @@ async fn membership_removal_and_leave_revoke_open_connections() {
         .unwrap();
     assert!(servers.as_array().unwrap().is_empty());
 
+    let banned = http
+        .post(&member, "/servers/join")
+        .json(&join)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(banned.status(), 409);
+    assert_eq!(
+        banned.json::<Value>().await.unwrap()["code"],
+        "server_banned"
+    );
+    assert_eq!(
+        http.get(&member, &format!("{base}/bans"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        404
+    );
+    assert_eq!(
+        http.delete(&outsider, &format!("{base}/bans/{}", member.id))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        404
+    );
+    let bans: Value = http
+        .get(&owner, &format!("{base}/bans"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(bans["members"][0]["id"], member.id.to_string());
+    http.delete(&owner, &format!("{base}/bans/{}", member.id))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    assert_eq!(
+        http.get(&member, &format!("{base}/channels"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        404
+    );
     http.post(&member, "/servers/join")
         .json(&join)
         .send()

@@ -30,3 +30,9 @@ pub enum LeaveOutcome {
     Owner,
     NotFound,
 }
+
+pub enum JoinOutcome {
+    Joined(Server),
+    Banned,
+    NotFound,
+}

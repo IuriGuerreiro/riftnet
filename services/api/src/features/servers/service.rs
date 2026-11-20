@@ -4,7 +4,7 @@ use rand::{RngCore, rngs::OsRng};
 use std::sync::Arc;
 
 use super::models::{
-    ChannelWrite, CreatedServer, LeaveOutcome, Server, ServerMember, ServerMembership,
+    ChannelWrite, CreatedServer, JoinOutcome, LeaveOutcome, Server, ServerMember, ServerMembership,
 };
 use super::repository::ServerRepo;
 use crate::common::error::{ApiError, RepoError};
@@ -96,27 +96,48 @@ impl ServerService {
             .await?
             .ok_or(ApiError::NotFound)
     }
-    pub async fn remove_member(
+    pub async fn ban_member(
         &self,
         owner_id: i64,
         server_id: i64,
         user_id: i64,
     ) -> Result<(), ApiError> {
-        if !self
-            .repo
-            .remove_member(owner_id, server_id, user_id)
-            .await?
-        {
+        if !self.repo.ban_member(owner_id, server_id, user_id).await? {
             return Err(ApiError::NotFound);
         }
         if owner_id == user_id {
             return Err(ApiError::conflict(
-                "owner_cannot_leave",
-                "The server owner cannot leave or remove themselves",
+                "owner_cannot_be_banned",
+                "The server owner cannot be banned",
             ));
         }
         self.notify_removed(user_id, server_id).await;
         Ok(())
+    }
+    pub async fn unban_member(
+        &self,
+        owner_id: i64,
+        server_id: i64,
+        user_id: i64,
+    ) -> Result<(), ApiError> {
+        if !self.repo.unban_member(owner_id, server_id, user_id).await? {
+            return Err(ApiError::NotFound);
+        }
+        Ok(())
+    }
+    pub async fn list_bans(
+        &self,
+        owner_id: i64,
+        server_id: i64,
+        after_id: i64,
+    ) -> Result<Vec<ServerMember>, ApiError> {
+        if after_id < 0 {
+            return Err(ApiError::bad_request("bad_cursor", "Invalid member cursor"));
+        }
+        self.repo
+            .list_bans(owner_id, server_id, after_id)
+            .await?
+            .ok_or(ApiError::NotFound)
     }
     pub async fn leave(&self, user_id: i64, server_id: i64) -> Result<(), ApiError> {
         match self.repo.leave(user_id, server_id).await? {
@@ -175,9 +196,17 @@ impl ServerService {
         Ok(())
     }
     pub async fn join(&self, user_id: i64, token: &str) -> Result<Server, ApiError> {
-        self.repo.join(user_id, token).await?.ok_or_else(|| {
-            ApiError::bad_request("invalid_invite", "This invite link is invalid or revoked")
-        })
+        match self.repo.join(user_id, token).await? {
+            JoinOutcome::Joined(server) => Ok(server),
+            JoinOutcome::Banned => Err(ApiError::conflict(
+                "server_banned",
+                "You are banned from this server",
+            )),
+            JoinOutcome::NotFound => Err(ApiError::bad_request(
+                "invalid_invite",
+                "This invite link is invalid or revoked",
+            )),
+        }
     }
 }
 

@@ -22,7 +22,7 @@ export function forgetServer(
     ["servers", userId],
     (current) => current?.filter((server) => server.id !== serverId),
   );
-  for (const feature of ["server-channels", "server-members"]) {
+  for (const feature of ["server-channels", "server-members", "server-bans"]) {
     void queryClient.cancelQueries({ queryKey: [feature, userId, serverId] });
     queryClient.removeQueries({ queryKey: [feature, userId, serverId] });
   }

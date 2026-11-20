@@ -3,12 +3,27 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 use sqlx::PgPool;
 
-use super::models::{ChannelWrite, LeaveOutcome, Server, ServerMember, ServerMembership};
+use super::models::{
+    ChannelWrite, JoinOutcome, LeaveOutcome, Server, ServerMember, ServerMembership,
+};
 use crate::common::error::RepoError;
 
 #[async_trait]
 pub trait ServerRepo: Send + Sync {
-    async fn remove_member(
+    async fn unban_member(
+        &self,
+        owner_id: i64,
+        server_id: i64,
+        user_id: i64,
+    ) -> Result<bool, RepoError>;
+    async fn list_bans(
+        &self,
+        owner_id: i64,
+        server_id: i64,
+        after_id: i64,
+    ) -> Result<Option<Vec<ServerMember>>, RepoError>;
+
+    async fn ban_member(
         &self,
         owner_id: i64,
         server_id: i64,
@@ -60,7 +75,7 @@ pub trait ServerRepo: Send + Sync {
         candidate: &str,
     ) -> Result<Option<String>, RepoError>;
     async fn revoke_invite(&self, user_id: i64, server_id: i64) -> Result<bool, RepoError>;
-    async fn join(&self, user_id: i64, token: &str) -> Result<Option<Server>, RepoError>;
+    async fn join(&self, user_id: i64, token: &str) -> Result<JoinOutcome, RepoError>;
 }
 
 pub struct PgServerRepo {
@@ -75,7 +90,47 @@ impl PgServerRepo {
 
 #[async_trait]
 impl ServerRepo for PgServerRepo {
-    async fn remove_member(
+    async fn ban_member(
+        &self,
+        owner_id: i64,
+        server_id: i64,
+        user_id: i64,
+    ) -> Result<bool, RepoError> {
+        let mut tx = self.pool.begin().await?;
+        let owner: Option<i64> = sqlx::query_scalar(
+            "SELECT s.id FROM servers s JOIN server_members m ON m.server_id = s.id
+             WHERE s.id = $1 AND m.user_id = $2 AND m.role = 'owner'
+             FOR UPDATE OF s FOR SHARE OF m",
+        )
+        .bind(server_id)
+        .bind(owner_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        if owner.is_none() {
+            return Ok(false);
+        }
+        sqlx::query(
+            "INSERT INTO server_bans (server_id, user_id)
+             SELECT $1, id FROM users WHERE id = $2 AND id <> $3
+             ON CONFLICT DO NOTHING",
+        )
+        .bind(server_id)
+        .bind(user_id)
+        .bind(owner_id)
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query(
+            "DELETE FROM server_members WHERE server_id = $1 AND user_id = $2 AND role = 'member'",
+        )
+        .bind(server_id)
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        Ok(true)
+    }
+
+    async fn unban_member(
         &self,
         owner_id: i64,
         server_id: i64,
@@ -85,18 +140,37 @@ impl ServerRepo for PgServerRepo {
             "WITH owner AS (
                 SELECT server_id FROM server_members
                 WHERE server_id = $1 AND user_id = $2 AND role = 'owner' FOR SHARE
-             ), removed AS (
-                DELETE FROM server_members
-                WHERE server_id IN (SELECT server_id FROM owner) AND user_id = $3 AND role = 'member'
-             )
-             SELECT server_id FROM owner",
+             ), unbanned AS (
+                DELETE FROM server_bans WHERE server_id IN (SELECT server_id FROM owner) AND user_id = $3
+             ) SELECT server_id FROM owner",
+        ).bind(server_id).bind(owner_id).bind(user_id).fetch_optional(&self.pool).await?;
+        Ok(owner.is_some())
+    }
+
+    async fn list_bans(
+        &self,
+        owner_id: i64,
+        server_id: i64,
+        after_id: i64,
+    ) -> Result<Option<Vec<ServerMember>>, RepoError> {
+        let mut tx = self.pool.begin().await?;
+        let owner: Option<i64> = sqlx::query_scalar(
+            "SELECT server_id FROM server_members WHERE server_id = $1 AND user_id = $2 AND role = 'owner' FOR SHARE",
+        ).bind(server_id).bind(owner_id).fetch_optional(&mut *tx).await?;
+        if owner.is_none() {
+            return Ok(None);
+        }
+        let rows = sqlx::query_as(
+            "SELECT u.id, COALESCE(NULLIF(u.display_name, ''), u.username, 'Unknown user') AS name,
+             false AS is_owner FROM server_bans b JOIN users u ON u.id = b.user_id
+             WHERE b.server_id = $1 AND b.user_id > $2 ORDER BY b.user_id LIMIT 101",
         )
         .bind(server_id)
-        .bind(owner_id)
-        .bind(user_id)
-        .fetch_optional(&self.pool)
+        .bind(after_id)
+        .fetch_all(&mut *tx)
         .await?;
-        Ok(owner.is_some())
+        tx.commit().await?;
+        Ok(Some(rows))
     }
 
     async fn leave(&self, user_id: i64, server_id: i64) -> Result<LeaveOutcome, RepoError> {
@@ -332,24 +406,41 @@ impl ServerRepo for PgServerRepo {
         Ok(owner.is_some())
     }
 
-    async fn join(&self, user_id: i64, token: &str) -> Result<Option<Server>, RepoError> {
-        let server = sqlx::query_as::<_, (i64, String)>(
-            "WITH invited AS (
-                 SELECT s.id, s.name FROM server_invites i JOIN servers s ON s.id = i.server_id
-                 WHERE i.token = $1 FOR KEY SHARE OF i
-             ), joined AS (
-                 INSERT INTO server_members (server_id, user_id, role)
-                 SELECT id, $2, 'member' FROM invited
-                 ON CONFLICT (server_id, user_id) DO NOTHING
-             )
-             SELECT id, name FROM invited",
+    async fn join(&self, user_id: i64, token: &str) -> Result<JoinOutcome, RepoError> {
+        let mut tx = self.pool.begin().await?;
+        let invited: Option<(i64, String)> = sqlx::query_as(
+            "SELECT s.id, s.name FROM server_invites i JOIN servers s ON s.id = i.server_id
+             WHERE i.token = $1 FOR SHARE OF s FOR KEY SHARE OF i",
         )
         .bind(token)
+        .fetch_optional(&mut *tx)
+        .await?;
+        let Some((server_id, name)) = invited else {
+            return Ok(JoinOutcome::NotFound);
+        };
+        let banned: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM server_bans WHERE server_id = $1 AND user_id = $2)",
+        )
+        .bind(server_id)
         .bind(user_id)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(RepoError::from)?;
-        Ok(server.map(|(id, name)| Server { id, name }))
+        .fetch_one(&mut *tx)
+        .await?;
+        if banned {
+            return Ok(JoinOutcome::Banned);
+        }
+        sqlx::query(
+            "INSERT INTO server_members (server_id, user_id, role) VALUES ($1, $2, 'member')
+             ON CONFLICT (server_id, user_id) DO NOTHING",
+        )
+        .bind(server_id)
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        Ok(JoinOutcome::Joined(Server {
+            id: server_id,
+            name,
+        }))
     }
     async fn member_server(&self, user_id: i64, channel_id: i64) -> Result<Option<i64>, RepoError> {
         Ok(sqlx::query_scalar(
@@ -500,17 +591,17 @@ mod tests {
                 .await?;
         assert_eq!(count, 100);
         assert!(matches!(
-            service.remove_member(2, 10, 1).await,
+            service.ban_member(2, 10, 1).await,
             Err(crate::common::error::ApiError::NotFound)
         ));
         assert!(matches!(
-            service.remove_member(3, 10, 2).await,
+            service.ban_member(3, 10, 2).await,
             Err(crate::common::error::ApiError::NotFound)
         ));
         assert!(matches!(
-            service.remove_member(1, 10, 1).await,
+            service.ban_member(1, 10, 1).await,
             Err(crate::common::error::ApiError::Conflict {
-                code: "owner_cannot_leave",
+                code: "owner_cannot_be_banned",
                 ..
             })
         ));
@@ -521,17 +612,56 @@ mod tests {
                 ..
             })
         ));
-        service.remove_member(1, 10, 2).await?;
-        service.remove_member(1, 10, 2).await?;
+        service.ban_member(1, 10, 2).await?;
+        service.ban_member(1, 10, 2).await?;
         assert!(repo.member_server(2, 11).await?.is_none());
         assert!(repo.list_channels(2, 10).await?.is_none());
         assert!(repo.list_members(2, 10, 0).await?.is_none());
         let invite = service.invite(1, 10).await?;
+        assert!(matches!(
+            service.join(2, &invite).await,
+            Err(crate::common::error::ApiError::Conflict {
+                code: "server_banned",
+                ..
+            })
+        ));
+        assert!(matches!(
+            service.unban_member(2, 10, 2).await,
+            Err(crate::common::error::ApiError::NotFound)
+        ));
+        assert!(matches!(
+            service.list_bans(2, 10, 0).await,
+            Err(crate::common::error::ApiError::NotFound)
+        ));
+        assert_eq!(service.list_bans(1, 10, 0).await?[0].id, 2);
+        service.unban_member(1, 10, 2).await?;
+        service.unban_member(1, 10, 2).await?;
         service.join(2, &invite).await?;
         assert!(repo.member_server(2, 11).await?.is_some());
         service.leave(2, 10).await?;
         assert!(repo.member_server(2, 11).await?.is_none());
         assert!(repo.member_server(1, 11).await?.is_some());
+        service.unban_member(1, 10, 2).await?;
+        let (banned, joined) =
+            tokio::join!(service.ban_member(1, 10, 2), service.join(2, &invite),);
+        banned?;
+        if let Err(error) = joined {
+            assert!(matches!(
+                error,
+                crate::common::error::ApiError::Conflict {
+                    code: "server_banned",
+                    ..
+                }
+            ));
+        }
+        assert!(repo.member_server(2, 11).await?.is_none());
+        assert!(matches!(
+            service.join(2, &invite).await,
+            Err(crate::common::error::ApiError::Conflict {
+                code: "server_banned",
+                ..
+            })
+        ));
         Ok(())
     }
 }

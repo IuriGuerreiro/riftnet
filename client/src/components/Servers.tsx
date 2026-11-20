@@ -15,7 +15,7 @@ import { platform } from "../platform";
 import { readWorkspaceSearch } from "../schemas/workspace";
 import { useAuth } from "../stores/auth";
 import { ChannelChat } from "./ChannelChat";
-import { ChannelControls, LeaveServer, ServerMembers } from "./ServerManagement";
+import { ChannelControls, LeaveServer, ServerBans, ServerMembers } from "./ServerManagement";
 import { Button, ErrorText, Input } from "./ui";
 
 function useMyServers() {
@@ -240,6 +240,7 @@ function ServerWorkspace({ serverId }: { serverId: string }) {
           onUnavailable={loseAccess}
         />
       )}
+      {server?.is_owner && channels.isSuccess && <ServerBans serverId={serverId} />}
       {selected && !channels.isError ? (
         <ChannelChat
           key={selected.id}

@@ -22,6 +22,7 @@ describe("server access", () => {
     );
     client.setQueryData(["server-channels", "user", "removed"], [{ id: "channel" }]);
     client.setQueryData(["server-members", "user", "removed"], ["member"]);
+    client.setQueryData(["server-bans", "user", "removed"], ["banned"]);
     client.setQueryData(["channel-history", "user", "removed", "channel"], ["private"]);
     client.setQueryData(["channel-history", "user", "kept", "other"], ["kept message"]);
     client.setQueryData(["servers", "other-user"], [{ id: "removed" }]);
@@ -32,6 +33,7 @@ describe("server access", () => {
     ]);
     expect(client.getQueryData(["server-channels", "user", "removed"])).toBeUndefined();
     expect(client.getQueryData(["server-members", "user", "removed"])).toBeUndefined();
+    expect(client.getQueryData(["server-bans", "user", "removed"])).toBeUndefined();
     expect(client.getQueryData(["channel-history", "user", "removed", "channel"])).toBeUndefined();
     expect(client.getQueryData(["channel-history", "user", "kept", "other"])).toEqual([
       "kept message",
