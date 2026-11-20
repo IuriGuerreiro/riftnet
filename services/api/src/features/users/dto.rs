@@ -9,6 +9,7 @@ pub struct UserDto {
     pub username: Option<String>,
     pub display_name: Option<String>,
     pub bio: Option<String>,
+    pub custom_status: Option<String>,
     /// Hex BLAKE3. Image: GET /users/{id}/avatar/{avatar_hash}?size=128|512
     pub avatar_hash: Option<String>,
 }
@@ -21,6 +22,7 @@ impl From<User> for UserDto {
             username: u.username,
             display_name: u.display_name,
             bio: u.bio,
+            custom_status: u.custom_status,
             avatar_hash,
         }
     }
@@ -34,6 +36,7 @@ impl From<&User> for protocol::v1::User {
             display_name: u.display_name.clone().unwrap_or_default(),
             avatar_hash: u.avatar_hex().unwrap_or_default(),
             bio: u.bio.clone().unwrap_or_default(),
+            custom_status: u.custom_status.clone().unwrap_or_default(),
         }
     }
 }
@@ -54,6 +57,7 @@ pub struct SearchUsersQuery {
 pub struct UpdateProfileRequest {
     pub display_name: Option<String>,
     pub bio: Option<String>,
+    pub custom_status: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

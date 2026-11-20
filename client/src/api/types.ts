@@ -4,6 +4,7 @@ export interface User {
   username: string | null;
   display_name: string | null;
   bio?: string | null;
+  custom_status?: string | null;
   avatar_hash?: string | null;
 }
 

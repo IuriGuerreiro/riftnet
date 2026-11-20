@@ -7,6 +7,7 @@ Backend: `services/api/src/features/users/`. Contract: `proto/v1/users.proto`.
 | Field          | Rule                                                        |
 | -------------- | ----------------------------------------------------------- |
 | `display_name` | 1–32 chars after trim, no control chars. `""` clears it.    |
+| `custom_status` | Up to 128 characters after trim; no control characters. `""` clears it. |
 | `bio`          | Up to 190 chars, newlines OK, no other control chars.       |
 | `avatar_hash`  | Hex id of the current avatar (BLAKE3 of image + nonce). Null = none. |
 
@@ -14,7 +15,7 @@ Backend: `services/api/src/features/users/`. Contract: `proto/v1/users.proto`.
 
 | Method + path                              | What                                                 |
 | ------------------------------------------ | ---------------------------------------------------- |
-| `PATCH /me`                                | `{ display_name?, bio? }`. Missing = keep, `""` = clear. One atomic update |
+| `PATCH /me`                                | `{ display_name?, bio?, custom_status? }`. Missing = keep, `""` = clear. One atomic update |
 | `PUT /me/avatar`                           | Raw image body, max 8 MB. 10 per hour per user       |
 | `DELETE /me/avatar`                        | Remove the avatar                                    |
 | `GET /users/{id}`                          | A user's profile                                     |
@@ -46,4 +47,6 @@ A new image always has a new hash, so clients can cache images by hash forever.
 
 `UserUpdated` is pushed to the user, accepted friends and everyone they share
 a conversation with (same audience as presence, `friends::audience`) when the
-username, display name, bio or avatar changes.
+username, display name, bio, custom status or avatar changes.
+
+Presence controls and private notification preferences are described in [user settings](user-settings.md).

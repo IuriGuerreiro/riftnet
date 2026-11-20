@@ -62,6 +62,7 @@ pub async fn update_me(
     let changes = ProfileChanges {
         display_name: req.display_name,
         bio: req.bio,
+        custom_status: req.custom_status,
     };
     Ok(Json(
         state

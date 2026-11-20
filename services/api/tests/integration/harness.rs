@@ -433,3 +433,17 @@ pub async fn send_text(client: &mut Client, conversation_id: u64, text: &str) ->
         other => panic!("send failed: {other:?}"),
     }
 }
+
+impl Http {
+    pub fn patch(&self, user: &TestUser, path: &str) -> reqwest::RequestBuilder {
+        self.client
+            .patch(format!("{}{path}", self.base))
+            .bearer_auth(&user.token)
+    }
+
+    pub fn put(&self, user: &TestUser, path: &str) -> reqwest::RequestBuilder {
+        self.client
+            .put(format!("{}{path}", self.base))
+            .bearer_auth(&user.token)
+    }
+}
