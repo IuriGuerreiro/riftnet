@@ -12,6 +12,7 @@ export interface Profile {
   username: string | null;
   displayName: string | null;
   bio: string | null;
+  customStatus: string | null;
   avatarHash: string | null;
 }
 
@@ -21,6 +22,7 @@ export function fromJson(u: JsonUser): Profile {
     username: u.username,
     displayName: u.display_name,
     bio: u.bio ?? null,
+    customStatus: u.custom_status ?? null,
     avatarHash: u.avatar_hash ?? null,
   };
 }
@@ -31,6 +33,7 @@ export function fromProto(u: ProtoUser): Profile {
     username: u.username || null,
     displayName: u.displayName || null,
     bio: u.bio || null,
+    customStatus: u.customStatus || null,
     avatarHash: u.avatarHash || null,
   };
 }
@@ -75,6 +78,7 @@ export const useProfiles = create<ProfilesStore>()((set, get) => ({
           username: p.username,
           display_name: p.displayName,
           bio: p.bio,
+          custom_status: p.customStatus,
           avatar_hash: p.avatarHash,
         });
       }
@@ -88,6 +92,7 @@ function same(a: Profile | undefined, b: Profile): boolean {
     a.username === b.username &&
     a.displayName === b.displayName &&
     a.bio === b.bio &&
+    a.customStatus === b.customStatus &&
     a.avatarHash === b.avatarHash
   );
 }
@@ -114,6 +119,7 @@ function patchSnapshots(u: ProtoUser) {
     username: u.username || null,
     display_name: u.displayName || null,
     bio: u.bio || null,
+    custom_status: u.customStatus || null,
     avatar_hash: u.avatarHash || null,
   };
   const patch = (rows: typeof list.friends) =>

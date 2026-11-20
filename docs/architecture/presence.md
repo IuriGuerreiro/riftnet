@@ -1,6 +1,8 @@
 # Presence
 
-Who is online. Three states: **online**, **idle**, **offline**.
+Who is online. Visible states: **online**, **idle**, **do not disturb**, **offline**.
+
+Saved [presence preferences](user-settings.md) override socket activity while connected. Invisible appears offline. With no live socket, every preference appears offline.
 
 ## Rules
 
@@ -23,7 +25,10 @@ One hash per user, `presence:<user_id>`: `connection_id → "<expires_at_ms>:<id
   return the status before and after. Atomic, so two devices connecting at once
   send exactly one "online" push.
 - The hash expires on its own once every socket is gone.
-- `PresenceStore` trait: `RedisPresenceStore` in real use, `MemoryPresenceStore` in tests.
+- `PresenceStore` trait: `RedisPresenceStore` in real use, `MemoryPresenceStore` in baseline service tests.
+- `presence-preference:<user_id>` stores the saved preference, its Postgres version, and the latest event revision. This key does not expire when sockets disconnect. The same Lua script reads it during socket operations.
+- The service hydrates missing preferences from Postgres. Unknown preferences stay invisible until recovery succeeds. Redis keeps updating socket lifetimes while Postgres is unavailable.
+- Presence snapshots and pushes include revisions so clients can reject updates that arrive out of order.
 - Config: `REDIS_URL` (default `redis://127.0.0.1:6379`).
 
 ## Heartbeat
@@ -82,7 +87,9 @@ refreshes the activity hash TTL alongside presence. Reads also filter expired
 connections, so a crashed API cannot leave visible activity behind.
 
 `GetActivities {user_ids}` accepts at most 200 IDs. The server returns activity
-only for accepted friends, even when the caller shares a DM or group with someone
+only for accepted friends whose effective presence is visible. Invisible mode
+hides activity and prevents friend-call discovery, including direct Join requests.
+The same restriction applies even when the caller shares a DM or group with someone
 else. It derives Streaming from that connection's active call screen-share state;
 clients cannot claim Streaming with an activity label. A streaming connection wins
 when several devices publish activity; otherwise the highest connection ID wins.

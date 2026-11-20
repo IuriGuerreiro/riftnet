@@ -14,7 +14,7 @@ function saveMe(me: User) {
 
 export function useUpdateProfile() {
   return useMutation({
-    mutationFn: (body: { display_name: string; bio: string }) =>
+    mutationFn: (body: { display_name: string; bio: string; custom_status?: string }) =>
       http<User>("/me", { method: "PATCH", body }),
     onSuccess: saveMe,
   });

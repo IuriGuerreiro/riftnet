@@ -162,7 +162,8 @@ export function FriendsPanel({ onDm }: { onDm: (username: string) => void }) {
               label={name(f)}
               avatarId={f.user.id}
               userId={f.user.id}
-              hint={
+              hint={profiles[f.user.id]?.customStatus ?? f.user.custom_status ?? undefined}
+              activity={
                 activities[f.user.id]?.label
                   ? `${activities[f.user.id]?.streaming ? "Streaming" : "Playing"} ${activities[f.user.id]?.label}`
                   : undefined

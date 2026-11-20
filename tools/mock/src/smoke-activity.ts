@@ -121,6 +121,27 @@ try {
   assert.equal(playing[0].streaming, false);
   assert.equal(playing[0].joinable, false);
   console.log("✓ Playing is visible to accepted friends only");
+  assert.equal(
+    (await api(ana.token, "PUT", "/me/settings/presence", { presence: "invisible" })).status,
+    200,
+  );
+  assert.equal((await read(b, [ana.id])).length, 0, "Invisible users must not leak activity");
+  assert.equal(
+    (
+      await b.request({
+        case: "joinFriendCall",
+        value: create(JoinFriendCallSchema, { friendId: BigInt(ana.id), sdpOffer: "" }),
+      })
+    ).case,
+    "error",
+  );
+  assert.equal(
+    (await api(ana.token, "PUT", "/me/settings/presence", { presence: "online" })).status,
+    200,
+  );
+  assert.equal((await read(b, [ana.id]))[0]?.label, "Minecraft");
+  console.log("✓ Invisible hides activity and denies friend-call discovery");
+
   const dm = await c.request({
     case: "openDm",
     value: create(OpenDmSchema, { username: ana.username }),

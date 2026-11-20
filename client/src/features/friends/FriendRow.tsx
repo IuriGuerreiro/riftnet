@@ -6,12 +6,14 @@ import { StatusDot } from "../../components/StatusDot";
 export function FriendRow({
   label,
   hint,
+  activity,
   userId,
   avatarId,
   children,
 }: {
   label: string;
   hint?: string;
+  activity?: string;
   userId?: string;
   avatarId: string;
   children: React.ReactNode;
@@ -23,6 +25,11 @@ export function FriendRow({
       <div className="min-w-0 flex-1">
         <p className="truncate">{label}</p>
         {hint && <p className="text-xs text-zinc-500">{hint}</p>}
+        {activity && (
+          <p className="truncate text-xs text-green-400" title={activity}>
+            {activity}
+          </p>
+        )}
       </div>
       {children}
     </div>

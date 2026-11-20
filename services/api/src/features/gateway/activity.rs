@@ -75,7 +75,7 @@ pub async fn join(
     let friend = i64::try_from(req.friend_id).map_err(|_| ApiError::NotFound)?;
     state
         .presence
-        .require_friend(session.user_id, friend)
+        .require_visible_friend(session.user_id, friend)
         .await?;
     let call = state.calls.friend_call(session.user_id, friend).await?;
     let (call, sdp_answer) = state
@@ -91,7 +91,7 @@ pub async fn join(
     // INVARIANT: recheck access after media admission; revoke the peer if it changed.
     let still_friends = state
         .presence
-        .require_friend(session.user_id, friend)
+        .require_visible_friend(session.user_id, friend)
         .await
         .is_ok();
     let same_call = state
