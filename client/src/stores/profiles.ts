@@ -39,7 +39,7 @@ export function fromProto(u: ProtoUser): Profile {
 }
 
 export function nameOf(p: Pick<Profile, "displayName" | "username" | "id"> | undefined): string {
-  if (!p) return "someone";
+  if (!p) return "Someone";
   return p.displayName ?? (p.username ? `@${p.username}` : p.id);
 }
 

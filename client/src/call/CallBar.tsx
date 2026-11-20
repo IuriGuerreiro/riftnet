@@ -1,9 +1,9 @@
+import { Mic, MicOff, Phone, PhoneOff, ScreenShare, ScreenShareOff } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import type { WsClient } from "../api/ws";
+import { Button, IconButton } from "../components/ui";
 import { CallState, peerConnection, useCalls } from "../stores/calls";
-
-const btn = "rounded-md px-2 py-1 text-xs font-semibold disabled:opacity-50";
 
 export function CallBar({ ws, conversationId }: { ws: WsClient | null; conversationId: bigint }) {
   const { current, joined, muted, sharing, error, call, leave, toggleMute, toggleShare } =
@@ -14,46 +14,44 @@ export function CallBar({ ws, conversationId }: { ws: WsClient | null; conversat
   if (!here) {
     return (
       <div className="flex items-center gap-2 text-xs font-normal">
-        {error && <span className="text-red-400">{error}</span>}
-        <button
+        {error && <span className="text-danger">{error}</span>}
+        <IconButton
+          label={current ? "Already in a call" : "Start voice call"}
+          icon={<Phone size={18} />}
           disabled={!ws || current !== null}
-          title={current ? "already in a call" : undefined}
           onClick={() => ws && call(ws, conversationId)}
-          className={`${btn} bg-green-600 text-white`}
-        >
-          📞 Call
-        </button>
+        />
       </div>
     );
   }
 
   const status =
     current.state === CallState.RINGING
-      ? "ringing…"
+      ? "Ringing…"
       : joined
-        ? `🔊 in call (${current.participantIds.length})`
-        : "connecting…";
+        ? `In call (${current.participantIds.length})`
+        : "Connecting…";
   return (
-    <div className="flex items-center gap-2 text-xs font-normal text-zinc-400">
+    <div className="flex items-center gap-2 text-xs font-normal text-fg-muted">
       {info && <span>{info}</span>}
       <span>{status}</span>
-      <button onClick={toggleMute} className={`${btn} bg-zinc-700 text-zinc-100`}>
-        {muted ? "Unmute" : "Mute"}
-      </button>
-      <button
+      <IconButton
+        label={muted ? "Unmute" : "Mute"}
+        icon={muted ? <MicOff size={18} /> : <Mic size={18} />}
+        active={muted}
+        onClick={toggleMute}
+      />
+      <IconButton
+        label={sharing ? "Stop sharing" : "Share screen"}
+        icon={sharing ? <ScreenShareOff size={18} /> : <ScreenShare size={18} />}
+        active={sharing}
         disabled={!joined}
         onClick={() => ws && void toggleShare(ws)}
-        className={`${btn} ${sharing ? "bg-blue-600 text-white" : "bg-zinc-700 text-zinc-100"}`}
-      >
-        {sharing ? "Stop sharing" : "🖥 Share screen"}
-      </button>
-      <button
-        disabled={!ws}
-        onClick={() => ws && leave(ws)}
-        className={`${btn} bg-red-600 text-white`}
-      >
+      />
+      <Button variant="danger" size="sm" disabled={!ws} onClick={() => ws && leave(ws)}>
+        <PhoneOff size={16} />
         Hang up
-      </button>
+      </Button>
     </div>
   );
 }
@@ -68,14 +66,19 @@ export function IncomingCall({
   const { incoming, accept, decline } = useCalls();
   if (!incoming || !ws) return null;
   return (
-    <div className="fixed left-1/2 top-4 z-50 flex -translate-x-1/2 items-center gap-3 rounded-xl bg-zinc-800 px-4 py-3 shadow-lg ring-2 ring-green-600">
-      <span className="text-sm">📞 @{callerName(incoming.callerId)} is calling…</span>
-      <button onClick={() => accept(ws)} className={`${btn} bg-green-600 text-white`}>
+    <div className="fixed left-1/2 top-4 z-50 flex -translate-x-1/2 items-center gap-3 rounded-panel bg-surface-2 px-4 py-3 shadow-pop ring-2 ring-success">
+      <Phone size={18} className="text-success" />
+      <span className="text-sm">{callerName(incoming.callerId)} is calling…</span>
+      <Button
+        size="sm"
+        className="bg-success text-surface-0 hover:brightness-110"
+        onClick={() => accept(ws)}
+      >
         Accept
-      </button>
-      <button onClick={() => decline(ws)} className={`${btn} bg-red-600 text-white`}>
+      </Button>
+      <Button size="sm" variant="danger" onClick={() => decline(ws)}>
         Decline
-      </button>
+      </Button>
     </div>
   );
 }

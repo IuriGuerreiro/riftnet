@@ -15,25 +15,25 @@ export const profileSchema = z.object({
   display_name: z
     .string()
     .trim()
-    .max(MAX_DISPLAY_NAME, `At most ${MAX_DISPLAY_NAME} characters`)
-    .refine((s) => !controlChars.test(s), "No special control characters"),
+    .max(MAX_DISPLAY_NAME, `Must be ${MAX_DISPLAY_NAME} characters or fewer`)
+    .refine((s) => !controlChars.test(s), "Cannot contain control characters"),
   custom_status: z
     .string()
     .trim()
-    .max(128, "At most 128 characters")
-    .refine((s) => !controlChars.test(s), "No special control characters")
+    .max(128, "Must be 128 characters or fewer")
+    .refine((s) => !controlChars.test(s), "Cannot contain control characters")
     .optional(),
   bio: z
     .string()
     .trim()
-    .max(MAX_BIO, `At most ${MAX_BIO} characters`)
-    .refine((s) => !controlNoNewline.test(s), "No special control characters"),
+    .max(MAX_BIO, `Must be ${MAX_BIO} characters or fewer`)
+    .refine((s) => !controlNoNewline.test(s), "Cannot contain control characters"),
 });
 export type ProfileForm = z.infer<typeof profileSchema>;
 
 export function avatarFileProblem(file: { type: string; size: number }): string | null {
-  if (!AVATAR_TYPES.includes(file.type)) return "Pick a PNG, JPEG, WebP or GIF image";
-  if (file.size > MAX_AVATAR_BYTES) return "Image must be 8 MB or less";
-  if (file.size === 0) return "That file is empty";
+  if (!AVATAR_TYPES.includes(file.type)) return "Use a PNG, JPEG, WebP, or GIF image";
+  if (file.size > MAX_AVATAR_BYTES) return "Image must be 8 MB or smaller";
+  if (file.size === 0) return "Selected file is empty";
   return null;
 }

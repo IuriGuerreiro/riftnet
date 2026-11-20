@@ -1,3 +1,4 @@
+import { Paperclip } from "lucide-react";
 import { useState } from "react";
 
 import { downloadFile, formatSize } from "../../api/attachments";
@@ -22,20 +23,20 @@ export function AttachmentChip({ a, mine }: { a: AttachmentInfo; mine: boolean }
           setState("error");
         }
       }}
-      title={expired ? "expired" : error || "download"}
+      title={expired ? "Attachment expired" : error || "Download file"}
       className={`mt-1 flex w-full items-center gap-2 rounded border px-2 py-1 text-left text-xs ${
-        mine ? "border-zinc-800/40" : "border-zinc-600"
+        mine ? "border-on-brand/30" : "border-line-strong"
       } ${expired ? "opacity-50 line-through" : "hover:underline"}`}
     >
-      <span>📎</span>
+      <Paperclip size={14} className="shrink-0" />
       <span className="truncate">{a.filename}</span>
       <span className="ml-auto shrink-0 opacity-70">
         {expired
-          ? "expired"
+          ? "Expired"
           : state === "busy"
-            ? "downloading…"
+            ? "Downloading…"
             : state === "error"
-              ? "failed"
+              ? "Failed"
               : formatSize(a.size)}
       </span>
     </button>

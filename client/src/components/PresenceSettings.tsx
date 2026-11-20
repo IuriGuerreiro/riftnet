@@ -5,7 +5,7 @@ import { z } from "zod";
 import { http } from "../api/http";
 import { watchOwnPresence } from "../api/presence-settings";
 import { useAuth } from "../stores/auth";
-import { ErrorText } from "./ui";
+import { ErrorText, fieldClass } from "./ui";
 
 const presenceSettings = z.object({
   presence: z.enum(["online", "idle", "do_not_disturb", "invisible"]),
@@ -35,10 +35,10 @@ export function PresenceSettings() {
   });
 
   return (
-    <label className="block space-y-1 text-xs text-zinc-400">
-      Presence
+    <label className="block space-y-1.5 text-xs font-semibold uppercase text-fg-muted">
+      Status
       <select
-        className="w-full rounded-lg bg-zinc-800 px-3 py-2 text-sm text-zinc-100"
+        className={`${fieldClass} normal-case font-normal`}
         value={query.data?.presence ?? "online"}
         disabled={!query.data || update.isPending}
         onChange={(e) => {

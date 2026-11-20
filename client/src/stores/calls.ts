@@ -67,7 +67,7 @@ export const useCalls = create<CallsState>((set, get) => {
     });
     pc = new RTCPeerConnection();
     const micTrack = mic.getAudioTracks()[0];
-    if (!micTrack) throw new Error("No microphone track");
+    if (!micTrack) throw new Error("No microphone found");
     pc.addTransceiver(micTrack, { direction: "sendrecv", streams: [mic] });
     // WARN: the idle video slot avoids renegotiation, which only works for 1:1 calls.
     videoSender = pc.addTransceiver("video", { direction: "sendrecv" }).sender;
@@ -83,7 +83,7 @@ export const useCalls = create<CallsState>((set, get) => {
     pc.onconnectionstatechange = () => {
       if (pc?.connectionState === "connected") set({ joined: true });
       if (pc?.connectionState === "failed")
-        set({ error: "audio connection failed", joined: false });
+        set({ error: "Audio connection failed", joined: false });
     };
     const offer = await pc.createOffer();
     offer.sdp = offer.sdp?.replace(/(a=fmtp:111 [^\r\n]*)/, "$1;usedtx=1;maxaveragebitrate=64000");
@@ -106,7 +106,7 @@ export const useCalls = create<CallsState>((set, get) => {
             }),
           },
     );
-    if (reply.case !== "callJoined") throw new Error(`expected callJoined, got ${reply.case}`);
+    if (reply.case !== "callJoined") throw new Error("Could not join the call");
     await pc.setRemoteDescription({ type: "answer", sdp: reply.value.sdpAnswer });
     set({ current: reply.value.call ?? (target.kind === "friend" ? null : target.call) });
     showScreen(get().current);
@@ -210,7 +210,7 @@ export const useCalls = create<CallsState>((set, get) => {
           joined: false,
           sharing: false,
           remoteScreen: null,
-          error: "disconnected from the call",
+          error: "Disconnected from the call",
         });
       }
     },
@@ -222,7 +222,7 @@ export const useCalls = create<CallsState>((set, get) => {
           value: createProto(CallStartSchema, { conversationId }),
         });
         if (reply.case !== "callResult" || !reply.value.call)
-          throw new Error("could not start the call");
+          throw new Error("Could not start the call");
         set({ current: reply.value.call });
         await join(ws, { kind: "call", call: reply.value.call });
       }),

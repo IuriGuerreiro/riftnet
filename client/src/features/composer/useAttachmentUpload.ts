@@ -18,10 +18,10 @@ export function useAttachmentUpload(conversationId: bigint) {
     const ids: bigint[] = [];
     try {
       for (const [i, f] of files.entries()) {
-        setProgress(`uploading ${i + 1}/${files.length} · hashing…`);
+        setProgress(`Preparing file ${i + 1} of ${files.length}…`);
         ids.push(
           await uploadFile(conversationId, f, (p) =>
-            setProgress(`uploading ${i + 1}/${files.length} · ${Math.round(p * 100)}%`),
+            setProgress(`Uploading ${i + 1} of ${files.length} (${Math.round(p * 100)}%)`),
           ),
         );
       }

@@ -3,6 +3,7 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useForm } from "react-hook-form";
 
 import { useSetUsername } from "../api/auth";
+import { AuthLayout } from "../components/AuthLayout";
 import { Button, Card, ErrorText, Input } from "../components/ui";
 import { type UsernameForm, usernameSchema } from "../schemas/auth";
 import { readWorkspaceSearch } from "../schemas/workspace";
@@ -20,19 +21,22 @@ export function UsernamePage() {
   );
 
   return (
-    <Card>
-      <h1 className="text-2xl font-bold">Pick your username</h1>
-      <form onSubmit={onSubmit} className="space-y-3">
-        <Input
-          placeholder="username"
-          {...form.register("username")}
-          error={form.formState.errors.username?.message}
-        />
-        <ErrorText error={setUsername.error} />
-        <Button type="submit" disabled={setUsername.isPending}>
-          Continue
-        </Button>
-      </form>
-    </Card>
+    <AuthLayout>
+      <Card>
+        <h1 className="text-2xl font-bold">Choose a username</h1>
+        <form onSubmit={onSubmit} className="space-y-3">
+          <Input
+            label="Username"
+            autoFocus
+            {...form.register("username")}
+            error={form.formState.errors.username?.message}
+          />
+          <ErrorText error={setUsername.error} />
+          <Button type="submit" block size="lg" disabled={setUsername.isPending}>
+            Continue
+          </Button>
+        </form>
+      </Card>
+    </AuthLayout>
   );
 }

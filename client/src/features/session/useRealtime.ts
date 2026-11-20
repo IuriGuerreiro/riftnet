@@ -75,5 +75,5 @@ export function useKnownUsers() {
 export function useNameFor() {
   const profiles = useProfiles((s) => s.byId);
   return (id: bigint | string | undefined) =>
-    id === undefined ? "someone" : nameOf(profiles[id.toString()]);
+    id === undefined ? "Someone" : nameOf(profiles[id.toString()]);
 }

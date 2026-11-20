@@ -1,3 +1,6 @@
+import { X } from "lucide-react";
+
+import { IconButton } from "../../components/ui";
 import { useChat } from "../../stores/chat";
 import { nameOf, useProfiles } from "../../stores/profiles";
 
@@ -10,22 +13,22 @@ export function ReplyBar({ conversationId }: { conversationId: bigint }) {
   const profiles = useProfiles((s) => s.byId);
   if (replyingTo === null || !message) return null;
   return (
-    <div className="flex items-center gap-2 rounded bg-zinc-800/60 px-2 py-1 text-xs text-zinc-400">
+    <div className="flex items-center gap-2 rounded-t-panel bg-surface-2 px-4 py-2 text-xs text-fg-muted">
       <span className="min-w-0 flex-1 truncate">
         Replying to{" "}
-        <span className="font-semibold text-zinc-200">
+        <span className="font-semibold text-fg">
           {nameOf(profiles[message.authorId.toString()])}
         </span>
-        : {message.text || "📎 attachment"}
+        : {message.text || "Attachment"}
       </span>
-      <button
-        type="button"
-        title="Cancel reply (Esc)"
+      <IconButton
+        label="Cancel reply (Esc)"
+        size="sm"
+        tone="danger"
+        icon={<X size={14} />}
         onClick={() => setReplyingTo(null)}
-        className="hover:text-red-400"
-      >
-        ✕
-      </button>
+        className="size-5"
+      />
     </div>
   );
 }
