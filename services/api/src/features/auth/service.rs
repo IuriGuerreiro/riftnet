@@ -470,6 +470,7 @@ mod tests {
                 _: i64,
                 _: Option<Option<&str>>,
                 _: Option<Option<&str>>,
+                _: Option<Option<&str>>,
             ) -> Result<Option<User>, RepoError> {
                 unimplemented!()
             }

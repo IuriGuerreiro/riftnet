@@ -1,6 +1,10 @@
 # Profiles
 
-Choose your account in the sidebar to open **Edit profile**. The panel lets you save a display name and bio, upload an avatar, or remove it.
+Choose your account in the sidebar to open **Edit profile**. The panel lets you save a display name, bio, and custom status, upload an avatar, or remove it.
+
+Choose Online, Idle, Do not disturb, or Invisible in the Presence selector. This choice is saved for your account and applies across devices. Invisible appears offline to other users. Online allows automatic idle detection.
+
+Custom status appears below your name in friends lists and updates live.
 
 ## Check an update from another account
 

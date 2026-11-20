@@ -9,5 +9,6 @@ pub mod health;
 pub mod messages;
 pub mod presence;
 pub mod servers;
+pub mod settings;
 pub mod typing;
 pub mod users;
