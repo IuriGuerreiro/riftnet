@@ -18,7 +18,9 @@ cargo build --locked -p api
 
 Optional command arguments run after the auth smoke, from the repository root with
 `API_HTTP` set to the verification API. For example, run
-`.agents/skills/verify-discord/auth-smoke.sh pnpm --filter mock smoke:activity`.
+`VERIFY_RATE_LIMITS=off .agents/skills/verify-discord/auth-smoke.sh pnpm --filter mock smoke:activity`.
+Disable rate limits only when provisioning extra fixture accounts would exceed the
+auth smoke's signup quota. The default remains on.
 
 The helper needs Docker Compose, Bash, curl, Python 3, and the Linux tools `ss` and `flock`. It starts a fresh Compose project with local test data, uses a temporary signing key, and runs the API on port 17100. Run one helper at a time on the host. Its other ports are 15432, 19042, 14222, 18222, 16379, 17102, 17106, and 17107. Use the local test stack only. If you build with `CARGO_TARGET_DIR`, pass the same value to the helper.
 

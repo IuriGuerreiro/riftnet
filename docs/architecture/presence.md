@@ -70,7 +70,7 @@ sequenceDiagram
 ## Test
 
 - Unit: `cargo test -p api presence` (service with in-memory fakes).
-- Redis script: `cargo test -p api presence -- --ignored` (needs Redis running).
+- Redis script: `cargo test -p api --lib presence -- --ignored` (needs Redis running).
 - End to end: `API_HTTP=http://127.0.0.1:7100 pnpm --filter mock smoke:presence` (registers 3 users).
 - UI: `pnpm --filter mock start`: user 2 flips online/idle every 20s.
 

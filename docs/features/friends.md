@@ -30,5 +30,7 @@ Run the API smoke on a fresh local stack:
 
 ```sh
 cargo build --locked -p api
-.agents/skills/verify-discord/auth-smoke.sh pnpm --filter mock smoke:activity
+VERIFY_RATE_LIMITS=off .agents/skills/verify-discord/auth-smoke.sh pnpm --filter mock smoke:activity
 ```
+
+`VERIFY_RATE_LIMITS=off` allows fixture registration after the auth smoke uses the signup quota. It applies only to the helper's isolated API.

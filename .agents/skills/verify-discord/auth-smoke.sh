@@ -79,10 +79,13 @@ if ((attempt == 30)); then
   exit 1
 fi
 
+scylla_id=$("${compose[@]}" ps -q scylla)
+scylla_ip=$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$scylla_id")
+
 cd "$scratch"
-env -i PATH="$PATH" API_ADDR=127.0.0.1:17100 \
+env -i PATH="$PATH" RATE_LIMITS="${VERIFY_RATE_LIMITS:-on}" API_ADDR=127.0.0.1:17100 \
   DATABASE_URL=postgres://app:app@127.0.0.1:15432/app \
-  SCYLLA_NODES=127.0.0.1:19042 NATS_URL=nats://127.0.0.1:14222 \
+  SCYLLA_NODES="$scylla_ip:9042" NATS_URL=nats://127.0.0.1:14222 \
   REDIS_URL=redis://127.0.0.1:16379 ZITADEL_URL=http://localhost:17102 \
   ZITADEL_PAT_FILE="$scratch/.secrets/api.pat" \
   API_SIGNING_KEY_FILE="$scratch/api-secrets/signing-key" \
