@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 
-import { forgetServer, isServerUnavailable } from "../api/server-access";
+import { forgetServer, isServerUnavailable, reconcileServerAccess } from "../api/server-access";
 import {
   createServer,
   createServerInvite,
@@ -20,7 +20,12 @@ import { Button, ErrorText, Input } from "./ui";
 
 function useMyServers() {
   const userId = useAuth((state) => state.user?.id);
-  return useQuery({ queryKey: ["servers", userId], queryFn: listServers });
+  const queryClient = useQueryClient();
+  const servers = useQuery({ queryKey: ["servers", userId], queryFn: listServers });
+  useEffect(() => {
+    if (servers.data && servers.isSuccess) reconcileServerAccess(queryClient, userId, servers.data);
+  }, [queryClient, userId, servers.data, servers.isSuccess]);
+  return servers;
 }
 
 export function ServerNavigation() {

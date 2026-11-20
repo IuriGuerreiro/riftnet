@@ -100,7 +100,7 @@ impl ServerRepo for PgServerRepo {
         let owner: Option<i64> = sqlx::query_scalar(
             "SELECT s.id FROM servers s JOIN server_members m ON m.server_id = s.id
              WHERE s.id = $1 AND m.user_id = $2 AND m.role = 'owner'
-             FOR UPDATE OF s FOR SHARE OF m",
+             FOR NO KEY UPDATE OF s FOR SHARE OF m",
         )
         .bind(server_id)
         .bind(owner_id)
@@ -663,5 +663,97 @@ mod tests {
             })
         ));
         Ok(())
+    }
+    #[tokio::test]
+    #[ignore = "requires local Postgres"]
+    async fn invite_join_waits_for_pending_ban() {
+        let admin_url = std::env::var("IT_DATABASE_URL")
+            .unwrap_or_else(|_| "postgres://app:app@127.0.0.1:55432/app".into());
+        let admin = PgPool::connect(&admin_url).await.unwrap();
+        let database = format!("ban_lock_{}", rand::random::<u32>());
+        sqlx::query(&format!("CREATE DATABASE {database}"))
+            .execute(&admin)
+            .await
+            .unwrap();
+        let base = admin_url.rsplit_once('/').unwrap().0;
+        let pool = PgPool::connect(&format!("{base}/{database}"))
+            .await
+            .unwrap();
+        let result = verify_pending_ban(pool.clone(), &database).await;
+        pool.close().await;
+        sqlx::query(&format!("DROP DATABASE {database}"))
+            .execute(&admin)
+            .await
+            .unwrap();
+        admin.close().await;
+        result.unwrap();
+    }
+
+    async fn verify_pending_ban(pool: PgPool, database: &str) -> anyhow::Result<()> {
+        for schema in [
+            include_str!("../../../migrations/0001_auth.sql"),
+            include_str!("../../../migrations/0006_servers.sql"),
+            include_str!("../../../migrations/0007_server_invites.sql"),
+            include_str!("../../../migrations/0011_server_bans.sql"),
+        ] {
+            sqlx::raw_sql(schema).execute(&pool).await?;
+        }
+        sqlx::query("INSERT INTO users (id, zitadel_id) VALUES (1, 'owner'), (2, 'member')")
+            .execute(&pool)
+            .await?;
+        let repo = Arc::new(PgServerRepo::new(pool.clone()));
+        repo.create(1, 10, 11, "Server").await?;
+        repo.invite(1, 10, "invite").await?;
+        assert!(matches!(
+            repo.join(2, "invite").await?,
+            JoinOutcome::Joined(_)
+        ));
+        let mut blocker = pool.begin().await?;
+        sqlx::query(
+            "SELECT user_id FROM server_members WHERE server_id = 10 AND user_id = 2 FOR UPDATE",
+        )
+        .execute(&mut *blocker)
+        .await?;
+        let banning_repo = repo.clone();
+        let banning = tokio::spawn(async move { banning_repo.ban_member(1, 10, 2).await });
+        wait_for_query_lock(&pool, database, "DELETE FROM server_members").await?;
+        let joining_repo = repo.clone();
+        let joining = tokio::spawn(async move { joining_repo.join(2, "invite").await });
+        wait_for_query_lock(&pool, database, "FROM server_invites i JOIN servers").await?;
+        anyhow::ensure!(
+            !joining.is_finished(),
+            "invite joined before the pending ban committed"
+        );
+        blocker.commit().await?;
+        assert!(banning.await??);
+        assert!(matches!(joining.await??, JoinOutcome::Banned));
+        assert!(repo.member_server(2, 11).await?.is_none());
+        Ok(())
+    }
+    async fn wait_for_query_lock(
+        pool: &PgPool,
+        database: &str,
+        fragment: &str,
+    ) -> anyhow::Result<()> {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        loop {
+            let waiting: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM pg_stat_activity
+                 WHERE datname = $1 AND wait_event_type = 'Lock'
+                 AND position($2 in query) > 0)",
+            )
+            .bind(database)
+            .bind(fragment)
+            .fetch_one(pool)
+            .await?;
+            if waiting {
+                return Ok(());
+            }
+            anyhow::ensure!(
+                std::time::Instant::now() < deadline,
+                "query did not reach its expected row lock: {fragment}"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
     }
 }

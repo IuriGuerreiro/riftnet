@@ -169,6 +169,11 @@ pub async fn leave(
     State(state): State<AppState>,
     Path(server_id): Path<i64>,
 ) -> Result<StatusCode, ApiError> {
+    state.limiter.check(
+        &format!("server_leave:user:{}", auth.user_id),
+        30,
+        Duration::from_secs(60),
+    )?;
     state.servers.leave(auth.user_id, server_id).await?;
     Ok(StatusCode::NO_CONTENT)
 }

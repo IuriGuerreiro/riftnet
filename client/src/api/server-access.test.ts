@@ -2,8 +2,16 @@ import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "./http";
-import { forgetServer, isServerUnavailable } from "./server-access";
+import {
+  forgetServer,
+  isServerUnavailable,
+  reconcileServerAccess,
+  refreshServerAccess,
+} from "./server-access";
+import { listServers } from "./servers";
 import { WsError } from "./ws";
+
+vi.mock("./servers", () => ({ listServers: vi.fn() }));
 
 vi.mock("../platform", () => ({
   platform: { httpUrl: "http://localhost", wsUrl: "ws://localhost" },
@@ -48,5 +56,46 @@ describe("server access", () => {
     expect(isServerUnavailable(new ApiError(500, "internal", "Retry"))).toBe(false);
     expect(isServerUnavailable(new WsError("closed", "Offline"))).toBe(false);
     expect(isServerUnavailable(null)).toBe(false);
+  });
+});
+
+describe("server membership recovery", () => {
+  it("removes missed memberships and restores access after another device rejoins", () => {
+    const client = new QueryClient();
+    client.setQueryData(["server-access", "user", "missed"], true);
+    client.setQueryData(["channel-history", "user", "missed", "channel"], ["old"]);
+    client.setQueryData(["server-access", "user", "rejoined"], false);
+    const servers = [{ id: "rejoined", name: "Restored", is_owner: false }];
+    client.setQueryData(["servers", "user"], servers);
+    reconcileServerAccess(client, "user", servers);
+    expect(client.getQueryData(["server-access", "user", "missed"])).toBe(false);
+    expect(client.getQueryData(["channel-history", "user", "missed", "channel"])).toBeUndefined();
+    expect(client.getQueryData(["server-access", "user", "rejoined"])).toBe(true);
+    client.clear();
+  });
+
+  it("fetches memberships and invalidates open server data on a new connection", async () => {
+    const client = new QueryClient();
+    client.setQueryData(["server-access", "user", "server"], false);
+    client.setQueryData(["server-channels", "user", "server"], [{ id: "channel" }]);
+    vi.mocked(listServers).mockResolvedValueOnce([
+      { id: "server", name: "Server", is_owner: false },
+    ]);
+    await refreshServerAccess(client, "user");
+    expect(client.getQueryData(["server-access", "user", "server"])).toBe(true);
+    expect(client.getQueryState(["server-channels", "user", "server"])?.isInvalidated).toBe(true);
+    client.clear();
+  });
+
+  it("keeps known membership data when reconnection reconciliation fails", async () => {
+    const client = new QueryClient();
+    const servers = [{ id: "server", name: "Server", is_owner: false }];
+    client.setQueryData(["servers", "user"], servers);
+    client.setQueryData(["server-access", "user", "server"], true);
+    vi.mocked(listServers).mockRejectedValueOnce(new Error("offline"));
+    await expect(refreshServerAccess(client, "user")).rejects.toThrow("offline");
+    expect(client.getQueryData(["server-access", "user", "server"])).toBe(true);
+    expect(client.getQueryData(["servers", "user"])).toEqual(servers);
+    client.clear();
   });
 });
