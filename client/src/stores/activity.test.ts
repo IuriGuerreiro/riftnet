@@ -2,6 +2,7 @@ import { create } from "@bufbuild/protobuf";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { WsClient } from "../api/ws";
+import { PongSchema } from "../gen/v1/envelope_pb";
 import { ActivitiesSchema } from "../gen/v1/presence_pb";
 import { useActivity } from "./activity";
 
@@ -20,6 +21,27 @@ afterEach(() => {
 });
 
 describe("friend activity", () => {
+  it("keeps the latest publication when an old connection replies late", async () => {
+    let resolve:
+      | ((value: { case: "pong"; value: ReturnType<typeof create<typeof PongSchema>> }) => void)
+      | undefined;
+    const old: Pick<WsClient, "request"> = {
+      request: () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    };
+    const next: Pick<WsClient, "request"> = {
+      request: () => Promise.resolve({ case: "pong", value: create(PongSchema) }),
+    };
+    const pending = useActivity.getState().publish(old, "Old game");
+    await useActivity.getState().publish(next, "New game");
+    resolve?.({ case: "pong", value: create(PongSchema) });
+    await pending;
+    expect(useActivity.getState().published?.label).toBe("New game");
+    expect(useActivity.getState().published?.ws).toBe(next);
+  });
+
   it("replaces revoked activity on the next read", async () => {
     vi.useFakeTimers();
     let removed = false;

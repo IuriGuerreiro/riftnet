@@ -6,22 +6,25 @@ import { type FriendActivity, GetActivitiesSchema, SetActivitySchema } from "../
 
 interface ActivityState {
   byId: Record<string, FriendActivity>;
-  published: { ws: WsClient; label: string } | null;
-  publish: (ws: WsClient, label: string) => Promise<void>;
+  published: { ws: Pick<WsClient, "request">; label: string } | null;
+  publish: (ws: Pick<WsClient, "request">, label: string) => Promise<void>;
   clear: () => void;
   watch: (ws: Pick<WsClient, "request">, ids: string[]) => () => void;
 }
+
+let publication = 0;
 
 export const useActivity = create<ActivityState>((set) => ({
   byId: {},
   published: null,
   publish: async (ws, label) => {
+    const version = ++publication;
     const reply = await ws.request({
       case: "setActivity",
       value: createProto(SetActivitySchema, { label }),
     });
     if (reply.case !== "pong") throw new Error("Could not update activity");
-    set({ published: { ws, label } });
+    if (version === publication) set({ published: { ws, label } });
   },
   clear: () => set({ byId: {} }),
   watch: (ws, ids) => {
