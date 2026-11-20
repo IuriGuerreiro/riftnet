@@ -317,6 +317,12 @@ mod tests {
 
     #[async_trait]
     impl UserRepo for FakeUserRepo {
+        async fn find_by_email(&self, _: &str) -> Result<Option<User>, RepoError> {
+            unimplemented!()
+        }
+        async fn remember_email(&self, _: i64, _: &str) -> Result<(), RepoError> {
+            unimplemented!()
+        }
         async fn find_by_id(&self, id: i64) -> Result<Option<User>, RepoError> {
             Ok(self.users.iter().find(|u| u.id == id).cloned())
         }
@@ -356,6 +362,7 @@ mod tests {
         async fn set_profile(
             &self,
             _: i64,
+            _: Option<Option<&str>>,
             _: Option<Option<&str>>,
             _: Option<Option<&str>>,
         ) -> Result<Option<User>, RepoError> {
@@ -401,6 +408,7 @@ mod tests {
             username: Some(name.into()),
             display_name: None,
             bio: None,
+            custom_status: None,
             avatar_hash: None,
             created_at: Utc::now(),
         }

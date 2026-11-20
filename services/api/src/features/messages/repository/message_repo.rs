@@ -351,3 +351,8 @@ impl<T: MessageRepo + ?Sized> crate::features::conversations::repository::Unread
         Ok(found.len() as u32)
     }
 }
+
+#[async_trait]
+pub trait ChannelMessageRepo: MessageRepo {
+    async fn insert_channel_message(&self, message: &Message) -> Result<bool, RepoError>;
+}

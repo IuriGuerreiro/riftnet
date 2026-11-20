@@ -12,6 +12,7 @@ import {
 } from "../schemas/profile";
 import { useProfile } from "../stores/profiles";
 import { Avatar } from "./Avatar";
+import { PresenceSettings } from "./PresenceSettings";
 import { Button, ErrorText, Input, Modal, Textarea } from "./ui";
 
 export function ProfilePanel({ myId, onClose }: { myId: string; onClose: () => void }) {
@@ -25,7 +26,11 @@ export function ProfilePanel({ myId, onClose }: { myId: string; onClose: () => v
 
   const form = useForm<ProfileForm>({
     resolver: zodResolver(profileSchema),
-    defaultValues: { display_name: me?.displayName ?? "", bio: me?.bio ?? "" },
+    defaultValues: {
+      display_name: me?.displayName ?? "",
+      bio: me?.bio ?? "",
+      custom_status: me?.customStatus ?? "",
+    },
   });
   const bio = useWatch({ control: form.control, name: "bio" });
 
@@ -50,6 +55,7 @@ export function ProfilePanel({ myId, onClose }: { myId: string; onClose: () => v
 
   return (
     <Modal open title="Edit profile" onClose={onClose}>
+      <PresenceSettings />
       <section className="flex items-center gap-4">
         {preview ? (
           <img
@@ -112,6 +118,12 @@ export function ProfilePanel({ myId, onClose }: { myId: string; onClose: () => v
           placeholder={me?.username ? `@${me.username}` : "Display name"}
           {...form.register("display_name")}
           error={form.formState.errors.display_name?.message}
+        />
+        <Input
+          label="Custom status"
+          placeholder="What are you up to?"
+          {...form.register("custom_status")}
+          error={form.formState.errors.custom_status?.message}
         />
         <Textarea
           label="Bio"

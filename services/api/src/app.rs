@@ -34,16 +34,24 @@ use crate::features::friends::repository::PgFriendRepo;
 use crate::features::friends::service::FriendService;
 use crate::features::messages::repository::{ScyllaMessageRepo, ScyllaReactionRepo};
 use crate::features::messages::service::MessageService;
+use crate::features::presence::repository::PgPreferenceRepository;
 use crate::features::presence::service::PresenceService;
 use crate::features::presence::store::RedisPresenceStore;
+use crate::features::servers::channel_service::ChannelMessageService;
+use crate::features::servers::repository::PgServerRepo;
+use crate::features::servers::service::ServerService;
+use crate::features::settings::{self, SettingsService};
 use crate::features::typing::service::TypingService;
 use crate::features::users::repository::{PgUserRepo, UserRepo};
 use crate::features::users::service::UserService;
-use crate::features::{attachments, auth, bots, friends, gateway, health, users};
+use crate::features::{attachments, auth, bots, friends, gateway, health, servers, users};
 
 #[derive(Clone)]
 pub struct AppState {
+    pub settings: Arc<SettingsService>,
     pub bots: Arc<BotService>,
+    pub servers: Arc<ServerService>,
+    pub channel_messages: Arc<ChannelMessageService>,
     pub attachments: Arc<AttachmentService>,
     pub auth: Arc<AuthService>,
     pub users: Arc<UserService>,
@@ -85,7 +93,11 @@ pub async fn build(
 
     let user_repo: Arc<dyn UserRepo> = Arc::new(PgUserRepo::new(pool.clone()));
     let auth_repo = Arc::new(PgAuthRepo::new(pool.clone()));
-    let identity = Arc::new(ZitadelClient::new(&config.zitadel_url, &config.zitadel_pat));
+    let identity = Arc::new(ZitadelClient::new(
+        &config.zitadel_url,
+        &config.zitadel_pat,
+        config.auth_concurrency,
+    ));
 
     let scylla_conversations = Arc::new(ScyllaConversationRepo::new(scylla.clone()).await?);
     let conversation_repo: Arc<dyn ConversationRepo> = scylla_conversations.clone();
@@ -139,7 +151,25 @@ pub async fn build(
     ));
 
     let state = AppState {
-        bots: Arc::new(BotService::new(Arc::new(PgBotRepo::new(pool)), ids.clone())),
+        settings: Arc::new(SettingsService::new(
+            pool.clone(),
+            conversation_repo.clone(),
+        )),
+        bots: Arc::new(BotService::new(
+            Arc::new(PgBotRepo::new(pool.clone())),
+            ids.clone(),
+        )),
+        servers: Arc::new(ServerService::new(
+            Arc::new(PgServerRepo::new(pool.clone())),
+            ids.clone(),
+            events.clone(),
+        )),
+        channel_messages: Arc::new(ChannelMessageService::new(
+            Arc::new(PgServerRepo::new(pool.clone())),
+            message_repo.clone(),
+            events.clone(),
+            ids.clone(),
+        )),
         attachments: attachment_service.clone(),
         auth: Arc::new(AuthService::new(
             identity,
@@ -173,6 +203,7 @@ pub async fn build(
         calls,
         presence: Arc::new(PresenceService::new(
             presence_store,
+            Arc::new(PgPreferenceRepository::new(pool.clone())),
             friend_repo.clone(),
             conversation_repo.clone(),
             events.clone(),
@@ -196,6 +227,8 @@ pub async fn build(
         shutdown,
         events,
     };
+
+    state.presence.spawn_recovery(state.shutdown.clone());
 
     let origins: Vec<HeaderValue> = config
         .cors_origins
@@ -222,7 +255,9 @@ pub async fn build(
         .merge(auth::routes())
         .merge(bots::routes())
         .merge(users::routes())
+        .merge(settings::routes())
         .merge(friends::routes())
+        .merge(servers::routes())
         .merge(attachments::routes())
         .merge(gateway::routes())
         .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))

@@ -13,10 +13,12 @@ export function Menu({
   trigger,
   items,
   align = "end",
+  className,
 }: {
   trigger: (props: { open: boolean; toggle: () => void }) => ReactNode;
   items: MenuItem[];
   align?: "start" | "end";
+  className?: string;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -38,7 +40,7 @@ export function Menu({
   }, [open]);
 
   return (
-    <div ref={ref} className="relative inline-flex">
+    <div ref={ref} className={cn("relative inline-flex", className)}>
       {trigger({ open, toggle: () => setOpen((o) => !o) })}
       {open && (
         <div

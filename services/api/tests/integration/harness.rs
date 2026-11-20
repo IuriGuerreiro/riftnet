@@ -103,6 +103,7 @@ async fn boot() -> anyhow::Result<(tokio::net::TcpListener, axum::Router, Server
     let key_file = key_dir.join("signing_key");
     let database_url = database_url(&name);
     let config = Config {
+        auth_concurrency: 2,
         env: "test".into(),
         addr: "127.0.0.1:0".parse()?,
         database_url: database_url.clone(),
@@ -430,5 +431,19 @@ pub async fn send_text(client: &mut Client, conversation_id: u64, text: &str) ->
     match reply {
         Payload::MessageAck(ack) => ack.message.expect("message"),
         other => panic!("send failed: {other:?}"),
+    }
+}
+
+impl Http {
+    pub fn patch(&self, user: &TestUser, path: &str) -> reqwest::RequestBuilder {
+        self.client
+            .patch(format!("{}{path}", self.base))
+            .bearer_auth(&user.token)
+    }
+
+    pub fn put(&self, user: &TestUser, path: &str) -> reqwest::RequestBuilder {
+        self.client
+            .put(format!("{}{path}", self.base))
+            .bearer_auth(&user.token)
     }
 }

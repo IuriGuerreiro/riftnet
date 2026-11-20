@@ -1,18 +1,23 @@
 import { sameDay, snowflakeTime } from "../../lib/time";
-import type { ChatMessage } from "../../stores/chat";
 
 const GROUP_WINDOW_MS = 7 * 60_000;
 
-export interface MessageLayout {
-  message: ChatMessage;
+interface Groupable {
+  id: bigint;
+  authorId: bigint;
+  replyTo?: unknown;
+}
+
+export interface MessageLayout<M extends Groupable> {
+  message: M;
   time: Date;
   header: boolean;
   dayDivider: boolean;
 }
 
 function startsGroup(
-  prev: { message: ChatMessage; time: Date } | undefined,
-  message: ChatMessage,
+  prev: { message: Groupable; time: Date } | undefined,
+  message: Groupable,
   time: Date,
 ): boolean {
   if (!prev || !sameDay(prev.time, time)) return true;
@@ -21,8 +26,8 @@ function startsGroup(
   return message.replyTo !== undefined;
 }
 
-export function groupMessages(messages: ChatMessage[]): MessageLayout[] {
-  let prev: { message: ChatMessage; time: Date } | undefined;
+export function groupMessages<M extends Groupable>(messages: M[]): MessageLayout<M>[] {
+  let prev: { message: M; time: Date } | undefined;
   return messages.map((message) => {
     const time = snowflakeTime(message.id);
     const dayDivider = !prev || !sameDay(prev.time, time);

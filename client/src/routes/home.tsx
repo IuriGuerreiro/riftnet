@@ -1,9 +1,11 @@
+import { useSearch } from "@tanstack/react-router";
 import { useState } from "react";
 
 import { IncomingCall, RemoteScreen } from "../call/CallBar";
 import { ProfilePanel } from "../components/ProfilePanel";
 import { ChatPane } from "../features/chat/ChatPane";
 import { FriendsPage } from "../features/friends/FriendsPage";
+import { ServerPanel } from "../features/servers/ServerView";
 import { useKnownUsers, useNameFor, useRealtime } from "../features/session/useRealtime";
 import {
   type NewConversation,
@@ -11,10 +13,12 @@ import {
 } from "../features/sidebar/NewConversationDialogs";
 import { ServerRail } from "../features/sidebar/ServerRail";
 import { Sidebar } from "../features/sidebar/Sidebar";
+import { readWorkspaceSearch } from "../schemas/workspace";
 import { useConnection } from "../stores/connection";
 import { useUi } from "../stores/ui";
 
 export function HomePage() {
+  const { server, invite } = useSearch({ from: "__root__", select: readWorkspaceSearch });
   useRealtime();
   useKnownUsers();
   const { ws, user: me } = useConnection();
@@ -33,7 +37,7 @@ export function HomePage() {
       {creating && <NewConversationDialog kind={creating} onClose={() => setCreating(null)} />}
       <ServerRail onCreateGroup={() => setCreating("group")} />
       <Sidebar onEditProfile={() => setEditingProfile(true)} onNew={setCreating} />
-      {view === "friends" ? <FriendsPage /> : <ChatPane />}
+      {(server ?? invite) ? <ServerPanel /> : view === "friends" ? <FriendsPage /> : <ChatPane />}
     </div>
   );
 }

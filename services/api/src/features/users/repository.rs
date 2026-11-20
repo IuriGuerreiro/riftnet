@@ -6,6 +6,8 @@ use crate::common::error::RepoError;
 
 #[async_trait]
 pub trait UserRepo: Send + Sync {
+    async fn find_by_email(&self, email: &str) -> Result<Option<User>, RepoError>;
+    async fn remember_email(&self, id: i64, email: &str) -> Result<(), RepoError>;
     async fn find_by_id(&self, id: i64) -> Result<Option<User>, RepoError>;
     async fn find_by_zitadel_id(&self, zitadel_id: &str) -> Result<Option<User>, RepoError>;
     async fn find_by_ids(&self, ids: &[i64]) -> Result<Vec<User>, RepoError>;
@@ -28,6 +30,7 @@ pub trait UserRepo: Send + Sync {
         id: i64,
         display_name: Option<Option<&str>>,
         bio: Option<Option<&str>>,
+        custom_status: Option<Option<&str>>,
     ) -> Result<Option<User>, RepoError>;
     /// Swaps the avatar hash. Returns the user and the hash it replaced,
     /// so the caller can delete the old files. None if the user is gone.
@@ -50,6 +53,22 @@ impl PgUserRepo {
 
 #[async_trait]
 impl UserRepo for PgUserRepo {
+    async fn find_by_email(&self, email: &str) -> Result<Option<User>, RepoError> {
+        Ok(sqlx::query_as("SELECT * FROM users WHERE email = $1")
+            .bind(email)
+            .fetch_optional(&self.pool)
+            .await?)
+    }
+
+    async fn remember_email(&self, id: i64, email: &str) -> Result<(), RepoError> {
+        sqlx::query("UPDATE users SET email = $1 WHERE id = $2")
+            .bind(email)
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
     #[tracing::instrument(name = "db SELECT users", skip_all, err(Display), fields(otel.kind = "client", db.system = "postgresql", db.operation = "SELECT", db.collection.name = "users"))]
     async fn find_by_id(&self, id: i64) -> Result<Option<User>, RepoError> {
         Ok(sqlx::query_as("SELECT * FROM users WHERE id = $1")
@@ -132,11 +151,13 @@ impl UserRepo for PgUserRepo {
         id: i64,
         display_name: Option<Option<&str>>,
         bio: Option<Option<&str>>,
+        custom_status: Option<Option<&str>>,
     ) -> Result<Option<User>, RepoError> {
         Ok(sqlx::query_as(
             "UPDATE users SET \
                display_name = CASE WHEN $2 THEN $3 ELSE display_name END, \
-               bio = CASE WHEN $4 THEN $5 ELSE bio END \
+               bio = CASE WHEN $4 THEN $5 ELSE bio END, \
+               custom_status = CASE WHEN $6 THEN $7 ELSE custom_status END \
              WHERE id = $1 RETURNING *",
         )
         .bind(id)
@@ -144,6 +165,8 @@ impl UserRepo for PgUserRepo {
         .bind(display_name.flatten())
         .bind(bio.is_some())
         .bind(bio.flatten())
+        .bind(custom_status.is_some())
+        .bind(custom_status.flatten())
         .fetch_optional(&self.pool)
         .await?)
     }

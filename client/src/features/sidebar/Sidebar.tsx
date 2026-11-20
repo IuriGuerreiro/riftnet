@@ -1,9 +1,12 @@
+import { useSearch } from "@tanstack/react-router";
 import { Users } from "lucide-react";
 
 import { Badge } from "../../components/ui";
 import { cn } from "../../components/ui/cn";
+import { readWorkspaceSearch } from "../../schemas/workspace";
 import { useFriends } from "../../stores/friends";
 import { useUi } from "../../stores/ui";
+import { ServerSidebar } from "../servers/ServerSidebar";
 import { ConversationList } from "./ConversationList";
 import type { NewConversation } from "./NewConversationDialogs";
 import { UserPanel } from "./UserPanel";
@@ -17,6 +20,15 @@ export function Sidebar({
 }) {
   const pending = useFriends((s) => s.list.incoming.length);
   const { view, showFriends } = useUi();
+  const { server, channel } = useSearch({ from: "__root__", select: readWorkspaceSearch });
+
+  if (server)
+    return (
+      <aside className="flex w-60 shrink-0 flex-col bg-surface-1">
+        <ServerSidebar key={server} serverId={server} channelId={channel} />
+        <UserPanel onEditProfile={onEditProfile} />
+      </aside>
+    );
 
   return (
     <aside className="flex w-60 shrink-0 flex-col bg-surface-1">

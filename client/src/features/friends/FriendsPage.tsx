@@ -119,7 +119,10 @@ export function FriendsPage() {
                 key={f.user.id}
                 f={f}
                 label={name(f)}
-                sub={isOnline(f) ? "Online" : "Offline"}
+                sub={
+                  (profiles[f.user.id]?.customStatus ?? f.user.custom_status) ??
+                  (isOnline(f) ? "Online" : "Offline")
+                }
                 onOpen={() => message(f)}
               >
                 <IconButton

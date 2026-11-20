@@ -14,3 +14,8 @@ pub fn registration(result: &'static str) {
 pub fn refresh(result: &'static str) {
     metrics::counter!(REFRESHES, "result" => result).increment(1);
 }
+
+pub fn duration(operation: &'static str, elapsed: std::time::Duration) {
+    metrics::histogram!("auth_request_duration_seconds", "operation" => operation)
+        .record(elapsed.as_secs_f64());
+}

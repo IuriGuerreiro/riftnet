@@ -55,9 +55,12 @@ impl AuthService {
         password: &str,
         device: NewDevice,
     ) -> Result<Session, ApiError> {
+        let started = std::time::Instant::now();
         let result = self.register_inner(email, password, device).await;
+        metrics::duration("register", started.elapsed());
         let outcome = match &result {
             Ok(_) => "ok",
+            Err(ApiError::TooManyRequests) => "overloaded",
             Err(ApiError::BadRequest { .. } | ApiError::Conflict { .. }) => "rejected",
             Err(_) => "error",
         };
@@ -85,10 +88,12 @@ impl AuthService {
                         ApiError::conflict("email_taken", "that email is already registered")
                     }
                     IdentityError::WeakPassword(msg) => ApiError::bad_request("weak_password", msg),
+                    IdentityError::Busy => ApiError::TooManyRequests,
                     other => identity_internal(other),
                 })?;
 
         let user = self.find_or_create_user(&zitadel_id).await?;
+        self.users.remember_email(user.id, &email).await?;
         self.start_session(user, device).await
     }
 
@@ -99,9 +104,12 @@ impl AuthService {
         password: &str,
         device: NewDevice,
     ) -> Result<Session, ApiError> {
+        let started = std::time::Instant::now();
         let result = self.login_inner(email, password, device).await;
+        metrics::duration("login", started.elapsed());
         let outcome = match &result {
             Ok(_) => "ok",
+            Err(ApiError::TooManyRequests) => "overloaded",
             Err(ApiError::Unauthorized(_) | ApiError::BadRequest { .. }) => "failed",
             Err(_) => "error",
         };
@@ -119,16 +127,29 @@ impl AuthService {
         let email = validate_email(email)?;
         let device = validate_device(device)?;
 
+        let known = self.users.find_by_email(&email).await?;
         let zitadel_id = self
             .identity
-            .verify_password(&email, password)
+            .verify_password(
+                &email,
+                password,
+                known.as_ref().map(|u| u.zitadel_id.as_str()),
+            )
             .await
             .map_err(|e| match e {
                 IdentityError::InvalidCredentials => ApiError::Unauthorized("invalid_credentials"),
+                IdentityError::Busy => ApiError::TooManyRequests,
                 other => identity_internal(other),
             })?;
 
-        let user = self.find_or_create_user(&zitadel_id).await?;
+        let user = match known {
+            Some(user) => user,
+            None => {
+                let user = self.find_or_create_user(&zitadel_id).await?;
+                self.users.remember_email(user.id, &email).await?;
+                user
+            }
+        };
         self.start_session(user, device).await
     }
 
@@ -398,7 +419,12 @@ mod tests {
             async fn create_user(&self, _: &str, _: &str) -> Result<String, IdentityError> {
                 unimplemented!()
             }
-            async fn verify_password(&self, _: &str, _: &str) -> Result<String, IdentityError> {
+            async fn verify_password(
+                &self,
+                _: &str,
+                _: &str,
+                _: Option<&str>,
+            ) -> Result<String, IdentityError> {
                 unimplemented!()
             }
         }
@@ -406,6 +432,12 @@ mod tests {
         struct NoUsers;
         #[async_trait]
         impl UserRepo for NoUsers {
+            async fn find_by_email(&self, _: &str) -> Result<Option<User>, RepoError> {
+                unimplemented!()
+            }
+            async fn remember_email(&self, _: i64, _: &str) -> Result<(), RepoError> {
+                unimplemented!()
+            }
             async fn find_by_id(&self, _: i64) -> Result<Option<User>, RepoError> {
                 unimplemented!()
             }
@@ -436,6 +468,7 @@ mod tests {
             async fn set_profile(
                 &self,
                 _: i64,
+                _: Option<Option<&str>>,
                 _: Option<Option<&str>>,
                 _: Option<Option<&str>>,
             ) -> Result<Option<User>, RepoError> {
