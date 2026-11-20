@@ -147,3 +147,64 @@ pub async fn list_members(
             .into(),
     ))
 }
+
+pub async fn ban_member(
+    auth: AuthUser,
+    State(state): State<AppState>,
+    Path((server_id, user_id)): Path<(i64, i64)>,
+) -> Result<StatusCode, ApiError> {
+    state.limiter.check(
+        &format!("server_ban:user:{}", auth.user_id),
+        30,
+        Duration::from_secs(60),
+    )?;
+    state
+        .servers
+        .ban_member(auth.user_id, server_id, user_id)
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+pub async fn leave(
+    auth: AuthUser,
+    State(state): State<AppState>,
+    Path(server_id): Path<i64>,
+) -> Result<StatusCode, ApiError> {
+    state.limiter.check(
+        &format!("server_leave:user:{}", auth.user_id),
+        30,
+        Duration::from_secs(60),
+    )?;
+    state.servers.leave(auth.user_id, server_id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn unban_member(
+    auth: AuthUser,
+    State(state): State<AppState>,
+    Path((server_id, user_id)): Path<(i64, i64)>,
+) -> Result<StatusCode, ApiError> {
+    state.limiter.check(
+        &format!("server_unban:user:{}", auth.user_id),
+        30,
+        Duration::from_secs(60),
+    )?;
+    state
+        .servers
+        .unban_member(auth.user_id, server_id, user_id)
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+pub async fn list_bans(
+    auth: AuthUser,
+    State(state): State<AppState>,
+    Path(server_id): Path<i64>,
+    Query(query): Query<MembersQuery>,
+) -> Result<Json<MembersPage>, ApiError> {
+    Ok(Json(
+        state
+            .servers
+            .list_bans(auth.user_id, server_id, query.after_id)
+            .await?
+            .into(),
+    ))
+}

@@ -24,3 +24,15 @@ pub enum ChannelWrite {
     NotFound,
     LimitReached,
 }
+
+pub enum LeaveOutcome {
+    Left,
+    Owner,
+    NotFound,
+}
+
+pub enum JoinOutcome {
+    Joined(Server),
+    Banned,
+    NotFound,
+}

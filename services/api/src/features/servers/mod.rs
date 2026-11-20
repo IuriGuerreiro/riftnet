@@ -30,5 +30,11 @@ pub fn routes() -> Router<AppState> {
             "/servers/{server_id}/members",
             get(controller::list_members),
         )
+        .route(
+            "/servers/{server_id}/bans/{user_id}",
+            post(controller::ban_member).delete(controller::unban_member),
+        )
+        .route("/servers/{server_id}/bans", get(controller::list_bans))
+        .route("/servers/{server_id}/leave", post(controller::leave))
         .route("/servers/join", post(controller::join))
 }

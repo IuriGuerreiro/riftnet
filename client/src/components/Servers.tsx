@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
+import { forgetServer, isServerUnavailable, reconcileServerAccess } from "../api/server-access";
 import {
   createServer,
   createServerInvite,
@@ -14,12 +15,17 @@ import { platform } from "../platform";
 import { readWorkspaceSearch } from "../schemas/workspace";
 import { useAuth } from "../stores/auth";
 import { ChannelChat } from "./ChannelChat";
-import { ChannelControls, ServerMembers } from "./ServerManagement";
+import { ChannelControls, LeaveServer, ServerBans, ServerMembers } from "./ServerManagement";
 import { Button, ErrorText, Input } from "./ui";
 
 function useMyServers() {
   const userId = useAuth((state) => state.user?.id);
-  return useQuery({ queryKey: ["servers", userId], queryFn: listServers });
+  const queryClient = useQueryClient();
+  const servers = useQuery({ queryKey: ["servers", userId], queryFn: listServers });
+  useEffect(() => {
+    if (servers.data && servers.isSuccess) reconcileServerAccess(queryClient, userId, servers.data);
+  }, [queryClient, userId, servers.data, servers.isSuccess]);
+  return servers;
 }
 
 export function ServerNavigation() {
@@ -39,6 +45,7 @@ export function ServerNavigation() {
       );
       queryClient.setQueryData(["server-channels", userId, server.id], [default_channel]);
       void queryClient.invalidateQueries({ queryKey: ["servers", userId] });
+      queryClient.setQueryData(["server-access", userId, server.id], true);
       setName("");
       setCreating(false);
       void navigate({ search: { server: server.id, channel: default_channel.id } });
@@ -61,7 +68,9 @@ export function ServerNavigation() {
       >
         <option value="">Direct messages</option>
         {server && !servers.data?.some((item) => item.id === server) && (
-          <option value={server}>Selected server</option>
+          <option value={server}>
+            {servers.isSuccess ? "Server unavailable" : "Loading server…"}
+          </option>
         )}
         {servers.data?.map((item) => (
           <option key={item.id} value={item.id}>
@@ -136,6 +145,7 @@ function JoinInvite({ token }: { token: string }) {
             : [...(current ?? []), { ...server, is_owner: false }],
       );
       void queryClient.invalidateQueries({ queryKey: ["servers", userId] });
+      queryClient.setQueryData(["server-access", userId, server.id], true);
       void navigate({ search: { server: server.id }, replace: true });
     },
   });
@@ -165,12 +175,38 @@ function ServerWorkspace({ serverId }: { serverId: string }) {
   const servers = useMyServers();
   const server = servers.data?.find((item) => item.id === serverId);
   const userId = useAuth((state) => state.user?.id);
+  const queryClient = useQueryClient();
+  const access = useQuery({
+    queryKey: ["server-access", userId, serverId],
+    queryFn: () => true,
+    initialData: true,
+    staleTime: Infinity,
+  });
   const channels = useQuery({
     queryKey: ["server-channels", userId, serverId],
     queryFn: () => listServerChannels(serverId),
+    enabled: access.data,
     retry: false,
   });
   const selected = channels.data?.find((item) => item.id === channel) ?? channels.data?.[0];
+  const loseAccess = () => forgetServer(queryClient, userId, serverId);
+  const unavailable = !access.data || isServerUnavailable(channels.error);
+  useEffect(() => {
+    if (isServerUnavailable(channels.error)) forgetServer(queryClient, userId, serverId);
+  }, [channels.error, queryClient, userId, serverId]);
+  if (unavailable) {
+    return (
+      <section className="flex min-w-0 flex-1 flex-col items-center justify-center gap-4 p-6">
+        <p role="status">This server is no longer available.</p>
+        <button
+          className="text-sm text-brand"
+          onClick={() => void navigate({ search: {}, replace: true })}
+        >
+          Back to direct messages
+        </button>
+      </section>
+    );
+  }
 
   return (
     <section className="flex min-w-0 flex-1 flex-col">
@@ -192,6 +228,9 @@ function ServerWorkspace({ serverId }: { serverId: string }) {
             ))}
           </select>
         )}
+        {server && !server.is_owner && (
+          <LeaveServer serverId={serverId} onUnavailable={loseAccess} />
+        )}
         {server?.is_owner && (
           <>
             <ChannelControls serverId={serverId} selected={selected} />
@@ -199,9 +238,22 @@ function ServerWorkspace({ serverId }: { serverId: string }) {
           </>
         )}
       </header>
-      {channels.isSuccess && <ServerMembers serverId={serverId} />}
+      {channels.isSuccess && (
+        <ServerMembers
+          serverId={serverId}
+          isOwner={server?.is_owner ?? false}
+          onUnavailable={loseAccess}
+        />
+      )}
+      {server?.is_owner && channels.isSuccess && <ServerBans serverId={serverId} />}
       {selected && !channels.isError ? (
-        <ChannelChat key={selected.id} channelId={selected.id} name={selected.name} />
+        <ChannelChat
+          key={selected.id}
+          channelId={selected.id}
+          serverId={serverId}
+          name={selected.name}
+          onUnavailable={loseAccess}
+        />
       ) : (
         <div className="m-auto p-4 text-center text-sm text-zinc-400">
           {channels.isPending && "Loading channels…"}
