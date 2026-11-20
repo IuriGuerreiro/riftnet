@@ -1,5 +1,8 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 
+import { forgetServer, onServerRemoved } from "../../api/server-access";
+import { useAuth } from "../../stores/auth";
 import { useCalls } from "../../stores/calls";
 import { useChat } from "../../stores/chat";
 import { useConnection } from "../../stores/connection";
@@ -10,6 +13,12 @@ import { useTyping } from "../../stores/typing";
 
 export function useRealtime() {
   const { ws, user: me, connect, disconnect } = useConnection();
+  const queryClient = useQueryClient();
+  const userId = useAuth((state) => state.user?.id);
+  useEffect(() => {
+    if (!ws) return;
+    return onServerRemoved(ws, (serverId) => forgetServer(queryClient, userId, serverId));
+  }, [ws, queryClient, userId]);
 
   useEffect(() => {
     void connect();

@@ -147,3 +147,28 @@ pub async fn list_members(
             .into(),
     ))
 }
+
+pub async fn remove_member(
+    auth: AuthUser,
+    State(state): State<AppState>,
+    Path((server_id, user_id)): Path<(i64, i64)>,
+) -> Result<StatusCode, ApiError> {
+    state.limiter.check(
+        &format!("server_remove:user:{}", auth.user_id),
+        30,
+        Duration::from_secs(60),
+    )?;
+    state
+        .servers
+        .remove_member(auth.user_id, server_id, user_id)
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+pub async fn leave(
+    auth: AuthUser,
+    State(state): State<AppState>,
+    Path(server_id): Path<i64>,
+) -> Result<StatusCode, ApiError> {
+    state.servers.leave(auth.user_id, server_id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}

@@ -155,6 +155,7 @@ pub async fn build(
         servers: Arc::new(ServerService::new(
             Arc::new(PgServerRepo::new(pool.clone())),
             ids.clone(),
+            events.clone(),
         )),
         channel_messages: Arc::new(ChannelMessageService::new(
             Arc::new(PgServerRepo::new(pool)),

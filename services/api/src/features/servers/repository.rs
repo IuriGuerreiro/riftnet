@@ -3,11 +3,19 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 use sqlx::PgPool;
 
-use super::models::{ChannelWrite, Server, ServerMember, ServerMembership};
+use super::models::{ChannelWrite, LeaveOutcome, Server, ServerMember, ServerMembership};
 use crate::common::error::RepoError;
 
 #[async_trait]
 pub trait ServerRepo: Send + Sync {
+    async fn remove_member(
+        &self,
+        owner_id: i64,
+        server_id: i64,
+        user_id: i64,
+    ) -> Result<bool, RepoError>;
+    async fn leave(&self, user_id: i64, server_id: i64) -> Result<LeaveOutcome, RepoError>;
+
     async fn create_channel(
         &self,
         user_id: i64,
@@ -67,6 +75,51 @@ impl PgServerRepo {
 
 #[async_trait]
 impl ServerRepo for PgServerRepo {
+    async fn remove_member(
+        &self,
+        owner_id: i64,
+        server_id: i64,
+        user_id: i64,
+    ) -> Result<bool, RepoError> {
+        let owner: Option<i64> = sqlx::query_scalar(
+            "WITH owner AS (
+                SELECT server_id FROM server_members
+                WHERE server_id = $1 AND user_id = $2 AND role = 'owner' FOR SHARE
+             ), removed AS (
+                DELETE FROM server_members
+                WHERE server_id IN (SELECT server_id FROM owner) AND user_id = $3 AND role = 'member'
+             )
+             SELECT server_id FROM owner",
+        )
+        .bind(server_id)
+        .bind(owner_id)
+        .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(owner.is_some())
+    }
+
+    async fn leave(&self, user_id: i64, server_id: i64) -> Result<LeaveOutcome, RepoError> {
+        let role: Option<String> = sqlx::query_scalar(
+            "WITH membership AS (
+                SELECT role FROM server_members WHERE server_id = $1 AND user_id = $2 FOR UPDATE
+             ), removed AS (
+                DELETE FROM server_members WHERE server_id = $1 AND user_id = $2
+                AND role = 'member' AND EXISTS (SELECT 1 FROM membership)
+             )
+             SELECT role FROM membership",
+        )
+        .bind(server_id)
+        .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(match role.as_deref() {
+            Some("member") => LeaveOutcome::Left,
+            Some(_) => LeaveOutcome::Owner,
+            None => LeaveOutcome::NotFound,
+        })
+    }
+
     async fn create_channel(
         &self,
         user_id: i64,
@@ -338,6 +391,20 @@ mod tests {
     use common::snowflake::Snowflake;
     use std::sync::Arc;
 
+    struct NoEvents;
+    #[async_trait]
+    impl crate::common::events::EventBus for NoEvents {
+        async fn publish_to_users(&self, _: &[i64], _: bytes::Bytes) -> anyhow::Result<()> {
+            Ok(())
+        }
+        async fn subscribe_user(
+            &self,
+            _: i64,
+        ) -> anyhow::Result<futures::stream::BoxStream<'static, bytes::Bytes>> {
+            Ok(Box::pin(futures::stream::empty()))
+        }
+    }
+
     #[tokio::test]
     #[ignore = "requires local Postgres"]
     async fn channel_management_and_member_visibility() {
@@ -373,7 +440,11 @@ mod tests {
         sqlx::query("INSERT INTO server_members VALUES (10, 2, 'member')")
             .execute(&pool)
             .await?;
-        let service = ServerService::new(repo.clone(), Arc::new(Snowflake::new(999)));
+        let service = ServerService::new(
+            repo.clone(),
+            Arc::new(Snowflake::new(999)),
+            Arc::new(NoEvents),
+        );
         let channel = service.create_channel(1, 10, "  planning  ").await?;
         assert_eq!(channel.name, "planning");
         assert!(matches!(
@@ -428,6 +499,39 @@ mod tests {
                 .fetch_one(&pool)
                 .await?;
         assert_eq!(count, 100);
+        assert!(matches!(
+            service.remove_member(2, 10, 1).await,
+            Err(crate::common::error::ApiError::NotFound)
+        ));
+        assert!(matches!(
+            service.remove_member(3, 10, 2).await,
+            Err(crate::common::error::ApiError::NotFound)
+        ));
+        assert!(matches!(
+            service.remove_member(1, 10, 1).await,
+            Err(crate::common::error::ApiError::Conflict {
+                code: "owner_cannot_leave",
+                ..
+            })
+        ));
+        assert!(matches!(
+            service.leave(1, 10).await,
+            Err(crate::common::error::ApiError::Conflict {
+                code: "owner_cannot_leave",
+                ..
+            })
+        ));
+        service.remove_member(1, 10, 2).await?;
+        service.remove_member(1, 10, 2).await?;
+        assert!(repo.member_server(2, 11).await?.is_none());
+        assert!(repo.list_channels(2, 10).await?.is_none());
+        assert!(repo.list_members(2, 10, 0).await?.is_none());
+        let invite = service.invite(1, 10).await?;
+        service.join(2, &invite).await?;
+        assert!(repo.member_server(2, 11).await?.is_some());
+        service.leave(2, 10).await?;
+        assert!(repo.member_server(2, 11).await?.is_none());
+        assert!(repo.member_server(1, 11).await?.is_some());
         Ok(())
     }
 }

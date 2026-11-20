@@ -3,19 +3,25 @@ use common::snowflake::Snowflake;
 use rand::{RngCore, rngs::OsRng};
 use std::sync::Arc;
 
-use super::models::{ChannelWrite, CreatedServer, Server, ServerMember, ServerMembership};
+use super::models::{
+    ChannelWrite, CreatedServer, LeaveOutcome, Server, ServerMember, ServerMembership,
+};
 use super::repository::ServerRepo;
 use crate::common::error::{ApiError, RepoError};
+use crate::common::events::EventBus;
+use protocol::Message as _;
+use protocol::v1::{Envelope, ServerRemoved, envelope::Payload};
 
 const DEFAULT_CHANNEL_NAME: &str = "general";
 
 pub struct ServerService {
     repo: Arc<dyn ServerRepo>,
     ids: Arc<Snowflake>,
+    events: Arc<dyn EventBus>,
 }
 impl ServerService {
-    pub fn new(repo: Arc<dyn ServerRepo>, ids: Arc<Snowflake>) -> Self {
-        Self { repo, ids }
+    pub fn new(repo: Arc<dyn ServerRepo>, ids: Arc<Snowflake>, events: Arc<dyn EventBus>) -> Self {
+        Self { repo, ids, events }
     }
     pub async fn create(&self, user_id: i64, name: &str) -> Result<CreatedServer, ApiError> {
         let name = name.trim();
@@ -89,6 +95,56 @@ impl ServerService {
             .list_members(user_id, server_id, after_id)
             .await?
             .ok_or(ApiError::NotFound)
+    }
+    pub async fn remove_member(
+        &self,
+        owner_id: i64,
+        server_id: i64,
+        user_id: i64,
+    ) -> Result<(), ApiError> {
+        if !self
+            .repo
+            .remove_member(owner_id, server_id, user_id)
+            .await?
+        {
+            return Err(ApiError::NotFound);
+        }
+        if owner_id == user_id {
+            return Err(ApiError::conflict(
+                "owner_cannot_leave",
+                "The server owner cannot leave or remove themselves",
+            ));
+        }
+        self.notify_removed(user_id, server_id).await;
+        Ok(())
+    }
+    pub async fn leave(&self, user_id: i64, server_id: i64) -> Result<(), ApiError> {
+        match self.repo.leave(user_id, server_id).await? {
+            LeaveOutcome::Left => self.notify_removed(user_id, server_id).await,
+            LeaveOutcome::Owner => {
+                return Err(ApiError::conflict(
+                    "owner_cannot_leave",
+                    "The server owner cannot leave",
+                ));
+            }
+            LeaveOutcome::NotFound => return Err(ApiError::NotFound),
+        }
+        Ok(())
+    }
+    async fn notify_removed(&self, user_id: i64, server_id: i64) {
+        let envelope = Envelope {
+            id: 0,
+            payload: Some(Payload::ServerRemoved(ServerRemoved {
+                server_id: server_id as u64,
+            })),
+        };
+        if let Err(error) = self
+            .events
+            .publish_to_users(&[user_id], envelope.encode_to_vec().into())
+            .await
+        {
+            tracing::warn!(%error, server.id = server_id, "server removal notification failed");
+        }
     }
     pub async fn list(&self, user_id: i64) -> Result<Vec<ServerMembership>, ApiError> {
         Ok(self.repo.list(user_id).await?)

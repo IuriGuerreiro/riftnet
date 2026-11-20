@@ -61,3 +61,11 @@ export async function listServerMembers(serverId: string, afterId: string) {
     await http<unknown>(`/servers/${serverId}/members?after_id=${encodeURIComponent(afterId)}`),
   );
 }
+
+export function removeServerMember(serverId: string, userId: string) {
+  return http<undefined>(`/servers/${serverId}/members/${userId}`, { method: "DELETE" });
+}
+
+export function leaveServer(serverId: string) {
+  return http<undefined>(`/servers/${serverId}/leave`, { method: "POST" });
+}
