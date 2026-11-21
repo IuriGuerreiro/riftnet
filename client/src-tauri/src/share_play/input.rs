@@ -9,6 +9,7 @@ use super::mapping::{Rect, to_pixels};
 
 /// The viewer pings every 500 ms; no traffic for this long ends control.
 pub const LEASE: Duration = Duration::from_secs(2);
+const HOST_MOUSE_PRIORITY: Duration = Duration::from_secs(2);
 /// A local Approve click is good for one grant within this window.
 pub const APPROVAL_TTL: Duration = Duration::from_secs(30);
 
@@ -35,6 +36,10 @@ pub trait Backend {
     fn button(&mut self, b: u8, down: bool) -> bool;
     fn move_to(&mut self, x: i32, y: i32);
     fn scroll(&mut self, dx: i32, dy: i32);
+    /// Read local activity independently of the input this backend injects.
+    fn host_mouse_activity(&mut self) -> Result<bool, String> {
+        Ok(false)
+    }
     /// Where the OS cursor is now, if the platform can tell.
     fn location(&self) -> Option<(i32, i32)>;
 }
@@ -69,6 +74,7 @@ pub enum Rejected {
     Unknown,
     /// Coordinates missing / outside the share, or the cursor didn't get there.
     OffTarget,
+    HostMousePriority,
     /// Not a pointer move, but arrived on the lossy channel.
     WrongChannel,
     NativeFailure,
@@ -81,6 +87,7 @@ pub enum ArmError {
     /// This grant id was armed before (stale update after a revoke).
     Stale,
     CleanupPending,
+    MouseMonitoringUnavailable,
 }
 
 #[derive(Default)]
@@ -91,9 +98,14 @@ pub struct Controller {
     lease_until: Option<Instant>,
     held_keys: Vec<Key>,
     held_buttons: Vec<u8>,
+    host_mouse_until: Option<Instant>,
 }
 
 impl Controller {
+    pub fn is_armed(&self) -> bool {
+        self.grant.is_some()
+    }
+
     #[cfg(test)]
     pub fn armed(&self) -> Option<Grant> {
         self.grant
@@ -163,9 +175,19 @@ impl Controller {
         false
     }
 
+    pub fn host_mouse_activity(&mut self, now: Instant, os: &mut impl Backend) -> bool {
+        self.host_mouse_until = Some(now + HOST_MOUSE_PRIORITY);
+        self.release_buttons(os);
+        self.held_buttons.is_empty()
+    }
+
+    fn release_buttons(&mut self, os: &mut impl Backend) {
+        self.held_buttons.retain(|b| !os.button(*b, false));
+    }
+
     pub fn release_all(&mut self, os: &mut impl Backend) {
         self.held_keys.retain(|key| !os.key(*key, false));
-        self.held_buttons.retain(|b| !os.button(*b, false));
+        self.release_buttons(os);
     }
 
     fn holding(&self, key: Key) -> bool {
@@ -218,6 +240,11 @@ impl Controller {
             return Err(Rejected::WrongChannel);
         }
         self.lease_until = Some(now + LEASE);
+        if !matches!(event, InputEvent::Key { .. } | InputEvent::Ping)
+            && self.host_mouse_until.is_some_and(|until| now < until)
+        {
+            return Err(Rejected::HostMousePriority);
+        }
         match event {
             InputEvent::Ping => {}
             InputEvent::Move { x, y } => {
@@ -347,6 +374,64 @@ mod tests {
 
     fn click(down: bool, x: f64, y: f64) -> InputEvent {
         InputEvent::Button { b: 0, down, x, y }
+    }
+
+    #[test]
+    fn host_mouse_activity_ends_a_drag_and_restarts_the_pause() {
+        let (mut c, mut os, now) = granted();
+        c.apply(FROM, key("KeyW", true), now, &mut os).unwrap();
+        c.apply(FROM, click(true, 0.1, 0.1), now, &mut os).unwrap();
+        os.log.clear();
+
+        let first_activity = now + Duration::from_millis(100);
+        assert!(c.host_mouse_activity(first_activity, &mut os));
+        assert_eq!(os.log, ["button 0 false"]);
+        os.log.clear();
+
+        let last_activity = now + Duration::from_secs(1);
+        assert!(c.host_mouse_activity(last_activity, &mut os));
+        let resumes_at = last_activity + HOST_MOUSE_PRIORITY;
+        for event in [
+            InputEvent::Move { x: 0.4, y: 0.4 },
+            click(true, 0.4, 0.4),
+            click(false, 0.4, 0.4),
+            InputEvent::Wheel {
+                dx: 0,
+                dy: 2,
+                x: 0.4,
+                y: 0.4,
+            },
+        ] {
+            assert_eq!(
+                c.apply(FROM, event, resumes_at - Duration::from_millis(1), &mut os),
+                Err(Rejected::HostMousePriority)
+            );
+        }
+        assert!(os.log.is_empty());
+        c.apply(
+            FROM,
+            key("KeyW", false),
+            resumes_at - Duration::from_millis(1),
+            &mut os,
+        )
+        .unwrap();
+        assert_eq!(os.log, ["key Char('w') false"]);
+
+        os.log.clear();
+        c.apply(FROM, click(true, 0.4, 0.4), resumes_at, &mut os)
+            .unwrap();
+        assert_eq!(os.log, ["move 500 200", "button 0 true"]);
+    }
+
+    #[test]
+    fn queued_mouse_input_from_before_takeover_is_dropped() {
+        let (mut c, mut os, received_at) = granted();
+        assert!(c.host_mouse_activity(received_at + Duration::from_millis(10), &mut os));
+        assert_eq!(
+            c.apply(FROM, click(true, 0.4, 0.4), received_at, &mut os),
+            Err(Rejected::HostMousePriority)
+        );
+        assert!(os.log.is_empty());
     }
 
     #[test]

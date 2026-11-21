@@ -1546,6 +1546,7 @@ dependencies = [
  "tauri-plugin-global-shortcut",
  "tauri-plugin-log",
  "windows 0.61.3",
+ "x11rb",
 ]
 
 [[package]]

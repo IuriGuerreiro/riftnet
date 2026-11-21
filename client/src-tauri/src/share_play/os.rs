@@ -1,17 +1,35 @@
 //! Real input via enigo (Windows SendInput, X11 XTest).
 
-use enigo::{Axis, Button, Coordinate, Direction, Enigo as Inner, Key, Keyboard, Mouse, Settings};
+use enigo::{Axis, Button, Direction, Enigo as Inner, Key, Keyboard, Mouse, Settings};
 
 use super::input::Backend;
 use super::keymap::{self, Named};
 
-pub struct Enigo(Inner);
+#[cfg(target_os = "linux")]
+mod linux;
+#[cfg(windows)]
+mod windows;
+
+#[cfg(target_os = "linux")]
+use linux::HostMouse;
+#[cfg(windows)]
+use windows::HostMouse;
+
+pub struct Enigo {
+    input: Inner,
+    host_mouse: HostMouse,
+}
 
 impl Enigo {
     pub fn new() -> Result<Self, String> {
-        Inner::new(&Settings::default())
-            .map(Self)
-            .map_err(|e| e.to_string())
+        let settings = Settings {
+            #[cfg(windows)]
+            windows_dw_extra_info: Some(windows::SHARE_PLAY_INPUT_MARKER),
+            ..Settings::default()
+        };
+        let input = Inner::new(&settings).map_err(|e| e.to_string())?;
+        let host_mouse = HostMouse::new().map_err(|e| e.to_string())?;
+        Ok(Self { input, host_mouse })
     }
 }
 
@@ -66,11 +84,11 @@ fn to_enigo(key: keymap::Key) -> Key {
 
 impl Backend for Enigo {
     fn key(&mut self, key: keymap::Key, down: bool) -> bool {
-        self.0.key(to_enigo(key), dir(down)).is_ok()
+        self.input.key(to_enigo(key), dir(down)).is_ok()
     }
 
     fn location(&self) -> Option<(i32, i32)> {
-        self.0.location().ok()
+        self.input.location().ok()
     }
 
     fn button(&mut self, b: u8, down: bool) -> bool {
@@ -79,30 +97,31 @@ impl Backend for Enigo {
             1 => Button::Middle,
             _ => Button::Right,
         };
-        self.0.button(b, dir(down)).is_ok()
+        self.input.button(b, dir(down)).is_ok()
     }
 
     fn move_to(&mut self, x: i32, y: i32) {
-        // enigo's absolute move on Windows only covers the primary monitor.
-        // SetCursorPos uses virtual-desktop pixels, so it reaches every monitor.
+        #[cfg(windows)]
+        windows::move_to(x, y);
+        #[cfg(target_os = "linux")]
+        let _ = self.input.move_mouse(x, y, enigo::Coordinate::Abs);
+    }
+
+    fn host_mouse_activity(&mut self) -> Result<bool, String> {
         #[cfg(windows)]
         {
-            let (w, h) = self.0.main_display().unwrap_or((0, 0));
-            if x < 0 || y < 0 || x >= w || y >= h {
-                // SAFETY: plain Win32 call with value arguments.
-                let _ = unsafe { windows::Win32::UI::WindowsAndMessaging::SetCursorPos(x, y) };
-                return;
-            }
+            self.host_mouse.active()
         }
-        let _ = self.0.move_mouse(x, y, Coordinate::Abs);
+        #[cfg(target_os = "linux")]
+        self.host_mouse.active().map_err(|err| err.to_string())
     }
 
     fn scroll(&mut self, dx: i32, dy: i32) {
         if dy != 0 {
-            let _ = self.0.scroll(dy, Axis::Vertical);
+            let _ = self.input.scroll(dy, Axis::Vertical);
         }
         if dx != 0 {
-            let _ = self.0.scroll(dx, Axis::Horizontal);
+            let _ = self.input.scroll(dx, Axis::Horizontal);
         }
     }
 }
