@@ -14,6 +14,9 @@ export interface Profile {
   bio: string | null;
   customStatus: string | null;
   avatarHash: string | null;
+  bannerHash: string | null;
+  accentColor: string | null;
+  pronouns: string | null;
 }
 
 export function fromJson(u: JsonUser): Profile {
@@ -24,6 +27,9 @@ export function fromJson(u: JsonUser): Profile {
     bio: u.bio ?? null,
     customStatus: u.custom_status ?? null,
     avatarHash: u.avatar_hash ?? null,
+    bannerHash: u.banner_hash ?? null,
+    accentColor: u.accent_color ?? null,
+    pronouns: u.pronouns ?? null,
   };
 }
 
@@ -35,6 +41,9 @@ export function fromProto(u: ProtoUser): Profile {
     bio: u.bio || null,
     customStatus: u.customStatus || null,
     avatarHash: u.avatarHash || null,
+    bannerHash: u.bannerHash || null,
+    accentColor: u.accentColor || null,
+    pronouns: u.pronouns || null,
   };
 }
 
@@ -80,6 +89,9 @@ export const useProfiles = create<ProfilesStore>()((set, get) => ({
           bio: p.bio,
           custom_status: p.customStatus,
           avatar_hash: p.avatarHash,
+          banner_hash: p.bannerHash,
+          accent_color: p.accentColor,
+          pronouns: p.pronouns,
         });
       }
     });
@@ -93,7 +105,10 @@ function same(a: Profile | undefined, b: Profile): boolean {
     a.displayName === b.displayName &&
     a.bio === b.bio &&
     a.customStatus === b.customStatus &&
-    a.avatarHash === b.avatarHash
+    a.avatarHash === b.avatarHash &&
+    a.bannerHash === b.bannerHash &&
+    a.accentColor === b.accentColor &&
+    a.pronouns === b.pronouns
   );
 }
 
@@ -121,6 +136,9 @@ function patchSnapshots(u: ProtoUser) {
     bio: u.bio || null,
     custom_status: u.customStatus || null,
     avatar_hash: u.avatarHash || null,
+    banner_hash: u.bannerHash || null,
+    accent_color: u.accentColor || null,
+    pronouns: u.pronouns || null,
   };
   const patch = (rows: typeof list.friends) =>
     rows.map((f) => (f.user.id === id ? { ...f, user: json } : f));

@@ -13,6 +13,7 @@ import { formatClock, formatDay, formatStamp } from "../../lib/time";
 import { useAuth } from "../../stores/auth";
 import { useConnection } from "../../stores/connection";
 import { groupMessages } from "../chat/groupMessages";
+import { ProfileTrigger } from "../profile/ProfileTrigger";
 
 export function ChannelChat({
   channelId: id,
@@ -165,7 +166,13 @@ export function ChannelChat({
                     <div className="w-10 shrink-0">
                       {header ? (
                         <span className="mt-0.5 block">
-                          <Avatar userId={message.authorId} size="md" />
+                          <ProfileTrigger
+                            userId={message.authorId}
+                            label={message.authorName}
+                            className="rounded-full"
+                          >
+                            <Avatar userId={message.authorId} size="md" />
+                          </ProfileTrigger>
                         </span>
                       ) : (
                         <time
@@ -180,14 +187,15 @@ export function ChannelChat({
                     <div className="min-w-0 flex-1">
                       {header && (
                         <p className="flex items-baseline gap-2">
-                          <span
+                          <ProfileTrigger
+                            userId={message.authorId}
                             className={cn(
-                              "font-medium",
+                              "font-medium hover:underline",
                               message.authorId.toString() === userId ? "text-brand" : "text-fg",
                             )}
                           >
                             {message.authorName}
-                          </span>
+                          </ProfileTrigger>
                           <time dateTime={time.toISOString()} className="text-xs text-fg-subtle">
                             {formatStamp(time)}
                           </time>

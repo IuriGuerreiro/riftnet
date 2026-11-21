@@ -10,6 +10,7 @@ import { type ChatMessage, useChat } from "../../stores/chat";
 import { useConnection } from "../../stores/connection";
 import { useProfiles } from "../../stores/profiles";
 import { Attachment } from "../attachments/Attachment";
+import { ProfileTrigger } from "../profile/ProfileTrigger";
 import { ReactionChipButton } from "../reactions/ReactionChipButton";
 import { useNameFor } from "../session/useRealtime";
 import { messageDomId } from "./jumpTo";
@@ -61,7 +62,13 @@ export function MessageRow({
       <div className="w-10 shrink-0">
         {header ? (
           <span className={m.replyTo !== undefined ? "mt-6 block" : "mt-0.5 block"}>
-            <Avatar userId={m.authorId} size="md" />
+            <ProfileTrigger
+              userId={m.authorId}
+              label={nameFor(m.authorId)}
+              className="rounded-full"
+            >
+              <Avatar userId={m.authorId} size="md" />
+            </ProfileTrigger>
           </span>
         ) : (
           <time
@@ -80,9 +87,15 @@ export function MessageRow({
         )}
         {header && (
           <p className="flex items-baseline gap-2">
-            <span className={cn("font-semibold", hasProfile ? "text-fg" : "text-fg-muted")}>
+            <ProfileTrigger
+              userId={m.authorId}
+              className={cn(
+                "font-semibold hover:underline",
+                hasProfile ? "text-fg" : "text-fg-muted",
+              )}
+            >
               {nameFor(m.authorId)}
-            </span>
+            </ProfileTrigger>
             <time dateTime={time.toISOString()} className="text-xs text-fg-subtle">
               {formatStamp(time)}
             </time>

@@ -3,6 +3,7 @@ import type { Conversation } from "../../gen/v1/conversations_pb";
 import { useActivity } from "../../stores/activity";
 import { PresenceStatus, usePresence } from "../../stores/presence";
 import { activityText } from "../activity/activity";
+import { ProfileTrigger } from "../profile/ProfileTrigger";
 import { useNameFor } from "../session/useRealtime";
 
 export function MemberList({ group }: { group: Conversation }) {
@@ -25,9 +26,10 @@ export function MemberList({ group }: { group: Conversation }) {
         Members — {group.members.length}
       </h2>
       {sorted.map((m) => (
-        <div
+        <ProfileTrigger
           key={m.id.toString()}
-          className={`flex items-center gap-3 rounded-control px-2 py-1.5 hover:bg-surface-3 ${
+          userId={m.id}
+          className={`flex w-full items-center gap-3 rounded-control px-2 py-1.5 hover:bg-surface-3 ${
             online(m.id) ? "" : "opacity-50"
           }`}
         >
@@ -42,7 +44,7 @@ export function MemberList({ group }: { group: Conversation }) {
               </span>
             )}
           </span>
-        </div>
+        </ProfileTrigger>
       ))}
     </aside>
   );

@@ -1,6 +1,6 @@
-pub mod avatar;
 mod controller;
 pub mod dto;
+pub mod image;
 pub mod models;
 pub mod repository;
 pub mod service;
@@ -17,11 +17,18 @@ pub fn routes() -> Router<AppState> {
         .route(
             "/me/avatar",
             put(controller::put_avatar)
-                .layer(DefaultBodyLimit::max(avatar::MAX_AVATAR_BYTES))
+                .layer(DefaultBodyLimit::max(image::MAX_IMAGE_BYTES))
                 .delete(controller::delete_avatar),
+        )
+        .route(
+            "/me/banner",
+            put(controller::put_banner)
+                .layer(DefaultBodyLimit::max(image::MAX_IMAGE_BYTES))
+                .delete(controller::delete_banner),
         )
         .route("/users/{id}", get(controller::get_user))
         .route("/users/{id}/avatar/{hash}", get(controller::get_avatar))
+        .route("/users/{id}/banner/{hash}", get(controller::get_banner))
         .route("/me/username", put(controller::set_username))
         .route("/users/search", get(controller::search_users))
 }

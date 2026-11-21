@@ -41,3 +41,21 @@ describe("avatarFileProblem", () => {
     expect(avatarFileProblem({ type: "image/jpeg", size: MAX_AVATAR_BYTES + 1 })).not.toBeNull();
   });
 });
+
+describe("pronouns and accent color", () => {
+  const base = { display_name: "", bio: "" };
+  it("accepts and normalizes", () => {
+    const r = profileSchema.parse({ ...base, pronouns: " they/them ", accent_color: " #A1B2C3 " });
+    expect(r.pronouns).toBe("they/them");
+    expect(r.accent_color).toBe("#a1b2c3");
+    expect(profileSchema.safeParse({ ...base, accent_color: "" }).success).toBe(true);
+  });
+  it("rejects bad values", () => {
+    for (const accent_color of ["red", "#12345", "#1234567", "123456", "#12345g"]) {
+      expect(profileSchema.safeParse({ ...base, accent_color }).success).toBe(false);
+    }
+    for (const pronouns of ["p".repeat(41), "a\nb"]) {
+      expect(profileSchema.safeParse({ ...base, pronouns }).success).toBe(false);
+    }
+  });
+});

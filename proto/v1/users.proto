@@ -12,10 +12,17 @@ message User {
   string avatar_hash = 4;
   string bio = 5; // empty = not set
   string custom_status = 6;
+  // Hex id of the current banner; empty = none. Same rules as avatar_hash.
+  // Image link: GET /users/{id}/banner/{banner_hash} -> { url } (WebP, 960x384).
+  string banner_hash = 7;
+  // "#rrggbb", lowercase; empty = not set.
+  string accent_color = 8;
+  string pronouns = 9; // empty = not set
 }
 
 // Pushed to the user, their friends and their DM/group members
-// when username, display name, bio or avatar changes.
+// when any profile field changes (name, bio, status, avatar, banner,
+// accent color, pronouns).
 message UserUpdated {
   User user = 1;
 }

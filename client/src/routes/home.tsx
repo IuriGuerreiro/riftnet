@@ -8,6 +8,7 @@ import { ProfilePanel } from "../components/ProfilePanel";
 import { useFriendActivityWatch } from "../features/activity/activity";
 import { ChatPane } from "../features/chat/ChatPane";
 import { FriendsPage } from "../features/friends/FriendsPage";
+import { ProfileCardHost } from "../features/profile/ProfileCard";
 import { ServerPanel } from "../features/servers/ServerView";
 import { useKnownUsers, useNameFor, useRealtime } from "../features/session/useRealtime";
 import {
@@ -47,6 +48,7 @@ export function HomePage() {
           }}
         />
       )}
+      <ProfileCardHost />
       {editingAudio && <AudioSettings onClose={() => setEditingAudio(false)} />}
       {creating && <NewConversationDialog kind={creating} onClose={() => setCreating(null)} />}
       <ServerRail onCreateGroup={() => setCreating("group")} />

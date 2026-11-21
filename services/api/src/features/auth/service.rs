@@ -468,15 +468,14 @@ mod tests {
             async fn set_profile(
                 &self,
                 _: i64,
-                _: Option<Option<&str>>,
-                _: Option<Option<&str>>,
-                _: Option<Option<&str>>,
+                _: crate::features::users::repository::ProfileUpdate<'_>,
             ) -> Result<Option<User>, RepoError> {
                 unimplemented!()
             }
-            async fn set_avatar(
+            async fn set_image(
                 &self,
                 _: i64,
+                _: crate::features::users::image::ProfileImage,
                 _: Option<&[u8]>,
             ) -> Result<Option<(User, Option<Vec<u8>>)>, RepoError> {
                 unimplemented!()
