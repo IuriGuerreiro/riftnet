@@ -73,6 +73,7 @@ message Envelope {
     ChannelHistory channel_history = 73;
     ChannelMessage channel_message = 74;
     ServerRemoved server_removed = 75;
+    ServerMemberUpdated server_member_updated = 77;
 
     // calls: field numbers 100-139 are reserved for them
     CallStart call_start = 100;
@@ -110,4 +111,12 @@ message AuthOk {
 
 message ServerRemoved {
   uint64 server_id = 1;
+}
+
+// Pushed to every member of a server when a member's nickname changes.
+message ServerMemberUpdated {
+  uint64 server_id = 1;
+  uint64 user_id = 2;
+  string nickname = 3; // empty = no nickname
+  string name = 4; // name to show in this server: nickname, else display name or username
 }

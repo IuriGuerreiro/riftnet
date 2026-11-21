@@ -14,6 +14,9 @@ pub struct User {
     pub banner_hash: Option<Vec<u8>>,
     pub accent_color: Option<i32>,
     pub pronouns: Option<String>,
+    pub name_color: Option<i32>,
+    pub status_emoji: Option<String>,
+    pub links: Vec<String>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -27,8 +30,16 @@ impl User {
     }
 
     pub fn accent_hex(&self) -> Option<String> {
-        self.accent_color.map(|c| format!("#{c:06x}"))
+        self.accent_color.map(color_hex)
     }
+
+    pub fn name_color_hex(&self) -> Option<String> {
+        self.name_color.map(color_hex)
+    }
+}
+
+fn color_hex(c: i32) -> String {
+    format!("#{c:06x}")
 }
 
 pub fn hex(bytes: &[u8]) -> String {

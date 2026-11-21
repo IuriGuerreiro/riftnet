@@ -11,9 +11,11 @@ import {
   useUploadBanner,
 } from "../api/profile";
 import { ProfileCardBody } from "../features/profile/ProfileCard";
+import { ColorField, EmojiPicker, LinksEditor } from "../features/profile/ProfileFields";
 import {
   AVATAR_TYPES,
   avatarFileProblem,
+  isHttpsUrl,
   MAX_BIO,
   MAX_PRONOUNS,
   type ProfileForm,
@@ -63,6 +65,11 @@ function useImagePick() {
   };
 }
 
+function validColor(raw: string | undefined): string | null {
+  const v = raw?.trim().toLowerCase() ?? "";
+  return /^#[0-9a-f]{6}$/.test(v) ? v : null;
+}
+
 function orNull(s: string | undefined): string | null {
   const t = s?.trim();
   return t === undefined || t === "" ? null : t;
@@ -86,17 +93,20 @@ export function ProfilePanel({ myId, onClose }: { myId: string; onClose: () => v
       custom_status: me?.customStatus ?? "",
       pronouns: me?.pronouns ?? "",
       accent_color: me?.accentColor ?? "",
+      name_color: me?.nameColor ?? "",
+      status_emoji: me?.statusEmoji ?? "",
+      links: (me?.links ?? []).map((url) => ({ url })),
     },
   });
   const draft = useWatch({ control: form.control });
-  const accent = draft.accent_color?.trim().toLowerCase() ?? "";
-  const accentValid = /^#[0-9a-f]{6}$/.test(accent);
 
   const onSave = form.handleSubmit((values) => {
     const dirty = form.formState.dirtyFields;
-    const changed = Object.fromEntries(
-      Object.entries(values).filter(([k]) => dirty[k as keyof ProfileForm]),
-    ) as ProfileUpdate;
+    const { links, ...rest } = values;
+    const changed: ProfileUpdate = Object.fromEntries(
+      Object.entries(rest).filter(([k]) => dirty[k as keyof ProfileForm]),
+    );
+    if (dirty.links) changed.links = (links ?? []).map((l) => l.url).filter(Boolean);
     if (Object.keys(changed).length === 0) return;
     update.mutate(changed, { onSuccess: () => form.reset(values) });
   });
@@ -107,7 +117,10 @@ export function ProfilePanel({ myId, onClose }: { myId: string; onClose: () => v
     bio: orNull(draft.bio),
     customStatus: orNull(draft.custom_status),
     pronouns: orNull(draft.pronouns),
-    accentColor: accentValid ? accent : null,
+    accentColor: validColor(draft.accent_color),
+    nameColor: validColor(draft.name_color),
+    statusEmoji: orNull(draft.status_emoji),
+    links: (draft.links ?? []).map((l) => l.url?.trim() ?? "").filter(isHttpsUrl),
   };
 
   return (
@@ -239,40 +252,15 @@ export function ProfilePanel({ myId, onClose }: { myId: string; onClose: () => v
           error={form.formState.errors.bio?.message}
           hint={`${draft.bio?.length ?? 0}/${MAX_BIO}`}
         />
-        <div className="flex items-end gap-2">
-          <input
-            type="color"
-            aria-label="Pick accent color"
-            value={accentValid ? accent : DEFAULT_ACCENT}
-            onChange={(e) =>
-              form.setValue("accent_color", e.target.value, {
-                shouldDirty: true,
-                shouldValidate: true,
-              })
-            }
-            className="mb-0.5 size-10 shrink-0 cursor-pointer rounded-control border border-line bg-transparent"
-          />
-          <div className="flex-1">
-            <Input
-              label="Accent color"
-              placeholder="#rrggbb"
-              {...form.register("accent_color")}
-              error={form.formState.errors.accent_color?.message}
-            />
-          </div>
-          {draft.accent_color && (
-            <Button
-              size="sm"
-              variant="ghost"
-              className="mb-1"
-              onClick={() =>
-                form.setValue("accent_color", "", { shouldDirty: true, shouldValidate: true })
-              }
-            >
-              Clear
-            </Button>
-          )}
-        </div>
+        <EmojiPicker form={form} />
+        <ColorField form={form} name="name_color" label="Name color" fallback="#ecedf1" />
+        <ColorField
+          form={form}
+          name="accent_color"
+          label="Accent color"
+          fallback={DEFAULT_ACCENT}
+        />
+        <LinksEditor control={form.control} form={form} />
         <ErrorText error={update.error} />
         {update.isSuccess && !form.formState.isDirty && (
           <p className="text-xs text-success">Profile saved</p>

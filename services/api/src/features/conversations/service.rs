@@ -633,6 +633,9 @@ mod tests {
             banner_hash: None,
             accent_color: None,
             pronouns: None,
+            name_color: None,
+            status_emoji: None,
+            links: Vec::new(),
             created_at: Utc::now(),
         }
     }

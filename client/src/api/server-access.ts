@@ -1,6 +1,8 @@
-import type { QueryClient } from "@tanstack/react-query";
+import type { InfiniteData, QueryClient } from "@tanstack/react-query";
 
+import { useServerNames } from "../stores/serverNames";
 import { ApiError } from "./http";
+import type { listServerMembers } from "./servers";
 import { listServers } from "./servers";
 import { type WsClient, WsError } from "./ws";
 
@@ -26,6 +28,7 @@ export function forgetServer(
     void queryClient.cancelQueries({ queryKey: [feature, userId, serverId] });
     queryClient.removeQueries({ queryKey: [feature, userId, serverId] });
   }
+  useServerNames.getState().forget(serverId);
   void queryClient.cancelQueries({ queryKey: ["channel-history", userId, serverId] });
   queryClient.removeQueries({ queryKey: ["channel-history", userId, serverId] });
 }
@@ -33,6 +36,34 @@ export function forgetServer(
 export function onServerRemoved(ws: WsClient, receive: (serverId: string) => void) {
   return ws.addPushListener((payload) => {
     if (payload.case === "serverRemoved") receive(payload.value.serverId.toString());
+  });
+}
+
+type MembersPages = InfiniteData<Awaited<ReturnType<typeof listServerMembers>>>;
+
+export function onServerMemberUpdated(
+  ws: WsClient,
+  queryClient: QueryClient,
+  userId: string | undefined,
+) {
+  return ws.addPushListener((payload) => {
+    if (payload.case !== "serverMemberUpdated") return;
+    const serverId = payload.value.serverId.toString();
+    const memberId = payload.value.userId.toString();
+    const { name } = payload.value;
+    const nickname = payload.value.nickname || null;
+    useServerNames.getState().set(serverId, memberId, name);
+    queryClient.setQueryData<MembersPages>(["server-members", userId, serverId], (data) =>
+      data
+        ? {
+            ...data,
+            pages: data.pages.map((page) => ({
+              ...page,
+              members: page.members.map((m) => (m.id === memberId ? { ...m, name, nickname } : m)),
+            })),
+          }
+        : data,
+    );
   });
 }
 

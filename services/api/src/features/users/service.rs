@@ -20,6 +20,9 @@ pub const MAX_DISPLAY_NAME_CHARS: usize = 32;
 pub const MAX_BIO_CHARS: usize = 190;
 pub const MAX_CUSTOM_STATUS_CHARS: usize = 128;
 pub const MAX_PRONOUNS_CHARS: usize = 40;
+pub const MAX_LINKS: usize = 5;
+pub const MAX_LINK_CHARS: usize = 200;
+const MAX_EMOJI_CHARS: usize = 16;
 const IMAGE_URL_TTL: Duration = Duration::from_secs(5 * 60);
 const IMAGES_IN_FLIGHT: usize = 2;
 
@@ -31,6 +34,9 @@ pub struct ProfileChanges {
     pub custom_status: Option<String>,
     pub pronouns: Option<String>,
     pub accent_color: Option<String>,
+    pub name_color: Option<String>,
+    pub status_emoji: Option<String>,
+    pub links: Option<Vec<String>>,
 }
 
 pub struct UserService {
@@ -110,14 +116,28 @@ impl UserService {
         let accent_color = changes
             .accent_color
             .as_deref()
-            .map(parse_accent_color)
+            .map(|raw| parse_color(raw, "invalid_accent_color"))
             .transpose()?;
+        let name_color = changes
+            .name_color
+            .as_deref()
+            .map(|raw| parse_color(raw, "invalid_name_color"))
+            .transpose()?;
+        let status_emoji = changes
+            .status_emoji
+            .as_deref()
+            .map(parse_status_emoji)
+            .transpose()?;
+        let links = changes.links.as_deref().map(parse_links).transpose()?;
         let update = ProfileUpdate {
             display_name: display_name.as_ref().map(Option::as_deref),
             bio: bio.as_ref().map(Option::as_deref),
             custom_status: custom_status.as_ref().map(Option::as_deref),
             pronouns: pronouns.as_ref().map(Option::as_deref),
             accent_color,
+            name_color,
+            status_emoji: status_emoji.as_ref().map(Option::as_deref),
+            links: links.as_deref(),
         };
         let user = self
             .repo
@@ -339,12 +359,12 @@ fn upload_id(content_hash: &[u8; 32]) -> [u8; 32] {
     *h.finalize().as_bytes()
 }
 
-fn parse_accent_color(raw: &str) -> Result<Option<i32>, ApiError> {
+fn parse_color(raw: &str, code: &'static str) -> Result<Option<i32>, ApiError> {
     let text = raw.trim();
     if text.is_empty() {
         return Ok(None);
     }
-    let bad = || ApiError::bad_request("invalid_accent_color", "use a #rrggbb color");
+    let bad = || ApiError::bad_request(code, "use a #rrggbb color");
     let digits = text.strip_prefix('#').ok_or_else(bad)?;
     if digits.len() != 6 || !digits.bytes().all(|b| b.is_ascii_hexdigit()) {
         return Err(bad());
@@ -352,9 +372,65 @@ fn parse_accent_color(raw: &str) -> Result<Option<i32>, ApiError> {
     i32::from_str_radix(digits, 16).map(Some).map_err(|_| bad())
 }
 
+fn parse_status_emoji(raw: &str) -> Result<Option<String>, ApiError> {
+    use unicode_segmentation::UnicodeSegmentation;
+    let text = raw.trim();
+    if text.is_empty() {
+        return Ok(None);
+    }
+    let one_grapheme = text.graphemes(true).count() == 1;
+    let short = text.chars().count() <= MAX_EMOJI_CHARS;
+    if !one_grapheme || !short || !text.chars().any(is_emoji_char) {
+        return Err(ApiError::bad_request(
+            "invalid_status_emoji",
+            "use a single emoji",
+        ));
+    }
+    Ok(Some(text.to_string()))
+}
+
+fn is_emoji_char(c: char) -> bool {
+    matches!(c as u32, 0xA9 | 0xAE | 0x203C..=0x3299 | 0x1F000..=0x1FAFF)
+}
+
+fn parse_links(raw: &[String]) -> Result<Vec<String>, ApiError> {
+    if raw.len() > MAX_LINKS {
+        return Err(ApiError::bad_request(
+            "invalid_links",
+            format!("at most {MAX_LINKS} links"),
+        ));
+    }
+    let mut links: Vec<String> = Vec::with_capacity(raw.len());
+    for item in raw {
+        let text = item.trim();
+        let bad = || {
+            ApiError::bad_request(
+                "invalid_links",
+                format!("each link must be an https:// URL up to {MAX_LINK_CHARS} characters"),
+            )
+        };
+        if text.is_empty() || text.chars().count() > MAX_LINK_CHARS {
+            return Err(bad());
+        }
+        let url = url::Url::parse(text).map_err(|_| bad())?;
+        let plain = url.username().is_empty() && url.password().is_none();
+        if url.scheme() != "https" || url.host_str().is_none() || !plain {
+            return Err(bad());
+        }
+        let link = url.to_string();
+        if link.chars().count() > MAX_LINK_CHARS {
+            return Err(bad());
+        }
+        if !links.contains(&link) {
+            links.push(link);
+        }
+    }
+    Ok(links)
+}
+
 /// Trims, rejects control characters (newlines allowed if `multiline`)
 /// and anything over `max` chars. Empty means "clear it": None.
-fn clean_text(
+pub fn clean_text(
     raw: &str,
     max: usize,
     multiline: bool,
@@ -472,6 +548,15 @@ mod tests {
                 }
                 if let Some(v) = up.accent_color {
                     u.accent_color = v;
+                }
+                if let Some(v) = up.name_color {
+                    u.name_color = v;
+                }
+                if let Some(v) = up.status_emoji {
+                    u.status_emoji = v.map(String::from);
+                }
+                if let Some(v) = up.links {
+                    u.links = v.to_vec();
                 }
                 u.clone()
             }))
@@ -649,6 +734,9 @@ mod tests {
             banner_hash: None,
             accent_color: None,
             pronouns: None,
+            name_color: None,
+            status_emoji: None,
+            links: Vec::new(),
             created_at: Utc::now(),
         }
     }
@@ -1079,10 +1167,87 @@ mod tests {
     }
 
     #[test]
-    fn accent_color_parse() {
-        assert_eq!(parse_accent_color("#000000").unwrap(), Some(0));
-        assert_eq!(parse_accent_color("#FFFFFF").unwrap(), Some(0xffffff));
-        assert_eq!(parse_accent_color("  ").unwrap(), None);
+    fn color_parse() {
+        assert_eq!(parse_color("#000000", "c").unwrap(), Some(0));
+        assert_eq!(parse_color("#FFFFFF", "c").unwrap(), Some(0xffffff));
+        assert_eq!(parse_color("  ", "c").unwrap(), None);
+    }
+
+    #[test]
+    fn status_emoji_rules() {
+        for ok in ["😀", "👍🏽", "👨‍👩‍👧", "🏳️‍🌈", "❤️", "#️⃣"]
+        {
+            assert_eq!(parse_status_emoji(ok).unwrap().as_deref(), Some(ok), "{ok}");
+        }
+        assert_eq!(parse_status_emoji(" ").unwrap(), None);
+        for bad in ["a", "é", "😀😀", "hi 😀", "1", "\u{7}"] {
+            assert!(parse_status_emoji(bad).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn link_rules() {
+        let v = |xs: &[&str]| xs.iter().map(|x| x.to_string()).collect::<Vec<_>>();
+        assert_eq!(
+            parse_links(&v(&[" https://github.com/ana ", "https://GitHub.com/ana"])).unwrap(),
+            v(&["https://github.com/ana"]),
+            "trimmed, normalized and deduplicated"
+        );
+        assert!(parse_links(&[]).unwrap().is_empty());
+        for bad in [
+            "http://example.com",
+            "javascript:alert(1)",
+            "https://user:pw@example.com",
+            "example.com",
+            "",
+        ] {
+            assert!(parse_links(&v(&[bad])).is_err(), "{bad}");
+        }
+        let long = format!("https://example.com/{}", "a".repeat(200));
+        assert!(parse_links(&v(&[&long])).is_err());
+        assert!(parse_links(&v(&["https://a.com"; 6])).is_err());
+    }
+
+    #[tokio::test]
+    async fn name_color_emoji_and_links_saved_and_pushed() {
+        let t = setup();
+        let u = t
+            .svc
+            .update_profile(
+                ANA,
+                ProfileChanges {
+                    name_color: Some("#FF8800".into()),
+                    status_emoji: Some("🎮".into()),
+                    links: Some(vec!["https://ana.dev".into()]),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(u.name_color, Some(0xff8800));
+        assert_eq!(u.links, vec!["https://ana.dev/".to_string()]);
+        let pushed = &t.pushes()[0].1;
+        assert_eq!(pushed.name_color, "#ff8800");
+        assert_eq!(pushed.status_emoji, "🎮");
+        assert_eq!(pushed.links, vec!["https://ana.dev/".to_string()]);
+
+        let u = t
+            .svc
+            .update_profile(
+                ANA,
+                ProfileChanges {
+                    links: Some(vec![]),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        assert!(u.links.is_empty());
+        assert_eq!(
+            u.status_emoji.as_deref(),
+            Some("🎮"),
+            "untouched field kept"
+        );
     }
 
     #[test]

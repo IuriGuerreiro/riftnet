@@ -1,6 +1,6 @@
 use super::dto::{
     ChannelNameBody, CreateServer, CreatedServerDto, JoinServer, MembersPage, MembersQuery,
-    NamedResource, ServerInvite, ServerSummaryDto,
+    NamedResource, NicknameBody, NicknameDto, ServerInvite, ServerSummaryDto,
 };
 use crate::{
     app::AppState,
@@ -143,6 +143,26 @@ pub async fn list_members(
         state
             .servers
             .list_members(auth.user_id, server_id, query.after_id)
+            .await?
+            .into(),
+    ))
+}
+
+pub async fn set_nickname(
+    auth: AuthUser,
+    State(state): State<AppState>,
+    Path(server_id): Path<i64>,
+    Json(body): Json<NicknameBody>,
+) -> Result<Json<NicknameDto>, ApiError> {
+    state.limiter.check(
+        &format!("server_nickname:user:{}", auth.user_id),
+        20,
+        Duration::from_secs(60),
+    )?;
+    Ok(Json(
+        state
+            .servers
+            .set_nickname(auth.user_id, server_id, &body.nickname)
             .await?
             .into(),
     ))

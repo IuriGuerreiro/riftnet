@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 
 import { cn } from "../../components/ui";
 import { useProfileCard } from "../../stores/profileCard";
@@ -10,11 +10,15 @@ export function ProfileTrigger({
   children,
   className,
   label,
+  nickname,
+  style,
 }: {
   userId: string | bigint | undefined;
   children: ReactNode;
   className?: string;
   label?: string;
+  nickname?: string;
+  style?: CSSProperties;
 }) {
   const toggle = useProfileCard((s) => s.toggle);
   if (userId === undefined) return <>{children}</>;
@@ -27,9 +31,14 @@ export function ProfileTrigger({
       onClick={(e) => {
         e.stopPropagation();
         const r = e.currentTarget.getBoundingClientRect();
-        toggle(userId.toString(), { top: r.top, left: r.left, right: r.right, bottom: r.bottom });
+        toggle(
+          userId.toString(),
+          { top: r.top, left: r.left, right: r.right, bottom: r.bottom },
+          nickname,
+        );
       }}
       className={cn("cursor-pointer text-left", className)}
+      style={style}
     >
       {children}
     </button>

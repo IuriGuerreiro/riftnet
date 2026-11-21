@@ -15,6 +15,9 @@ pub struct UserDto {
     pub banner_hash: Option<String>,
     pub accent_color: Option<String>,
     pub pronouns: Option<String>,
+    pub name_color: Option<String>,
+    pub status_emoji: Option<String>,
+    pub links: Vec<String>,
 }
 
 impl From<User> for UserDto {
@@ -22,6 +25,7 @@ impl From<User> for UserDto {
         let avatar_hash = u.avatar_hex();
         let banner_hash = u.banner_hex();
         let accent_color = u.accent_hex();
+        let name_color = u.name_color_hex();
         Self {
             id: u.id.to_string(),
             username: u.username,
@@ -32,6 +36,9 @@ impl From<User> for UserDto {
             banner_hash,
             accent_color,
             pronouns: u.pronouns,
+            name_color,
+            status_emoji: u.status_emoji,
+            links: u.links,
         }
     }
 }
@@ -48,6 +55,9 @@ impl From<&User> for protocol::v1::User {
             banner_hash: u.banner_hex().unwrap_or_default(),
             accent_color: u.accent_hex().unwrap_or_default(),
             pronouns: u.pronouns.clone().unwrap_or_default(),
+            name_color: u.name_color_hex().unwrap_or_default(),
+            status_emoji: u.status_emoji.clone().unwrap_or_default(),
+            links: u.links.clone(),
         }
     }
 }
@@ -71,6 +81,9 @@ pub struct UpdateProfileRequest {
     pub custom_status: Option<String>,
     pub pronouns: Option<String>,
     pub accent_color: Option<String>,
+    pub name_color: Option<String>,
+    pub status_emoji: Option<String>,
+    pub links: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize)]

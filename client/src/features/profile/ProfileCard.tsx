@@ -1,9 +1,12 @@
+import { ExternalLink } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { useBannerUrl, useLoadProfile } from "../../api/profile";
 import { Avatar } from "../../components/Avatar";
 import { StatusDot } from "../../components/StatusDot";
 import { Skeleton } from "../../components/ui";
+import { readableNameColor } from "../../lib/color";
+import { linkLabel } from "../../schemas/profile";
 import { useProfileCard } from "../../stores/profileCard";
 import { nameOf, type Profile, useProfile } from "../../stores/profiles";
 import { placeCard } from "./position";
@@ -21,10 +24,12 @@ export function ProfileCardHost() {
 function FloatingCard({
   userId,
   anchor,
+  nickname,
   onClose,
 }: {
   userId: string;
   anchor: { top: number; left: number; right: number; bottom: number };
+  nickname?: string;
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -86,7 +91,7 @@ function FloatingCard({
       }`}
     >
       {profile ? (
-        <ProfileCardBody profile={profile} />
+        <ProfileCardBody profile={profile} nickname={nickname} />
       ) : (
         <div className="space-y-3 rounded-panel border border-line bg-surface-1 p-4 shadow-pop">
           {load.isError ? (
@@ -106,9 +111,11 @@ function FloatingCard({
 export function ProfileCardBody({
   profile,
   bannerPreview,
+  nickname,
 }: {
   profile: Profile;
   bannerPreview?: string | null;
+  nickname?: string;
 }) {
   const { data: bannerUrl } = useBannerUrl(profile.id, profile.bannerHash);
   const banner = bannerPreview ?? bannerUrl ?? null;
@@ -134,16 +141,25 @@ export function ProfileCardBody({
             className="absolute bottom-1.5 right-1.5 size-5! border-4 border-surface-1"
           />
         </span>
-        <h2 className="mt-1 break-words text-lg font-bold leading-tight text-fg">
-          {nameOf(profile)}
+        <h2
+          className="mt-1 break-words text-lg font-bold leading-tight text-fg"
+          style={{ color: readableNameColor(profile.nameColor) }}
+        >
+          {nickname ?? nameOf(profile)}
         </h2>
+        {nickname && nickname !== nameOf(profile) && (
+          <p className="text-sm text-fg">{nameOf(profile)}</p>
+        )}
         <p className="text-sm text-fg-muted">
           {profile.username && <span>@{profile.username}</span>}
           {profile.username && profile.pronouns && <span aria-hidden> · </span>}
           {profile.pronouns && <span>{profile.pronouns}</span>}
         </p>
-        {profile.customStatus && (
-          <p className="mt-2 break-words text-sm text-fg">{profile.customStatus}</p>
+        {(profile.statusEmoji ?? profile.customStatus) && (
+          <p className="mt-2 break-words text-sm text-fg">
+            {profile.statusEmoji && <span className="mr-1">{profile.statusEmoji}</span>}
+            {profile.customStatus}
+          </p>
         )}
         {profile.bio && (
           <section className="mt-3 border-t border-line pt-3">
@@ -154,6 +170,24 @@ export function ProfileCardBody({
               {profile.bio}
             </p>
           </section>
+        )}
+        {profile.links.length > 0 && (
+          <ul aria-label="Links" className="mt-3 flex flex-wrap gap-2 border-t border-line pt-3">
+            {profile.links.map((link) => (
+              <li key={link}>
+                <a
+                  href={link}
+                  target="_blank"
+                  rel="noopener noreferrer nofollow"
+                  title={link}
+                  className="inline-flex items-center gap-1 rounded-control bg-surface-3 px-2 py-1 text-xs text-fg-muted hover:bg-surface-4 hover:text-fg"
+                >
+                  <ExternalLink size={12} aria-hidden />
+                  {linkLabel(link)}
+                </a>
+              </li>
+            ))}
+          </ul>
         )}
       </div>
     </article>

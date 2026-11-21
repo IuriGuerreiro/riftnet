@@ -17,7 +17,13 @@ pub struct CreatedServer {
 pub struct ServerMember {
     pub id: i64,
     pub name: String,
+    pub nickname: Option<String>,
     pub is_owner: bool,
+}
+
+pub struct NicknameChange {
+    pub nickname: Option<String>,
+    pub name: String,
 }
 pub enum ChannelWrite {
     Saved(Server),

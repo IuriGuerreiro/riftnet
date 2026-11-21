@@ -1,7 +1,12 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 
-import { forgetServer, onServerRemoved, refreshServerAccess } from "../../api/server-access";
+import {
+  forgetServer,
+  onServerMemberUpdated,
+  onServerRemoved,
+  refreshServerAccess,
+} from "../../api/server-access";
 import { useAuth } from "../../stores/auth";
 import { useCalls } from "../../stores/calls";
 import { useChat } from "../../stores/chat";
@@ -17,11 +22,15 @@ export function useRealtime() {
   const userId = useAuth((state) => state.user?.id);
   useEffect(() => {
     if (!ws) return;
-    const unsubscribe = onServerRemoved(ws, (serverId) =>
+    const stopRemoved = onServerRemoved(ws, (serverId) =>
       forgetServer(queryClient, userId, serverId),
     );
+    const stopMembers = onServerMemberUpdated(ws, queryClient, userId);
     void refreshServerAccess(queryClient, userId).catch(() => {});
-    return unsubscribe;
+    return () => {
+      stopRemoved();
+      stopMembers();
+    };
   }, [ws, queryClient, userId]);
 
   useEffect(() => {
