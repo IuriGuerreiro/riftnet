@@ -132,17 +132,17 @@ function CallMixer({ people, onClose }: { people: bigint[]; onClose: () => void 
                 onChange={(next) => prefs.setPersonVolume(id, next)}
               />
               <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => prefs.togglePersonMute(id)}
-                >
+                <Button size="sm" variant="secondary" onClick={() => prefs.togglePersonMute(id)}>
                   {muted ? "Unmute locally" : "Mute locally"}
                 </Button>
-                <Button size="sm" variant="ghost" onClick={() => {
-                  prefs.setPersonVolume(id, 100);
-                  if (muted) prefs.togglePersonMute(id);
-                }}>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    prefs.setPersonVolume(id, 100);
+                    if (muted) prefs.togglePersonMute(id);
+                  }}
+                >
                   Reset volume
                 </Button>
               </div>

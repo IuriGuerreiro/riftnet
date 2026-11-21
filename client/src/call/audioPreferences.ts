@@ -61,10 +61,11 @@ export const useAudioSettings = create<AudioSettings>()(
       update: (prefs) => set(prefs),
       setPersonVolume: (id, volume) =>
         set(({ people }) => ({ people: { ...people, [id.toString()]: volume } })),
-      togglePersonMute: (id) => set(({ mutedPeople }) => {
-        const key = id.toString();
-        return { mutedPeople: { ...mutedPeople, [key]: !mutedPeople[key] } };
-      }),
+      togglePersonMute: (id) =>
+        set(({ mutedPeople }) => {
+          const key = id.toString();
+          return { mutedPeople: { ...mutedPeople, [key]: !mutedPeople[key] } };
+        }),
       reset: () => set({ ...audioDefaults, people: {}, mutedPeople: {} }),
     }),
     {

@@ -741,7 +741,10 @@ function updatePlayback() {
   const now = performance.now();
   for (const [id, source] of voices) {
     const present = current?.participantIds.includes(id) ?? false;
-    const volume = present && !isParticipantMuted(prefs, id) ? (voiceVolume * participantVolume(prefs, id)) / 100 : 0;
+    const volume =
+      present && !isParticipantMuted(prefs, id)
+        ? (voiceVolume * participantVolume(prefs, id)) / 100
+        : 0;
     const level = source.playback.level();
     if (present && level >= 0.016) {
       source.lastSpeech = now;
