@@ -129,7 +129,9 @@ impl CallService {
             self.end_if(
                 call_id,
                 EndReason::Declined,
-                Box::new(move |c| still_ringing(c) && c.member_ids.contains(&me)),
+                Box::new(move |c| {
+                    c.member_ids.len() <= 2 && still_ringing(c) && c.member_ids.contains(&me)
+                }),
             )
             .await;
         }
@@ -217,6 +219,13 @@ impl CallService {
             .update(
                 call_id,
                 Box::new(move |c| {
+                    if sharing
+                        && c.participants
+                            .iter()
+                            .any(|p| p.sharing_screen && p.connection_id != connection_id)
+                    {
+                        return;
+                    }
                     for p in c
                         .participants
                         .iter_mut()
@@ -235,6 +244,16 @@ impl CallService {
             )
             .await
             .ok_or_else(not_found)?;
+        if !call
+            .participants
+            .iter()
+            .any(|p| p.connection_id == connection_id && p.sharing_screen == sharing)
+        {
+            return Err(ApiError::bad_request(
+                "screen_share_unavailable",
+                "Another participant is already sharing their screen",
+            ));
+        }
         self.push_updated(&call).await;
         Ok(call)
     }
@@ -807,6 +826,46 @@ mod tests {
         svc.decline(BOB, call.id).await.unwrap();
         assert_eq!(pushes(&events, ALICE), ["ended"]);
         assert!(svc.accept(BOB, call.id).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn declining_a_group_call_leaves_it_available_to_other_members() {
+        let (svc, events, _) = setup_with_members(vec![ALICE, BOB, EVE]);
+        let call = svc.start(ALICE, DM).await.unwrap();
+        svc.decline(BOB, call.id).await.unwrap();
+
+        assert!(!pushes(&events, EVE).iter().any(|event| event == "ended"));
+        assert!(svc.accept(EVE, call.id).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn only_one_participant_can_share_at_a_time() {
+        let (svc, _, _) = setup_with_members(vec![ALICE, BOB, EVE]);
+        let call = svc.start(ALICE, DM).await.unwrap();
+        for user in [ALICE, BOB, EVE] {
+            svc.join(user, user, user as u64, call.id, "offer".into())
+                .await
+                .unwrap();
+        }
+
+        let (alice, bob) = tokio::join!(
+            svc.screen_share(ALICE, ALICE as u64, call.id, true, false),
+            svc.screen_share(BOB, BOB as u64, call.id, true, false),
+        );
+        assert_ne!(alice.is_ok(), bob.is_ok());
+        let (sharer, next) = if alice.is_ok() {
+            (ALICE, BOB)
+        } else {
+            (BOB, ALICE)
+        };
+        svc.screen_share(sharer, sharer as u64, call.id, false, false)
+            .await
+            .unwrap();
+        assert!(
+            svc.screen_share(next, next as u64, call.id, true, false)
+                .await
+                .is_ok()
+        );
     }
 
     #[tokio::test]

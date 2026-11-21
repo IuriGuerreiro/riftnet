@@ -1,15 +1,28 @@
-import { Mic, MicOff, Phone, PhoneOff, ScreenShare, ScreenShareOff } from "lucide-react";
+import {
+  Mic,
+  MicOff,
+  Phone,
+  PhoneOff,
+  ScreenShare,
+  ScreenShareOff,
+  SlidersHorizontal,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import type { WsClient } from "../api/ws";
-import { Button, IconButton } from "../components/ui";
+import { Button, IconButton, Modal } from "../components/ui";
+import { useNameFor } from "../features/session/useRealtime";
 import { CallState, myId, peerConnection, useCalls } from "../stores/calls";
+import { isParticipantMuted, participantVolume, useAudioSettings } from "./audioPreferences";
+import { VolumeControl } from "./AudioSettings";
 import { ControlButton } from "./SharePlay";
 import { controlView, useControlInput } from "./useControlInput";
 
 export function CallBar({ ws, conversationId }: { ws: WsClient | null; conversationId: bigint }) {
   const { current, joined, muted, sharing, error, call, leave, toggleMute, toggleShare } =
     useCalls();
+  const audioError = useCalls((state) => state.audioError);
+  const [mixer, setMixer] = useState(false);
   const here = current?.conversationId === conversationId;
   const info = useStats(here && joined);
 
@@ -36,6 +49,11 @@ export function CallBar({ ws, conversationId }: { ws: WsClient | null; conversat
   return (
     <div className="flex items-center gap-2 text-xs font-normal text-fg-muted">
       {info && <span>{info}</span>}
+      {audioError && (
+        <span role="status" className="text-warning">
+          {audioError}
+        </span>
+      )}
       <span>{status}</span>
       <IconButton
         label={muted ? "Unmute" : "Mute"}
@@ -44,10 +62,16 @@ export function CallBar({ ws, conversationId }: { ws: WsClient | null; conversat
         onClick={toggleMute}
       />
       <IconButton
+        label="Mixer"
+        icon={<SlidersHorizontal size={18} />}
+        onClick={() => setMixer(true)}
+      />
+      {mixer && <CallMixer people={current.participantIds} onClose={() => setMixer(false)} />}
+      <IconButton
         label={sharing ? "Stop sharing" : "Share screen"}
         icon={sharing ? <ScreenShareOff size={18} /> : <ScreenShare size={18} />}
         active={sharing}
-        disabled={!joined}
+        disabled={!joined || (!sharing && current.sharingUserIds.some((id) => id !== myId()))}
         onClick={() => ws && void toggleShare(ws)}
       />
       <Button variant="danger" size="sm" disabled={!ws} onClick={() => ws && leave(ws)}>
@@ -55,6 +79,77 @@ export function CallBar({ ws, conversationId }: { ws: WsClient | null; conversat
         Hang up
       </Button>
     </div>
+  );
+}
+
+function CallMixer({ people, onClose }: { people: bigint[]; onClose: () => void }) {
+  const prefs = useAudioSettings();
+  const { deafened, speaking, toggleDeafen } = useCalls();
+  const localUser = myId();
+  const nameFor = useNameFor();
+  return (
+    <Modal open title="Call mixer" onClose={onClose}>
+      <VolumeControl
+        label="Call volume"
+        value={prefs.voiceVolume}
+        onChange={(voiceVolume) => prefs.update({ voiceVolume })}
+      />
+      <Button size="sm" variant="secondary" aria-pressed={deafened} onClick={toggleDeafen}>
+        {deafened ? "Undeafen" : "Deafen"}
+      </Button>
+      <VolumeControl
+        label="Stream volume"
+        value={prefs.streamVolume}
+        onChange={(streamVolume) => prefs.update({ streamVolume })}
+      />
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={prefs.normalizeVoices}
+          onChange={(event) => prefs.update({ normalizeVoices: event.currentTarget.checked })}
+        />
+        Balance voice loudness
+      </label>
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={prefs.duckStreams}
+          onChange={(event) => prefs.update({ duckStreams: event.currentTarget.checked })}
+        />
+        Lower stream audio while someone speaks
+      </label>
+      {people
+        .filter((id) => id !== localUser)
+        .map((id) => {
+          const volume = participantVolume(prefs, id);
+          const muted = isParticipantMuted(prefs, id);
+          return (
+            <section key={id.toString()} className="space-y-2 border-t border-surface-3 pt-3">
+              <VolumeControl
+                label={speaking.includes(id) ? `${nameFor(id)} · Speaking` : nameFor(id)}
+                value={volume}
+                max={200}
+                onChange={(next) => prefs.setPersonVolume(id, next)}
+              />
+              <div className="flex gap-2">
+                <Button size="sm" variant="secondary" onClick={() => prefs.togglePersonMute(id)}>
+                  {muted ? "Unmute locally" : "Mute locally"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    prefs.setPersonVolume(id, 100);
+                    if (muted) prefs.togglePersonMute(id);
+                  }}
+                >
+                  Reset volume
+                </Button>
+              </div>
+            </section>
+          );
+        })}
+    </Modal>
   );
 }
 
@@ -101,9 +196,10 @@ export function RemoteScreen({
   const view = controlView(current, myId());
   const controlling = view.role === "viewer" && view.granted && stream !== null;
   useControlInput(ref, controlling);
-  const hostId = view.role === "viewer" && view.granted
-    ? view.other
-    : current?.sharingUserIds.find((id) => id !== myId());
+  const hostId =
+    view.role === "viewer" && view.granted
+      ? view.other
+      : current?.sharingUserIds.find((id) => id !== myId());
   if (!stream) return null;
   return (
     <div className="fixed bottom-4 right-4 z-40 w-[48rem] max-w-[calc(100vw-2rem)]">
@@ -170,8 +266,8 @@ function useStats(active: boolean) {
         if (r.type === "candidate-pair" && r.nominated)
           rtt = Math.round((r.currentRoundTripTime ?? 0) * 1000);
         if (r.type === "inbound-rtp" && r.kind === "audio") {
-          got = r.packetsReceived ?? 0;
-          lost = r.packetsLost ?? 0;
+          got += r.packetsReceived ?? 0;
+          lost += r.packetsLost ?? 0;
         }
         if (r.type === "inbound-rtp" && r.kind === "video" && r.framesPerSecond) {
           video = `⬇ ${r.frameWidth}x${r.frameHeight}@${r.framesPerSecond} ${mbps(r)} · ${r.packetsLost ?? 0} lost`;

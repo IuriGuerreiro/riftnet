@@ -1,6 +1,7 @@
 import { useSearch } from "@tanstack/react-router";
 import { useState } from "react";
 
+import { AudioSettings } from "../call/AudioSettings";
 import { IncomingCall, RemoteScreen } from "../call/CallBar";
 import { ControlBanner } from "../call/SharePlay";
 import { ProfilePanel } from "../components/ProfilePanel";
@@ -29,6 +30,7 @@ export function HomePage() {
   const view = useUi((s) => s.view);
   const nameFor = useNameFor();
   const [editingProfile, setEditingProfile] = useState(false);
+  const [editingAudio, setEditingAudio] = useState(false);
   const [creating, setCreating] = useState<NewConversation | null>(null);
 
   return (
@@ -37,9 +39,17 @@ export function HomePage() {
       <IncomingCall ws={ws} callerName={(id) => nameFor(id)} />
       <ControlBanner ws={ws} nameFor={(id) => nameFor(id)} />
       {editingProfile && me && (
-        <ProfilePanel myId={me.id.toString()} onClose={() => setEditingProfile(false)} />
+        <ProfilePanel
+          myId={me.id.toString()}
+          onClose={() => setEditingProfile(false)}
+          onAudio={() => {
+            setEditingProfile(false);
+            setEditingAudio(true);
+          }}
+        />
       )}
       <ProfileCardHost />
+      {editingAudio && <AudioSettings onClose={() => setEditingAudio(false)} />}
       {creating && <NewConversationDialog kind={creating} onClose={() => setCreating(null)} />}
       <ServerRail onCreateGroup={() => setCreating("group")} />
       <Sidebar onEditProfile={() => setEditingProfile(true)} onNew={setCreating} />

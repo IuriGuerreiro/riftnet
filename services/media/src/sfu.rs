@@ -1,13 +1,12 @@
-// WARN: rooms of 2 only; 3+ people need renegotiation (see docs/architecture/calls.md).
 use std::collections::HashMap;
 use std::net::{SocketAddr, UdpSocket};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::{Duration, Instant};
 
-use str0m::change::SdpOffer;
+use str0m::change::{SdpAnswer, SdpOffer, SdpPendingOffer};
 use str0m::channel::{ChannelId, Reliability};
-use str0m::media::{KeyframeRequestKind, MediaData, MediaKind, Mid};
+use str0m::media::{Direction, KeyframeRequestKind, MediaData, MediaKind, Mid};
 use str0m::net::{Protocol, Receive};
 use str0m::{Candidate, Event, IceConnectionState, Input, Output, Rtc};
 
@@ -35,6 +34,140 @@ const INPUT_RATE_PER_S: f64 = 200.0;
 const INPUT_BURST: f64 = 400.0;
 const RELIABLE: &str = "input";
 const LATEST: &str = "input-move";
+const AUDIO_SIGNAL: &str = "call-audio-v1";
+const MAX_AUDIO_SDP: usize = 64 * 1024;
+
+#[derive(Clone, Copy)]
+enum Source {
+    Voice,
+    ScreenAudio,
+    Video,
+}
+
+struct AudioTracks {
+    voice: Mid,
+    screen: Mid,
+}
+
+#[derive(Default)]
+struct AudioNegotiation {
+    channel: Option<ChannelId>,
+    screen_input: Option<Mid>,
+    tracks: HashMap<u64, AudioTracks>,
+    pending: Option<(SdpPendingOffer, Instant)>,
+}
+
+impl AudioNegotiation {
+    fn sync(
+        &mut self,
+        rtc: &mut Rtc,
+        self_id: u64,
+        roster: &[(u64, u64)],
+        now: Instant,
+    ) -> anyhow::Result<()> {
+        let Some(channel) = self.channel else {
+            return Ok(());
+        };
+        if let Some((_, sent)) = &self.pending {
+            anyhow::ensure!(
+                now.duration_since(*sent) < Duration::from_secs(15),
+                "audio SDP timed out"
+            );
+            return Ok(());
+        }
+        let mut changes = rtc.sdp_api();
+        if self.screen_input.is_none() {
+            self.screen_input =
+                Some(changes.add_media(MediaKind::Audio, Direction::RecvOnly, None, None, None));
+        }
+        self.tracks.retain(|id, tracks| {
+            if roster.iter().any(|(peer, _)| peer == id) {
+                true
+            } else {
+                changes.stop_media(tracks.voice);
+                changes.stop_media(tracks.screen);
+                false
+            }
+        });
+        for &(peer, user) in roster.iter().filter(|(id, _)| *id != self_id) {
+            self.tracks.entry(peer).or_insert_with(|| AudioTracks {
+                voice: changes.add_media(
+                    MediaKind::Audio,
+                    Direction::SendOnly,
+                    None,
+                    Some(format!("voice-{user}-{peer}")),
+                    None,
+                ),
+                screen: changes.add_media(
+                    MediaKind::Audio,
+                    Direction::SendOnly,
+                    None,
+                    Some(format!("screen-{user}-{peer}")),
+                    None,
+                ),
+            });
+        }
+        if let Some((offer, pending)) = changes.apply() {
+            let sdp = offer.to_sdp_string();
+            let sdp = with_screen_stereo(&sdp, self.screen_input);
+            anyhow::ensure!(sdp.len() <= MAX_AUDIO_SDP, "audio SDP is too large");
+            let written = rtc
+                .channel(channel)
+                .ok_or_else(|| anyhow::anyhow!("audio channel closed"))?
+                .write(false, sdp.as_bytes())?;
+            anyhow::ensure!(written, "audio channel is full");
+            self.pending = Some((pending, now));
+        }
+        Ok(())
+    }
+
+    fn accept_answer(&mut self, rtc: &mut Rtc, data: &[u8]) -> anyhow::Result<()> {
+        anyhow::ensure!(data.len() <= MAX_AUDIO_SDP, "audio SDP is too large");
+        let Some((pending, _)) = self.pending.take() else {
+            anyhow::bail!("unexpected audio SDP answer")
+        };
+        let answer = SdpAnswer::from_sdp_string(std::str::from_utf8(data)?)?;
+        rtc.sdp_api().accept_answer(pending, answer)?;
+        Ok(())
+    }
+}
+
+fn with_screen_stereo(sdp: &str, input: Option<Mid>) -> String {
+    let Some(input) = input else {
+        return sdp.to_owned();
+    };
+    let input = input.to_string();
+    sdp.split("\r\nm=")
+        .map(|section| {
+            if !section
+                .lines()
+                .any(|line| line.strip_prefix("a=mid:") == Some(input.as_str()))
+            {
+                return section.to_owned();
+            }
+            let opus = section.lines().find_map(|line| {
+                let (pt, codec) = line.strip_prefix("a=rtpmap:")?.split_once(' ')?;
+                codec.eq_ignore_ascii_case("opus/48000/2").then_some(pt)
+            });
+            section
+                .split_inclusive("\r\n")
+                .map(|line| {
+                    if opus.is_some_and(|pt| {
+                        line.strip_prefix("a=fmtp:")
+                            .and_then(|value| value.split_once(' '))
+                            .is_some_and(|(payload, _)| payload == pt)
+                    }) && !line.contains(";stereo=")
+                    {
+                        format!("{};stereo=1\r\n", line.trim_end())
+                    } else {
+                        line.to_owned()
+                    }
+                })
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\r\nm=")
+}
 
 /// Token bucket for one peer's input messages.
 struct RateLimit {
@@ -182,6 +315,7 @@ struct Peer {
     channels: HashMap<String, ChannelId>,
     limiter: RateLimit,
     audio: Option<Mid>,
+    negotiated_audio: AudioNegotiation,
     video: Option<Mid>,
     /// When `media.join` arrived. Cleared once the first media is seen.
     awaiting_media: Option<Instant>,
@@ -298,6 +432,7 @@ fn run(
     let mut buf = vec![0u8; 2000];
     // Room id -> when its first peer joined.
     let mut rooms: HashMap<u64, Instant> = HashMap::new();
+    let mut roster: HashMap<u64, Vec<(u64, u64)>> = HashMap::new();
     record_membership(&peers, &rooms);
 
     // Loop saturation: per-pass work time, plus busy share over a window.
@@ -335,6 +470,7 @@ fn run(
                 } => {
                     tracing::info!(peer.id = peer_id, room.id = room, "peer added");
                     rooms.entry(room).or_insert(requested_at);
+                    roster.entry(room).or_default().push((peer_id, user_id));
                     peers.push(Peer {
                         id: peer_id,
                         room,
@@ -343,6 +479,7 @@ fn run(
                         channels: HashMap::new(),
                         limiter: RateLimit::new(requested_at),
                         audio: None,
+                        negotiated_audio: AudioNegotiation::default(),
                         video: None,
                         awaiting_media: Some(requested_at),
                         end_reason: None,
@@ -367,7 +504,7 @@ fn run(
             record_membership(&peers, &rooms);
         }
 
-        let mut forward: Vec<(u64, u64, MediaKind, MediaData)> = Vec::new();
+        let mut forward: Vec<(u64, u64, Source, MediaData)> = Vec::new();
         let mut keyframes: Vec<(u64, u64, KeyframeRequestKind)> = Vec::new();
         // (room, grant, host peer, label, tagged payload)
         let mut relay: Vec<(u64, u64, u64, String, Vec<u8>)> = Vec::new();
@@ -392,7 +529,9 @@ fn run(
                     }
                     Ok(Output::Event(e)) => match e {
                         Event::MediaAdded(m) => match m.kind {
-                            MediaKind::Audio => p.audio = Some(m.mid),
+                            MediaKind::Audio => {
+                                p.audio.get_or_insert(m.mid);
+                            }
                             MediaKind::Video => p.video = Some(m.mid),
                         },
                         Event::MediaData(d) => {
@@ -400,18 +539,22 @@ fn run(
                                 metrics::histogram!(m::JOIN_LATENCY_MS)
                                     .record(at.elapsed().as_secs_f64() * 1000.0);
                             }
-                            let kind = if Some(d.mid) == p.video {
-                                MediaKind::Video
+                            let source = if Some(d.mid) == p.audio {
+                                Source::Voice
+                            } else if Some(d.mid) == p.negotiated_audio.screen_input {
+                                Source::ScreenAudio
+                            } else if Some(d.mid) == p.video {
+                                Source::Video
                             } else {
-                                MediaKind::Audio
+                                continue;
                             };
-                            if kind != MediaKind::Video
+                            if matches!(source, Source::Voice)
                                 || routes
                                     .get(&p.room)
                                     .and_then(|s| s.active)
                                     .is_none_or(|r| r.host == p.id)
                             {
-                                forward.push((p.id, p.room, kind, d));
+                                forward.push((p.id, p.room, source, d));
                             }
                         }
                         Event::KeyframeRequest(r) => {
@@ -456,6 +599,19 @@ fn run(
                             }
                         }
                         Event::ChannelOpen(id, label) => {
+                            if label == AUDIO_SIGNAL {
+                                let valid = p
+                                    .rtc
+                                    .channel(id)
+                                    .and_then(|c| c.config().cloned())
+                                    .is_some_and(|c| {
+                                        c.ordered && matches!(c.reliability, Reliability::Reliable)
+                                    });
+                                if !valid || p.negotiated_audio.channel.replace(id).is_some() {
+                                    p.end("invalid_audio_channel");
+                                }
+                                continue;
+                            }
                             if !is_relayed(&label) {
                                 continue;
                             }
@@ -475,6 +631,9 @@ fn run(
                             p.channels.insert(label, id);
                         }
                         Event::ChannelClose(id) => {
+                            if p.negotiated_audio.channel == Some(id) {
+                                p.end("audio_channel_closed");
+                            }
                             if p.channels.get(RELIABLE) == Some(&id) {
                                 if let Some(r) = routes
                                     .get(&p.room)
@@ -487,6 +646,15 @@ fn run(
                             p.channels.retain(|_, c| *c != id);
                         }
                         Event::ChannelData(d) => {
+                            if p.negotiated_audio.channel == Some(d.id) {
+                                if let Err(error) =
+                                    p.negotiated_audio.accept_answer(&mut p.rtc, &d.data)
+                                {
+                                    tracing::warn!(peer.id = p.id, %error, "invalid audio answer");
+                                    p.end("invalid_audio_answer");
+                                }
+                                continue;
+                            }
                             let Some(label) = p
                                 .channels
                                 .iter()
@@ -528,14 +696,37 @@ fn run(
             }
         }
 
+        for p in peers
+            .iter_mut()
+            .filter(|p| p.rtc.is_alive() && p.negotiated_audio.channel.is_some())
+        {
+            if let Err(error) =
+                p.negotiated_audio
+                    .sync(&mut p.rtc, p.id, &roster[&p.room], Instant::now())
+            {
+                tracing::warn!(peer.id = p.id, %error, "could not negotiate audio tracks");
+                p.end("audio_negotiation_failed");
+            }
+        }
+
         for (from, room, kind, data) in &forward {
             for p in peers
                 .iter_mut()
-                .filter(|p| p.id != *from && p.room == *room)
+                .filter(|p| p.id != *from && p.room == *room && p.rtc.is_alive())
             {
+                let tracks = p.negotiated_audio.tracks.get(from);
+                let legacy_peer = roster
+                    .get(room)
+                    .and_then(|peers| peers.iter().find(|(id, _)| *id != p.id));
                 let (mid, label) = match kind {
-                    MediaKind::Audio => (p.audio, "audio"),
-                    MediaKind::Video => (p.video, "video"),
+                    Source::Voice if p.negotiated_audio.channel.is_none() => (
+                        p.audio
+                            .filter(|_| legacy_peer.is_some_and(|(id, _)| id == from)),
+                        "audio",
+                    ),
+                    Source::Voice => (tracks.map(|tracks| tracks.voice), "audio"),
+                    Source::ScreenAudio => (tracks.map(|tracks| tracks.screen), "screen_audio"),
+                    Source::Video => (p.video, "video"),
                 };
                 let dropped = |reason: &'static str| {
                     metrics::counter!(m::FORWARD_DROPPED, "kind" => label, "reason" => reason)
@@ -610,6 +801,12 @@ fn run(
                 peers.into_iter().partition(|p| !p.rtc.is_alive());
             peers = alive;
             for p in gone {
+                if let Some(members) = roster.get_mut(&p.room) {
+                    members.retain(|(id, _)| *id != p.id);
+                    if members.is_empty() {
+                        roster.remove(&p.room);
+                    }
+                }
                 let reason = p.end_reason.unwrap_or("closed");
                 tracing::info!(peer.id = p.id, reason, "peer removed");
                 for slot in routes.values_mut() {

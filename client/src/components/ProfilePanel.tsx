@@ -68,7 +68,15 @@ function orNull(s: string | undefined): string | null {
   return t === undefined || t === "" ? null : t;
 }
 
-export function ProfilePanel({ myId, onClose }: { myId: string; onClose: () => void }) {
+export function ProfilePanel({
+  myId,
+  onClose,
+  onAudio,
+}: {
+  myId: string;
+  onClose: () => void;
+  onAudio: () => void;
+}) {
   const me = useProfile(myId);
   const update = useUpdateProfile();
   const uploadAvatar = useUploadAvatar();
@@ -113,6 +121,9 @@ export function ProfilePanel({ myId, onClose }: { myId: string; onClose: () => v
   return (
     <Modal open title="Edit profile" onClose={onClose}>
       <PresenceSettings />
+      <Button variant="secondary" size="sm" onClick={onAudio}>
+        Voice &amp; Audio
+      </Button>
 
       {previewProfile && (
         <section aria-label="Profile preview">
