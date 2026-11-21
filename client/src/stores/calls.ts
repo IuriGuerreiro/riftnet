@@ -2,6 +2,8 @@ import { create as createProto } from "@bufbuild/protobuf";
 import { create } from "zustand";
 
 import type { WsClient } from "../api/ws";
+import { participantVolume, useAudioSettings } from "../call/audioPreferences";
+import { CallPlayback, captureMicrophone, type Microphone } from "../call/callAudio";
 import {
   decodeTagged,
   encodeInput,
@@ -34,6 +36,10 @@ interface CallsState {
   incoming: Call | null;
   joined: boolean;
   muted: boolean;
+  deafened: boolean;
+  audioError: string | null;
+  audioStatus: string | null;
+  toggleDeafen: () => void;
   sharing: boolean;
   remoteScreen: MediaStream | null;
   error: string | null;
@@ -57,7 +63,10 @@ interface CallsState {
 }
 
 let pc: RTCPeerConnection | null = null;
-let mic: MediaStream | null = null;
+let mic: Microphone | null = null;
+let micSender: RTCRtpSender | null = null;
+let micChanges = Promise.resolve();
+let mediaGeneration = 0;
 let screen: MediaStream | null = null;
 let videoSender: RTCRtpSender | null = null;
 let picking = false;
@@ -72,8 +81,7 @@ let armedController: bigint | null = null;
 let hostSupported: Promise<boolean> | null = null;
 let unlistenHotkey: (() => void) | null = null;
 let liveWs: WsClient | null = null;
-const speaker = new Audio();
-speaker.autoplay = true;
+const speaker = new CallPlayback();
 
 export function peerConnection() {
   return pc;
@@ -172,11 +180,14 @@ function onRemoteInput(data: unknown, lossy: boolean) {
 function hangUpMedia() {
   disarm();
   inputCh = moveCh = null;
+  mediaGeneration++;
   pc?.close();
-  for (const t of [...(mic?.getTracks() ?? []), ...(screen?.getTracks() ?? [])]) t.stop();
-  pc = mic = screen = screenIn = null;
+  mic?.close();
+  for (const t of screen?.getTracks() ?? []) t.stop();
+  pc = mic = micSender = screen = screenIn = null;
   videoSender = null;
-  speaker.srcObject = null;
+  speaker.close();
+  useCalls.setState({ deafened: false, audioError: null, audioStatus: null });
 }
 
 export const useCalls = create<CallsState>((set, get) => {
@@ -184,13 +195,23 @@ export const useCalls = create<CallsState>((set, get) => {
     ws: WsClient,
     target: { kind: "call"; call: Call } | { kind: "friend"; id: bigint },
   ) {
-    mic = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-    });
-    pc = new RTCPeerConnection();
-    const micTrack = mic.getAudioTracks()[0];
-    if (!micTrack) throw new Error("No microphone found");
-    pc.addTransceiver(micTrack, { direction: "sendrecv", streams: [mic] });
+    const generation = mediaGeneration;
+    const prefs = useAudioSettings.getState();
+    const captured = await captureMicrophone(prefs, true);
+    if (generation !== mediaGeneration) {
+      captured.close();
+      return;
+    }
+    mic = captured;
+    const connection = new RTCPeerConnection();
+    pc = connection;
+    mic.track.enabled = !get().muted && !get().deafened;
+    micSender = pc.addTransceiver(mic.track, { direction: "sendrecv" }).sender;
+    watchMicrophone(mic, prefs);
+    const latest = useAudioSettings.getState();
+    if (prefs.inputId !== latest.inputId || prefs.suppression !== latest.suppression)
+      refreshMicrophone();
+    else if (mic.gain) mic.gain.gain.value = latest.inputVolume / 100;
     // WARN: the idle video slot avoids renegotiation, which only works for 1:1 calls.
     videoSender = pc.addTransceiver("video", { direction: "sendrecv" }).sender;
     inputCh = pc.createDataChannel(RELIABLE, { ordered: true });
@@ -202,20 +223,23 @@ export const useCalls = create<CallsState>((set, get) => {
       ch.onclose = () => hostLost("Remote control ended: connection lost");
     }
     pc.ontrack = (e) => {
+      if (pc !== connection) return;
       const track = e.track;
       if (track.kind === "audio") {
-        speaker.srcObject = new MediaStream([track]);
+        speaker.attach(track);
+        configureSpeaker();
         return;
       }
       screenIn = new MediaStream([track]);
       showScreen(get().current);
     };
     pc.onconnectionstatechange = () => {
-      const state = pc?.connectionState;
+      if (pc !== connection) return;
+      const state = connection.connectionState;
       if (state === "disconnected" || state === "failed" || state === "closed")
         hostLost("Remote control ended: connection lost");
-      if (pc?.connectionState === "connected") set({ joined: true });
-      if (pc?.connectionState === "failed")
+      if (state === "connected") set({ joined: true });
+      if (state === "failed")
         set({ error: "Audio connection failed", joined: false });
     };
     const offer = await pc.createOffer();
@@ -240,9 +264,12 @@ export const useCalls = create<CallsState>((set, get) => {
           },
     );
     if (reply.case !== "callJoined") throw new Error("Could not join the call");
-    await pc.setRemoteDescription({ type: "answer", sdp: reply.value.sdpAnswer });
+    if (pc !== connection) return;
+    await connection.setRemoteDescription({ type: "answer", sdp: reply.value.sdpAnswer });
+    if (pc !== connection) return;
     set({ current: reply.value.call ?? (target.kind === "friend" ? null : target.call) });
     showScreen(get().current);
+    configureSpeaker();
   }
 
   function showScreen(call: Call | null) {
@@ -345,6 +372,13 @@ export const useCalls = create<CallsState>((set, get) => {
     incoming: null,
     joined: false,
     muted: false,
+    deafened: false,
+    audioError: null,
+    audioStatus: null,
+    toggleDeafen: () => {
+      set(({ deafened }) => ({ deafened: !deafened }));
+      syncMicrophoneMute();
+    },
     sharing: false,
     remoteScreen: null,
     error: null,
@@ -447,8 +481,8 @@ export const useCalls = create<CallsState>((set, get) => {
 
     toggleMute: () => {
       const muted = !get().muted;
-      for (const t of mic?.getAudioTracks() ?? []) t.enabled = !muted;
       set({ muted });
+      syncMicrophoneMute();
     },
 
     toggleShare: async (ws) => {
@@ -530,3 +564,96 @@ export const useCalls = create<CallsState>((set, get) => {
 });
 
 export { CallState };
+
+function syncMicrophoneMute() {
+  const { muted, deafened } = useCalls.getState();
+  if (mic) mic.track.enabled = !muted && !deafened;
+}
+
+function configureSpeaker() {
+  const { current, deafened } = useCalls.getState();
+  const prefs = useAudioSettings.getState();
+  const peer =
+    current?.participantIds.find((id) => id !== me) ??
+    (current?.callerId !== me ? current?.callerId : undefined);
+  speaker.configure(
+    deafened ? 0 : (prefs.voiceVolume * participantVolume(prefs, peer)) / 10000,
+    prefs.outputId,
+  );
+}
+
+function watchMicrophone(
+  microphone: Microphone,
+  prefs: ReturnType<typeof useAudioSettings.getState>,
+) {
+  const usingDefault = prefs.inputId && microphone.input.getSettings().deviceId !== prefs.inputId;
+  const enhancedUnavailable = prefs.suppression === "enhanced" && !microphone.enhanced;
+  useCalls.setState({
+    audioError: null,
+    audioStatus:
+      [
+        usingDefault ? "Using the system microphone." : "",
+        enhancedUnavailable ? "Enhanced suppression is unavailable. Using Standard." : "",
+      ]
+        .filter(Boolean)
+        .join(" ") || null,
+  });
+  microphone.input.addEventListener(
+    "ended",
+    () => {
+      if (mic === microphone) refreshMicrophone(true);
+    },
+    { once: true },
+  );
+}
+
+function refreshMicrophone(allowDefault = false) {
+  const sender = micSender;
+  const generation = mediaGeneration;
+  if (!sender) return;
+  micChanges = micChanges
+    .then(async () => {
+      if (generation !== mediaGeneration) return;
+      const prefs = useAudioSettings.getState();
+      const next = await captureMicrophone(prefs, allowDefault);
+      if (generation !== mediaGeneration) {
+        next.close();
+        return;
+      }
+      next.track.enabled = !useCalls.getState().muted && !useCalls.getState().deafened;
+      try {
+        await sender.replaceTrack(next.track);
+      } catch (error) {
+        next.close();
+        throw error;
+      }
+      if (generation !== mediaGeneration) {
+        next.close();
+        return;
+      }
+      mic?.close();
+      mic = next;
+      syncMicrophoneMute();
+      if (mic.gain) mic.gain.gain.value = useAudioSettings.getState().inputVolume / 100;
+      watchMicrophone(mic, prefs);
+    })
+    .catch((error: unknown) => {
+      if (generation === mediaGeneration)
+        useCalls.setState({
+          audioError: error instanceof Error ? error.message : "Could not switch microphone",
+        });
+    });
+}
+
+useCalls.subscribe((state, previous) => {
+  if (state.current !== previous.current || state.deafened !== previous.deafened)
+    configureSpeaker();
+});
+
+useAudioSettings.subscribe((prefs, previous) => {
+  configureSpeaker();
+  if (mic?.gain && prefs.inputVolume !== previous.inputVolume)
+    mic.gain.gain.setTargetAtTime(prefs.inputVolume / 100, mic.gain.context.currentTime, 0.015);
+  if (prefs.inputId !== previous.inputId || prefs.suppression !== previous.suppression)
+    refreshMicrophone();
+});

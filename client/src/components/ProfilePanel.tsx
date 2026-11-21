@@ -15,7 +15,15 @@ import { Avatar } from "./Avatar";
 import { PresenceSettings } from "./PresenceSettings";
 import { Button, ErrorText, Input, Modal, Textarea } from "./ui";
 
-export function ProfilePanel({ myId, onClose }: { myId: string; onClose: () => void }) {
+export function ProfilePanel({
+  myId,
+  onClose,
+  onAudio,
+}: {
+  myId: string;
+  onClose: () => void;
+  onAudio: () => void;
+}) {
   const me = useProfile(myId);
   const update = useUpdateProfile();
   const upload = useUploadAvatar();
@@ -56,6 +64,9 @@ export function ProfilePanel({ myId, onClose }: { myId: string; onClose: () => v
   return (
     <Modal open title="Edit profile" onClose={onClose}>
       <PresenceSettings />
+      <Button variant="secondary" size="sm" onClick={onAudio}>
+        Voice &amp; Audio
+      </Button>
       <section className="flex items-center gap-4">
         {preview ? (
           <img
