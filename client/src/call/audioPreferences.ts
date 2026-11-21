@@ -49,7 +49,6 @@ type AudioSettings = AudioPreferences & {
   update: (prefs: Partial<AudioPreferences>) => void;
   setPersonVolume: (id: bigint, volume: number) => void;
   togglePersonMute: (id: bigint) => void;
-  reset: () => void;
 };
 
 export const useAudioSettings = create<AudioSettings>()(
@@ -66,7 +65,6 @@ export const useAudioSettings = create<AudioSettings>()(
           const key = id.toString();
           return { mutedPeople: { ...mutedPeople, [key]: !mutedPeople[key] } };
         }),
-      reset: () => set({ ...audioDefaults, people: {}, mutedPeople: {} }),
     }),
     {
       name: "voice-audio",

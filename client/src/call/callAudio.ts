@@ -186,7 +186,7 @@ export class CallPlayback {
         .resume()
         .then(() => {
           if (this.context !== context || context.state !== "running") return;
-          // Chromium keeps decoding the remote track while this element plays it.
+          // INVARIANT: Chromium needs the original stream in a playing element to decode it.
           this.sourceAudio.volume = 0;
           this.gain = gain;
           this.analyser = analyser;
