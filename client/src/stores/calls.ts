@@ -51,8 +51,7 @@ interface CallsState {
   answerControl: (
     ws: WsClient,
     requestId: bigint,
-    approve: boolean,
-    monitor?: Rect,
+    approval: { monitor: Rect; warningAcknowledged: true } | null,
   ) => Promise<void>;
   revokeControl: (ws: WsClient) => Promise<void>;
 }
@@ -497,16 +496,15 @@ export const useCalls = create<CallsState>((set, get) => {
 
     requestControl: (ws, hostId) => sendControl(ws, CallControlAction.REQUEST, hostId),
 
-    answerControl: async (ws, requestId, approve, monitor) => {
+    answerControl: async (ws, requestId, approval) => {
       const c = get().current?.control;
       if (!c || c.hostId !== me || c.granted || c.requestId !== requestId) return;
-      if (approve) {
+      if (approval) {
         try {
-          if (!monitor) throw new Error("Pick the shared screen first");
           await tauri("share_play_approve", {
             controllerId: c.controllerId.toString(),
             requestId: requestId.toString(),
-            monitor,
+            ...approval,
           });
         } catch (e) {
           disarm();
@@ -515,10 +513,10 @@ export const useCalls = create<CallsState>((set, get) => {
           return;
         }
       }
-      if (!approve) disarm();
+      if (!approval) disarm();
       await sendControl(
         ws,
-        approve ? CallControlAction.GRANT : CallControlAction.DENY,
+        approval ? CallControlAction.GRANT : CallControlAction.DENY,
         c.controllerId,
         requestId,
       );

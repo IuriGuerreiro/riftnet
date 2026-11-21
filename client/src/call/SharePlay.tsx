@@ -22,16 +22,16 @@ export function ControlBanner({ ws, nameFor }: { ws: WsClient | null; nameFor: N
   return (
     <div
       role="alert"
-      className="fixed left-1/2 top-4 z-50 flex -translate-x-1/2 items-center gap-3 rounded-panel bg-surface-2 px-4 py-3 shadow-pop ring-2 ring-warning"
+      className="fixed left-1/2 top-4 z-50 flex w-max max-w-[calc(100%-2rem)] -translate-x-1/2 items-start gap-3 rounded-panel bg-surface-2 px-4 py-3 shadow-pop ring-2 ring-warning"
     >
-      <ShieldAlert size={18} className="text-warning" />
+      <ShieldAlert size={18} className="shrink-0 text-warning" />
       {armedFor !== null ? (
         <>
           <span className="text-sm">
             <b>{nameFor(armedFor)}</b> is controlling your screen · {REVOKE_HOTKEY_LABEL} to stop
           </span>
           <Button size="sm" variant="danger" onClick={() => void revokeControl(ws)}>
-            Revoke
+            Stop control
           </Button>
         </>
       ) : (
@@ -40,7 +40,10 @@ export function ControlBanner({ ws, nameFor }: { ws: WsClient | null; nameFor: N
           <ApproveRequest
             key={requestId.toString()}
             name={nameFor(view.other)}
-            onAnswer={(approve, monitor) => void answerControl(ws, requestId, approve, monitor)}
+            onGrant={(monitor) =>
+              void answerControl(ws, requestId, { monitor, warningAcknowledged: true })
+            }
+            onDeny={() => void answerControl(ws, requestId, null)}
           />
         )
       )}
@@ -50,12 +53,15 @@ export function ControlBanner({ ws, nameFor }: { ws: WsClient | null; nameFor: N
 
 function ApproveRequest({
   name,
-  onAnswer,
+  onGrant,
+  onDeny,
 }: {
   name: string;
-  onAnswer: (approve: boolean, monitor?: Rect) => void;
+  onGrant: (monitor: Rect) => void;
+  onDeny: () => void;
 }) {
   const [monitors, setMonitors] = useState<MonitorInfo[]>([]);
+  const [acknowledged, setAcknowledged] = useState(false);
   const [picked, setPicked] = useState<number | null>(null);
   useEffect(() => {
     let live = true;
@@ -71,13 +77,17 @@ function ApproveRequest({
   const monitor = picked === null ? undefined : monitors[picked]?.rect;
 
   return (
-    <>
-      <span className="text-sm">
-        <b>{name}</b> wants to control your keyboard and mouse on
-      </span>
+    <div className="flex max-w-sm flex-col gap-3 text-sm">
+      <p>
+        <b>{name}</b> wants to control your keyboard and mouse.
+      </p>
+      <p>
+        Only give control of your PC to someone you trust. To end access at any time, click{" "}
+        <b>Stop control</b> or press <b>{REVOKE_HOTKEY_LABEL}</b>.
+      </p>
       <select
         aria-label="Shared screen"
-        className="rounded bg-surface-3 px-2 py-1 text-sm"
+        className="rounded bg-surface-3 px-2 py-1"
         value={picked ?? ""}
         onChange={(e) => setPicked(e.target.value === "" ? null : Number(e.target.value))}
       >
@@ -88,13 +98,30 @@ function ApproveRequest({
           </option>
         ))}
       </select>
-      <Button size="sm" disabled={!monitor} onClick={() => onAnswer(true, monitor)}>
-        Approve
-      </Button>
-      <Button size="sm" variant="ghost" onClick={() => onAnswer(false)}>
-        Deny
-      </Button>
-    </>
+      <label className="flex items-start gap-2">
+        <input
+          type="checkbox"
+          className="mt-1"
+          checked={acknowledged}
+          onChange={(e) => setAcknowledged(e.target.checked)}
+        />
+        <span>I’ve read this warning and understand how to stop control.</span>
+      </label>
+      <div className="flex justify-end gap-2">
+        <Button size="sm" variant="ghost" onClick={onDeny}>
+          Deny
+        </Button>
+        <Button
+          size="sm"
+          disabled={!acknowledged || !monitor}
+          onClick={() => {
+            if (acknowledged && monitor) onGrant(monitor);
+          }}
+        >
+          Grant control
+        </Button>
+      </div>
+    </div>
   );
 }
 

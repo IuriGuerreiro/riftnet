@@ -31,7 +31,9 @@ pub const REVOKE_HOTKEY: &str = "CommandOrControl+Shift+F12";
 pub const REVOKE_EVENT: &str = "share-play://revoked";
 /// ~2 s of input at the SFU's rate limit. Full = something is wrong: revoke.
 const INPUT_QUEUE: usize = 256;
-const TICK: Duration = Duration::from_millis(50);
+const ACTIVE_TICK: Duration = Duration::from_millis(8);
+const IDLE_TICK: Duration = Duration::from_millis(50);
+type QueuedInput = (Tag, InputEvent, Instant);
 
 enum Ctrl {
     Approve {
@@ -50,7 +52,7 @@ enum Ctrl {
 
 pub struct SharePlay {
     ctrl: Sender<Ctrl>,
-    input: SyncSender<(Tag, InputEvent)>,
+    input: SyncSender<QueuedInput>,
     /// Set the moment a revoke is requested, before it is queued, so input
     /// already in the queue is never applied after it.
     revoking: Arc<AtomicBool>,
@@ -92,6 +94,9 @@ impl Backend for Nothing {
     }
     fn move_to(&mut self, _: i32, _: i32) {}
     fn scroll(&mut self, _: i32, _: i32) {}
+    fn host_mouse_activity(&mut self) -> Result<bool, String> {
+        Err("host mouse monitoring is unavailable".into())
+    }
     fn location(&self) -> Option<(i32, i32)> {
         None
     }
@@ -120,13 +125,18 @@ impl<B: Backend, F: Fn(&'static str)> Worker<B, F> {
                 request_id,
                 reply,
             } => {
-                let r = self.ctl.arm(
-                    grant_id,
-                    controller_id,
-                    request_id,
-                    Instant::now(),
-                    &mut self.os,
-                );
+                let r = if self.check_host_mouse().is_ok() {
+                    self.ctl.arm(
+                        grant_id,
+                        controller_id,
+                        request_id,
+                        Instant::now(),
+                        &mut self.os,
+                    )
+                } else {
+                    self.ctl.revoke(&mut self.os);
+                    Err(ArmError::MouseMonitoringUnavailable)
+                };
                 let _ = reply.send(r);
             }
             Ctrl::Revoke => {
@@ -152,22 +162,55 @@ impl<B: Backend, F: Fn(&'static str)> Worker<B, F> {
         true
     }
 
-    fn run(mut self, ctrl: Receiver<Ctrl>, input: Receiver<(Tag, InputEvent)>) {
+    fn poll_host_mouse(&mut self) -> Result<(), &'static str> {
+        let active = self.os.host_mouse_activity().map_err(|err| {
+            if self.ctl.is_armed() {
+                log::warn!("share play mouse monitor: {err}");
+            }
+            "host mouse monitoring failed"
+        })?;
+        if active && !self.ctl.host_mouse_activity(Instant::now(), &mut self.os) {
+            return Err("native input failed");
+        }
+        Ok(())
+    }
+
+    fn check_host_mouse(&mut self) -> Result<(), &'static str> {
+        let result = self.poll_host_mouse();
+        if let Err(why) = result
+            && self.ctl.is_armed()
+        {
+            self.ctl.revoke(&mut self.os);
+            (self.on_revoked)(why);
+        }
+        result
+    }
+
+    fn run(mut self, ctrl: Receiver<Ctrl>, input: Receiver<QueuedInput>) {
         loop {
             if !self.drain(&ctrl) {
                 break;
             }
+            let _ = self.check_host_mouse();
             if self.ctl.tick(Instant::now(), &mut self.os) {
                 (self.on_revoked)("lease");
             }
-            match input.recv_timeout(TICK) {
-                Ok((from, event)) => {
+            let tick = if self.ctl.is_armed() {
+                ACTIVE_TICK
+            } else {
+                IDLE_TICK
+            };
+            match input.recv_timeout(tick) {
+                Ok((from, event, received_at)) => {
                     // Control goes first: a revoke queued meanwhile wins.
                     if !self.drain(&ctrl) {
                         break;
                     }
-                    if let Err(why) = self.ctl.apply(from, event, Instant::now(), &mut self.os) {
-                        log::debug!("share play input dropped: {why:?}");
+                    let _ = self.check_host_mouse();
+                    if let Err(why) = self.ctl.apply(from, event, received_at, &mut self.os) {
+                        if why != input::Rejected::HostMousePriority {
+                            log::debug!("share play input dropped: {why:?}");
+                        }
                         if why == input::Rejected::NativeFailure {
                             self.ctl.revoke(&mut self.os);
                             (self.on_revoked)("native input failed");
@@ -236,7 +279,7 @@ impl SharePlay {
 
     /// Queue one event. A full queue means the host can't keep up: revoke.
     fn push(&self, from: Tag, event: InputEvent) -> Result<(), &'static str> {
-        match self.input.try_send((from, event)) {
+        match self.input.try_send((from, event, Instant::now())) {
             Ok(()) => Ok(()),
             Err(TrySendError::Full(_)) => {
                 self.revoke();
@@ -334,7 +377,11 @@ pub fn share_play_approve<R: Runtime>(
     controller_id: String,
     request_id: String,
     monitor: Rect,
+    warning_acknowledged: bool,
 ) -> Result<(), String> {
+    if !warning_acknowledged {
+        return Err("Read and acknowledge the Share Play warning first".into());
+    }
     if !supported() {
         return Err("remote control isn't supported on this system".into());
     }
