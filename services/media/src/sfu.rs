@@ -6,6 +6,7 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::{Duration, Instant};
 
 use str0m::change::SdpOffer;
+use str0m::channel::{ChannelId, Reliability};
 use str0m::media::{KeyframeRequestKind, MediaData, MediaKind, Mid};
 use str0m::net::{Protocol, Receive};
 use str0m::{Candidate, Event, IceConnectionState, Input, Output, Rtc};
@@ -21,22 +22,165 @@ pub struct Sfu {
     cmds: Sender<Cmd>,
 }
 
+/// Things the SFU decided on its own that the api must know about.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Notice {
+    PeerGone { peer_id: u64 },
+    RouteFailed { room: u64, grant: u64 },
+}
+
+/// Share Play limits on relayed input.
+const MAX_INPUT_BYTES: usize = 256;
+const INPUT_RATE_PER_S: f64 = 200.0;
+const INPUT_BURST: f64 = 400.0;
+const RELIABLE: &str = "input";
+const LATEST: &str = "input-move";
+
+/// Token bucket for one peer's input messages.
+struct RateLimit {
+    tokens: f64,
+    at: Instant,
+}
+
+impl RateLimit {
+    fn new(now: Instant) -> Self {
+        Self {
+            tokens: INPUT_BURST,
+            at: now,
+        }
+    }
+
+    fn allow(&mut self, now: Instant) -> bool {
+        let dt = now.saturating_duration_since(self.at).as_secs_f64();
+        self.at = now;
+        self.tokens = (self.tokens + dt * INPUT_RATE_PER_S).min(INPUT_BURST);
+        if self.tokens < 1.0 {
+            return false;
+        }
+        self.tokens -= 1.0;
+        true
+    }
+}
+
+/// The one input route of a room, for one grant.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Route {
+    pub controller: u64,
+    pub host: u64,
+    pub grant: u64,
+}
+
+/// A room's route plus the highest grant ever closed there. Grant ids only
+/// grow, so a late or replayed update for a closed grant is ignored.
+#[derive(Debug, Default)]
+struct RouteSlot {
+    active: Option<Route>,
+    closed: u64,
+    revision: u64,
+}
+
+impl RouteSlot {
+    fn update(&mut self, revision: u64, route: Option<Route>) {
+        if revision <= self.revision {
+            return;
+        }
+        self.revision = revision;
+        self.set(route);
+    }
+
+    fn set(&mut self, route: Option<Route>) {
+        let Some(r) = route else {
+            self.close();
+            return;
+        };
+        if r.grant == 0 || r.grant <= self.closed {
+            return;
+        }
+        match self.active {
+            Some(a) if r.grant < a.grant => {}
+            Some(a) if r.grant > a.grant => {
+                self.close();
+                self.active = Some(r);
+            }
+            _ => self.active = Some(r),
+        }
+    }
+
+    fn close(&mut self) -> Option<Route> {
+        let a = self.active.take()?;
+        self.closed = self.closed.max(a.grant);
+        Some(a)
+    }
+}
+
+/// The lossy channel carries pointer moves only. A key or click there could
+/// lose its release, so anything else is dropped.
+fn is_move(data: &[u8]) -> bool {
+    data.starts_with(br#"{"t":"move","#)
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum Relay {
+    /// Send to this host peer.
+    To(u64),
+    /// Ignore (lossy channel, or not part of the active grant).
+    Drop,
+    /// A reliable input message must not be lost: break the route.
+    Fail,
+}
+
+/// Only the granted controller's input reaches only its host.
+fn relay_decision(
+    route: Option<Route>,
+    from: u64,
+    label: &str,
+    data: &[u8],
+    allowed: bool,
+) -> Relay {
+    let Some(r) = route.filter(|r| r.controller == from) else {
+        return Relay::Drop;
+    };
+    let ok = data.len() <= MAX_INPUT_BYTES && allowed;
+    match label {
+        RELIABLE if ok => Relay::To(r.host),
+        RELIABLE => Relay::Fail,
+        LATEST if ok && is_move(data) => Relay::To(r.host),
+        _ => Relay::Drop,
+    }
+}
+
+// Bind events at production time, before SCTP buffering and route changes.
+fn input_for_grant(route: Option<Route>, packet: &[u8]) -> Option<&[u8]> {
+    let grant = u64::from_be_bytes(packet.get(..8)?.try_into().ok()?);
+    (route?.grant == grant).then(|| &packet[8..])
+}
+
 enum Cmd {
     Add {
         peer_id: u64,
         room: u64,
+        user_id: u64,
         rtc: Box<Rtc>,
         requested_at: Instant,
     },
     Remove {
         peer_id: u64,
     },
+    Route {
+        room: u64,
+        revision: u64,
+        route: Option<Route>,
+    },
 }
 
 struct Peer {
     id: u64,
     room: u64,
+    user_id: u64,
     rtc: Rtc,
+    /// Open data channels by label. Only `input*` labels are relayed.
+    channels: HashMap<String, ChannelId>,
+    limiter: RateLimit,
     audio: Option<Mid>,
     video: Option<Mid>,
     /// When `media.join` arrived. Cleared once the first media is seen.
@@ -79,19 +223,37 @@ fn record_membership(peers: &[Peer], rooms: &HashMap<u64, Instant>) {
     metrics::gauge!(m::ROOMS).set(rooms.len() as f64);
 }
 
+/// Share Play input channels. Anything else a client opens is ignored.
+fn is_relayed(label: &str) -> bool {
+    label.starts_with("input")
+}
+
+/// Prefix the sender's user id and the grant it was relayed under (8 bytes
+/// each, big endian) so the host checks both before applying it.
+fn tag(user_id: u64, grant: u64, data: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(16 + data.len());
+    out.extend_from_slice(&user_id.to_be_bytes());
+    out.extend_from_slice(&grant.to_be_bytes());
+    out.extend_from_slice(data);
+    out
+}
+
 static NEXT_PEER: AtomicU64 = AtomicU64::new(1);
 
-pub fn start(socket: UdpSocket) -> anyhow::Result<Sfu> {
+pub fn start(
+    socket: UdpSocket,
+) -> anyhow::Result<(Sfu, tokio::sync::mpsc::UnboundedReceiver<Notice>)> {
     let addr = socket.local_addr()?;
     let (cmds, rx) = mpsc::channel();
+    let (notices, notices_rx) = tokio::sync::mpsc::unbounded_channel();
     std::thread::Builder::new()
         .name("sfu".into())
-        .spawn(move || run(socket, rx))?;
-    Ok(Sfu { addr, cmds })
+        .spawn(move || run(socket, rx, notices))?;
+    Ok((Sfu { addr, cmds }, notices_rx))
 }
 
 impl Sfu {
-    pub fn add(&self, room: u64, sdp_offer: &str) -> anyhow::Result<(u64, String)> {
+    pub fn add(&self, room: u64, user_id: u64, sdp_offer: &str) -> anyhow::Result<(u64, String)> {
         let requested_at = Instant::now();
         let offer = SdpOffer::from_sdp_string(sdp_offer)?;
         let mut rtc = Rtc::builder()
@@ -104,6 +266,7 @@ impl Sfu {
         self.cmds.send(Cmd::Add {
             peer_id,
             room,
+            user_id,
             rtc: Box::new(rtc),
             requested_at,
         })?;
@@ -113,9 +276,23 @@ impl Sfu {
     pub fn remove(&self, peer_id: u64) {
         let _ = self.cmds.send(Cmd::Remove { peer_id });
     }
+
+    /// Share Play: the one input route of a room (controller peer, host peer).
+    pub fn route(&self, room: u64, revision: u64, route: Option<Route>) {
+        let _ = self.cmds.send(Cmd::Route {
+            room,
+            revision,
+            route,
+        });
+    }
 }
 
-fn run(socket: UdpSocket, cmds: Receiver<Cmd>) {
+fn run(
+    socket: UdpSocket,
+    cmds: Receiver<Cmd>,
+    notices: tokio::sync::mpsc::UnboundedSender<Notice>,
+) {
+    let mut routes: HashMap<u64, RouteSlot> = HashMap::new();
     let local = socket.local_addr().expect("socket address");
     let mut peers: Vec<Peer> = Vec::new();
     let mut buf = vec![0u8; 2000];
@@ -152,6 +329,7 @@ fn run(socket: UdpSocket, cmds: Receiver<Cmd>) {
                 Cmd::Add {
                     peer_id,
                     room,
+                    user_id,
                     rtc,
                     requested_at,
                 } => {
@@ -160,7 +338,10 @@ fn run(socket: UdpSocket, cmds: Receiver<Cmd>) {
                     peers.push(Peer {
                         id: peer_id,
                         room,
+                        user_id,
                         rtc: *rtc,
+                        channels: HashMap::new(),
+                        limiter: RateLimit::new(requested_at),
                         audio: None,
                         video: None,
                         awaiting_media: Some(requested_at),
@@ -175,6 +356,11 @@ fn run(socket: UdpSocket, cmds: Receiver<Cmd>) {
                         p.end("left");
                     }
                 }
+                Cmd::Route {
+                    room,
+                    revision,
+                    route,
+                } => routes.entry(room).or_default().update(revision, route),
             }
         }
         if joined {
@@ -183,6 +369,9 @@ fn run(socket: UdpSocket, cmds: Receiver<Cmd>) {
 
         let mut forward: Vec<(u64, u64, MediaKind, MediaData)> = Vec::new();
         let mut keyframes: Vec<(u64, u64, KeyframeRequestKind)> = Vec::new();
+        // (room, grant, host peer, label, tagged payload)
+        let mut relay: Vec<(u64, u64, u64, String, Vec<u8>)> = Vec::new();
+        let mut failed: Vec<(u64, u64)> = Vec::new();
         let mut next_timeout = Instant::now() + Duration::from_millis(100);
         for p in &mut peers {
             while p.rtc.is_alive() {
@@ -216,7 +405,14 @@ fn run(socket: UdpSocket, cmds: Receiver<Cmd>) {
                             } else {
                                 MediaKind::Audio
                             };
-                            forward.push((p.id, p.room, kind, d));
+                            if kind != MediaKind::Video
+                                || routes
+                                    .get(&p.room)
+                                    .and_then(|s| s.active)
+                                    .is_none_or(|r| r.host == p.id)
+                            {
+                                forward.push((p.id, p.room, kind, d));
+                            }
                         }
                         Event::KeyframeRequest(r) => {
                             let kind = match r.kind {
@@ -257,6 +453,65 @@ fn run(socket: UdpSocket, cmds: Receiver<Cmd>) {
                             if let Some(rtt) = st.rtt {
                                 metrics::histogram!(m::PEER_RTT_MS)
                                     .record(rtt.as_secs_f64() * 1000.0);
+                            }
+                        }
+                        Event::ChannelOpen(id, label) => {
+                            if !is_relayed(&label) {
+                                continue;
+                            }
+                            let valid = p
+                                .rtc
+                                .channel(id)
+                                .and_then(|c| c.config().cloned())
+                                .is_some_and(|c| {
+                                    label != RELIABLE
+                                        || (c.ordered
+                                            && matches!(c.reliability, Reliability::Reliable))
+                                });
+                            if !valid || p.channels.contains_key(&label) {
+                                p.end("invalid_input_channel");
+                                continue;
+                            }
+                            p.channels.insert(label, id);
+                        }
+                        Event::ChannelClose(id) => {
+                            if p.channels.get(RELIABLE) == Some(&id) {
+                                if let Some(r) = routes
+                                    .get(&p.room)
+                                    .and_then(|s| s.active)
+                                    .filter(|r| r.controller == p.id || r.host == p.id)
+                                {
+                                    failed.push((p.room, r.grant));
+                                }
+                            }
+                            p.channels.retain(|_, c| *c != id);
+                        }
+                        Event::ChannelData(d) => {
+                            let Some(label) = p
+                                .channels
+                                .iter()
+                                .find(|(_, c)| **c == d.id)
+                                .map(|(l, _)| l.clone())
+                                .filter(|l| is_relayed(l))
+                            else {
+                                continue;
+                            };
+                            let route = routes.get(&p.room).and_then(|s| s.active);
+                            let Some(data) = input_for_grant(route, &d.data) else {
+                                continue;
+                            };
+                            let allowed = route.is_some_and(|r| r.controller == p.id)
+                                && p.limiter.allow(Instant::now());
+                            match (route, relay_decision(route, p.id, &label, data, allowed)) {
+                                (Some(r), Relay::To(host)) => relay.push((
+                                    p.room,
+                                    r.grant,
+                                    host,
+                                    label,
+                                    tag(p.user_id, r.grant, data),
+                                )),
+                                (Some(r), Relay::Fail) => failed.push((p.room, r.grant)),
+                                _ => {}
                             }
                         }
                         Event::Connected => tracing::info!(peer.id = p.id, "peer connected"),
@@ -320,6 +575,36 @@ fn run(socket: UdpSocket, cmds: Receiver<Cmd>) {
             }
         }
 
+        for (room, grant, host, label, data) in &relay {
+            if failed.contains(&(*room, *grant)) {
+                continue;
+            }
+            let written = peers
+                .iter_mut()
+                .find(|p| p.id == *host && p.room == *room)
+                .and_then(|p| {
+                    let id = *p.channels.get(label)?;
+                    // Ok(false) = str0m couldn't buffer it: as bad as an error.
+                    p.rtc.channel(id)?.write(true, data).ok()
+                })
+                .unwrap_or(false);
+            if !written && label == RELIABLE {
+                failed.push((*room, *grant));
+            }
+        }
+        failed.sort_unstable();
+        failed.dedup();
+        for (room, grant) in failed {
+            let Some(slot) = routes.get_mut(&room) else {
+                continue;
+            };
+            if slot.active.is_some_and(|r| r.grant == grant) {
+                slot.close();
+                tracing::warn!(room.id = room, grant, "share play route failed");
+                let _ = notices.send(Notice::RouteFailed { room, grant });
+            }
+        }
+
         if peers.iter().any(|p| !p.rtc.is_alive()) {
             let (gone, alive): (Vec<Peer>, Vec<Peer>) =
                 peers.into_iter().partition(|p| !p.rtc.is_alive());
@@ -327,7 +612,21 @@ fn run(socket: UdpSocket, cmds: Receiver<Cmd>) {
             for p in gone {
                 let reason = p.end_reason.unwrap_or("closed");
                 tracing::info!(peer.id = p.id, reason, "peer removed");
+                for slot in routes.values_mut() {
+                    if slot
+                        .active
+                        .is_some_and(|r| r.controller == p.id || r.host == p.id)
+                    {
+                        slot.close();
+                    }
+                }
+                if reason != "left" {
+                    let _ = notices.send(Notice::PeerGone { peer_id: p.id });
+                }
                 metrics::counter!(m::PEER_SESSIONS_ENDED, "reason" => reason).increment(1);
+                if !peers.iter().any(|o| o.room == p.room) {
+                    routes.remove(&p.room);
+                }
                 if !peers.iter().any(|o| o.room == p.room)
                     && let Some(started) = rooms.remove(&p.room)
                 {
@@ -337,7 +636,7 @@ fn run(socket: UdpSocket, cmds: Receiver<Cmd>) {
             }
             record_membership(&peers, &rooms);
         }
-        if !forward.is_empty() || !keyframes.is_empty() {
+        if !forward.is_empty() || !keyframes.is_empty() || !relay.is_empty() {
             continue;
         }
 
@@ -375,5 +674,174 @@ fn run(socket: UdpSocket, cmds: Receiver<Cmd>) {
                 p.end("error");
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stale_clears_and_installs_cannot_replace_newer_routes() {
+        let mut slot = RouteSlot::default();
+        slot.update(2, route(50));
+        slot.update(1, None);
+        assert_eq!(slot.active, route(50));
+        slot.update(4, None);
+        slot.update(3, route(60));
+        assert_eq!(slot.active, None);
+        slot.update(5, route(70));
+        assert_eq!(slot.active, route(70));
+    }
+
+    #[test]
+    fn input_is_bound_to_its_original_grant() {
+        let mut packet = 50u64.to_be_bytes().to_vec();
+        packet.extend_from_slice(br#"{"t":"ping"}"#);
+        assert_eq!(input_for_grant(route(50), &packet), Some(&packet[8..]));
+        assert_eq!(input_for_grant(route(60), &packet), None);
+        assert_eq!(input_for_grant(None, &packet), None);
+        assert_eq!(input_for_grant(route(50), &[0; 7]), None);
+    }
+
+    #[test]
+    fn relays_only_input_channels() {
+        assert!(is_relayed("input"));
+        assert!(is_relayed("input-move"));
+        assert!(!is_relayed("chat"));
+    }
+
+    const NOW_ROUTE: Option<Route> = Some(Route {
+        controller: 2,
+        host: 1,
+        grant: 50,
+    });
+    const MOVE: &[u8] = br#"{"t":"move","x":0.5,"y":0.5}"#;
+    const KEY: &[u8] = br#"{"t":"key","code":"KeyW","down":true}"#;
+
+    #[test]
+    fn only_the_granted_controller_reaches_only_its_host() {
+        assert_eq!(
+            relay_decision(NOW_ROUTE, 2, RELIABLE, KEY, true),
+            Relay::To(1)
+        );
+        assert_eq!(
+            relay_decision(NOW_ROUTE, 2, LATEST, MOVE, true),
+            Relay::To(1)
+        );
+        assert_eq!(
+            relay_decision(NOW_ROUTE, 3, RELIABLE, KEY, true),
+            Relay::Drop,
+            "bystander"
+        );
+        assert_eq!(
+            relay_decision(NOW_ROUTE, 1, RELIABLE, KEY, true),
+            Relay::Drop,
+            "host"
+        );
+        assert_eq!(
+            relay_decision(None, 2, RELIABLE, KEY, true),
+            Relay::Drop,
+            "pending/no grant"
+        );
+        assert_eq!(
+            relay_decision(NOW_ROUTE, 2, "input-x", KEY, true),
+            Relay::Drop
+        );
+    }
+
+    #[test]
+    fn oversize_or_rate_limited_input_breaks_the_reliable_route() {
+        assert_eq!(
+            relay_decision(NOW_ROUTE, 2, RELIABLE, &[b'x'; MAX_INPUT_BYTES + 1], true),
+            Relay::Fail
+        );
+        assert_eq!(
+            relay_decision(NOW_ROUTE, 2, RELIABLE, KEY, false),
+            Relay::Fail
+        );
+        assert_eq!(
+            relay_decision(NOW_ROUTE, 2, LATEST, MOVE, false),
+            Relay::Drop,
+            "moves are lossy"
+        );
+    }
+
+    #[test]
+    fn rate_limit_refills() {
+        let t0 = Instant::now();
+        let mut r = RateLimit::new(t0);
+        let sent = (0..1000).filter(|_| r.allow(t0)).count();
+        assert_eq!(sent, INPUT_BURST as usize);
+        assert!(!r.allow(t0));
+        assert!(
+            r.allow(t0 + Duration::from_millis(10)),
+            "2 tokens after 10 ms"
+        );
+    }
+
+    #[test]
+    fn tag_prefixes_sender() {
+        assert_eq!(
+            tag(0x0102, 0x03, b"hi"),
+            [0, 0, 0, 0, 0, 0, 1, 2, 0, 0, 0, 0, 0, 0, 0, 3, b'h', b'i']
+        );
+    }
+
+    #[test]
+    fn lossy_channel_carries_moves_only() {
+        assert_eq!(
+            relay_decision(NOW_ROUTE, 2, LATEST, MOVE, true),
+            Relay::To(1)
+        );
+        for bad in [
+            KEY,
+            br#"{"t":"button","b":0,"down":true,"x":0,"y":0}"#.as_slice(),
+            br#"{"t":"ping"}"#,
+            br#" {"t":"move","x":0,"y":0}"#,
+        ] {
+            assert_eq!(relay_decision(NOW_ROUTE, 2, LATEST, bad, true), Relay::Drop);
+        }
+        assert_eq!(
+            relay_decision(NOW_ROUTE, 2, RELIABLE, KEY, true),
+            Relay::To(1),
+            "keys go on the reliable channel"
+        );
+    }
+
+    fn route(grant: u64) -> Option<Route> {
+        Some(Route {
+            controller: 2,
+            host: 1,
+            grant,
+        })
+    }
+
+    #[test]
+    fn closed_grant_never_reopens() {
+        let mut slot = RouteSlot::default();
+        slot.set(route(50));
+        assert_eq!(slot.active, route(50));
+        // The route failed: SFU closes grant 50.
+        assert_eq!(slot.close(), route(50));
+        // A late update for 50 (sent before the failure) arrives now.
+        slot.set(route(50));
+        assert_eq!(slot.active, None, "stale update can't undo the failure");
+        // An api clear also closes; older grants stay dead.
+        slot.set(route(60));
+        slot.set(None);
+        slot.set(route(55));
+        slot.set(route(60));
+        assert_eq!(slot.active, None);
+        // A newer grant opens, an older one can't replace it.
+        slot.set(route(70));
+        slot.set(route(65));
+        assert_eq!(slot.active, route(70));
+        // A newer grant replaces and closes the old one.
+        slot.set(route(80));
+        slot.set(route(70));
+        assert_eq!(slot.active, route(80));
+        slot.set(route(0));
+        assert_eq!(slot.active, route(80), "grant 0 is never a route");
     }
 }

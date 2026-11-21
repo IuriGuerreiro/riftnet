@@ -15,6 +15,22 @@ message Call {
   CallState state = 4;
   repeated uint64 participant_ids = 5;
   repeated uint64 sharing_user_ids = 6;
+  // Sharers whose desktop app can take remote input (Windows/X11, full-screen share).
+  repeated uint64 controllable_user_ids = 7;
+  // Share Play: at most one controller per call. Unset = nobody.
+  CallControlState control = 8;
+}
+
+message CallControlState {
+  uint64 host_id = 1;
+  uint64 controller_id = 2;
+  // false = the viewer asked and the host hasn't answered yet.
+  bool granted = 3;
+  // Unique per approval, 0 while pending. The host arms each id at most once.
+  uint64 grant_id = 4;
+  // Unique per request. The host's GRANT/DENY must name it, so an approval
+  // can't be spent on a different (replacement) request.
+  uint64 request_id = 5;
 }
 
 message CallStart {
@@ -36,6 +52,25 @@ message CallLeave {
 message CallScreenShare {
   uint64 call_id = 1;
   bool sharing = 2;
+  // This client can apply remote input to what it shares (Share Play).
+  bool controllable = 3;
+}
+
+enum CallControlAction {
+  CALL_CONTROL_ACTION_UNSPECIFIED = 0;
+  CALL_CONTROL_ACTION_REQUEST = 1; // viewer -> host; user_id = host
+  CALL_CONTROL_ACTION_GRANT = 2; // host; user_id = viewer
+  CALL_CONTROL_ACTION_DENY = 3; // host; user_id = viewer
+  CALL_CONTROL_ACTION_REVOKE = 4; // host or controller; user_id ignored
+}
+
+// Share Play control. Reply: CallResult. Everyone gets CallUpdated.
+message CallControl {
+  uint64 call_id = 1;
+  CallControlAction action = 2;
+  uint64 user_id = 3;
+  // GRANT/DENY: CallControlState.request_id being answered.
+  uint64 request_id = 4;
 }
 
 message CallResult {

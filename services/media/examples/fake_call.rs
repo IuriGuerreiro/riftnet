@@ -37,6 +37,7 @@ async fn main() -> anyhow::Result<()> {
         let req = MediaJoin {
             room_id: room,
             sdp_offer: offer.to_sdp_string(),
+            user_id: 0,
         };
         let msg = nats
             .request("media.join", req.encode_to_vec().into())

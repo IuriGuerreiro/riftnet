@@ -33,6 +33,7 @@ pub trait CallStore: Send + Sync {
     ) -> Option<(Call, Option<Participant>)>;
     async fn with_connection(&self, connection_id: u64) -> Vec<Call>;
     async fn with_user(&self, user_id: i64) -> Vec<Call>;
+    async fn with_peer(&self, peer_id: u64) -> Vec<Call>;
 }
 
 #[derive(Default)]
@@ -62,6 +63,7 @@ impl CallStore for MemoryCallStore {
         let mut calls = self.calls.lock().unwrap();
         let call = calls.get_mut(&call_id)?;
         change(call);
+        call.revision += 1;
         Some(call.clone())
     }
 
@@ -80,6 +82,7 @@ impl CallStore for MemoryCallStore {
             return Err(AddError::AlreadyIn);
         }
         call.participants.push(p);
+        call.revision += 1;
         if activate {
             call.state = CallState::Active;
         }
@@ -109,6 +112,8 @@ impl CallStore for MemoryCallStore {
             .iter()
             .position(|p| p.user_id == user_id)
             .map(|index| call.participants.remove(index));
+        call.settle_control();
+        call.revision += 1;
         Some((call.clone(), participant))
     }
 
@@ -134,6 +139,15 @@ impl CallStore for MemoryCallStore {
                     .iter()
                     .any(|p| p.connection_id == connection_id)
             })
+            .cloned()
+            .collect()
+    }
+
+    async fn with_peer(&self, peer_id: u64) -> Vec<Call> {
+        let calls = self.calls.lock().unwrap();
+        calls
+            .values()
+            .filter(|c| c.participants.iter().any(|p| p.peer_id == peer_id))
             .cloned()
             .collect()
     }

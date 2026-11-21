@@ -3,7 +3,9 @@ import { useEffect, useRef, useState } from "react";
 
 import type { WsClient } from "../api/ws";
 import { Button, IconButton } from "../components/ui";
-import { CallState, peerConnection, useCalls } from "../stores/calls";
+import { CallState, myId, peerConnection, useCalls } from "../stores/calls";
+import { ControlButton } from "./SharePlay";
+import { controlView, useControlInput } from "./useControlInput";
 
 export function CallBar({ ws, conversationId }: { ws: WsClient | null; conversationId: bigint }) {
   const { current, joined, muted, sharing, error, call, leave, toggleMute, toggleShare } =
@@ -83,22 +85,45 @@ export function IncomingCall({
   );
 }
 
-export function RemoteScreen() {
+export function RemoteScreen({
+  ws,
+  nameFor,
+}: {
+  ws: WsClient | null;
+  nameFor: (id: bigint) => string;
+}) {
   const stream = useCalls((s) => s.remoteScreen);
+  const current = useCalls((s) => s.current);
   const ref = useRef<HTMLVideoElement>(null);
   useEffect(() => {
     if (ref.current) ref.current.srcObject = stream;
   }, [stream]);
+  const view = controlView(current, myId());
+  const controlling = view.role === "viewer" && view.granted && stream !== null;
+  useControlInput(ref, controlling);
+  const hostId = view.role === "viewer" && view.granted
+    ? view.other
+    : current?.sharingUserIds.find((id) => id !== myId());
   if (!stream) return null;
   return (
-    <video
-      ref={ref}
-      autoPlay
-      playsInline
-      muted
-      onDoubleClick={(e) => void e.currentTarget.requestFullscreen()}
-      className="fixed bottom-4 right-4 z-40 w-[48rem] max-w-[calc(100vw-2rem)] rounded-xl bg-black shadow-lg ring-2 ring-blue-600"
-    />
+    <div className="fixed bottom-4 right-4 z-40 w-[48rem] max-w-[calc(100vw-2rem)]">
+      <video
+        ref={ref}
+        autoPlay
+        playsInline
+        muted
+        tabIndex={controlling ? 0 : -1}
+        onDoubleClick={controlling ? undefined : (e) => void e.currentTarget.requestFullscreen()}
+        className={`w-full rounded-xl bg-black shadow-lg ring-2 outline-none ${
+          controlling ? "cursor-none ring-warning" : "ring-blue-600"
+        }`}
+      />
+      {hostId !== undefined && (
+        <div className="absolute left-2 top-2 rounded-md bg-black/60 p-1">
+          <ControlButton ws={ws} hostId={hostId} nameFor={nameFor} />
+        </div>
+      )}
+    </div>
   );
 }
 

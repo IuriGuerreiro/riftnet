@@ -3,8 +3,21 @@ import { create } from "zustand";
 
 import type { WsClient } from "../api/ws";
 import {
+  decodeTagged,
+  encodeInput,
+  type HostState,
+  hostStep,
+  type InputEvent,
+  LATEST,
+  type MonitorInfo,
+  type Rect,
+  RELIABLE,
+} from "../call/sharePlayWire";
+import {
   type Call,
   CallAcceptSchema,
+  CallControlAction,
+  CallControlSchema,
   CallDeclineSchema,
   CallJoinSchema,
   CallLeaveSchema,
@@ -14,6 +27,7 @@ import {
 } from "../gen/v1/calls_pb";
 import type { Envelope } from "../gen/v1/envelope_pb";
 import { JoinFriendCallSchema } from "../gen/v1/presence_pb";
+import { platform } from "../platform";
 
 interface CallsState {
   current: Call | null;
@@ -23,6 +37,7 @@ interface CallsState {
   sharing: boolean;
   remoteScreen: MediaStream | null;
   error: string | null;
+  hostArmedFor: bigint | null;
 
   attach: (ws: WsClient, myId: bigint | undefined) => void;
   call: (ws: WsClient, conversationId: bigint) => Promise<void>;
@@ -32,6 +47,14 @@ interface CallsState {
   leave: (ws: WsClient) => Promise<void>;
   toggleMute: () => void;
   toggleShare: (ws: WsClient) => Promise<void>;
+  requestControl: (ws: WsClient, hostId: bigint) => Promise<void>;
+  answerControl: (
+    ws: WsClient,
+    requestId: bigint,
+    approve: boolean,
+    monitor?: Rect,
+  ) => Promise<void>;
+  revokeControl: (ws: WsClient) => Promise<void>;
 }
 
 let pc: RTCPeerConnection | null = null;
@@ -42,6 +65,14 @@ let picking = false;
 let joiningFriend = false;
 let screenIn: MediaStream | null = null;
 let me: bigint | undefined;
+let inputCh: RTCDataChannel | null = null;
+let moveCh: RTCDataChannel | null = null;
+let screenSize = { width: 0, height: 0 };
+const host: HostState = { armed: null, seen: new Set() };
+let armedController: bigint | null = null;
+let hostSupported: Promise<boolean> | null = null;
+let unlistenHotkey: (() => void) | null = null;
+let liveWs: WsClient | null = null;
 const speaker = new Audio();
 speaker.autoplay = true;
 
@@ -49,7 +80,99 @@ export function peerConnection() {
   return pc;
 }
 
+export function myId() {
+  return me;
+}
+
+async function tauri<T>(cmd: string, args?: Record<string, unknown>): Promise<T | null> {
+  if (platform.kind !== "desktop") return null;
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<T>(cmd, args);
+}
+
+function canHost(): Promise<boolean> {
+  hostSupported ??= tauri<boolean>("share_play_supported")
+    .then((ok) => ok === true)
+    .catch(() => false);
+  return hostSupported;
+}
+
+export function sendInput(e: InputEvent) {
+  const ch = e.t === "move" ? moveCh : inputCh;
+  const control = useCalls.getState().current?.control;
+  if (!control?.granted || control.controllerId !== me) return;
+  if (ch?.readyState === "open") {
+    ch.send(encodeInput(e, control.grantId));
+  }
+}
+
+export function listMonitors(): Promise<{ monitors: MonitorInfo[]; suggested: number | null }> {
+  return tauri<{ monitors: MonitorInfo[]; suggested: number | null }>("share_play_monitors", {
+    ...screenSize,
+  }).then((r) => r ?? { monitors: [], suggested: null });
+}
+
+function disarm() {
+  host.armed = null;
+  armedController = null;
+  useCalls.setState({ hostArmedFor: null });
+  void tauri("share_play_revoke").catch((e: unknown) => console.warn("share play", e));
+}
+
+function syncHost(call: Call | null, sharing: boolean) {
+  for (;;) {
+    const step = hostStep(host, call?.control, me, sharing);
+    if (step.kind === "none") return;
+    if (step.kind === "revoke") {
+      disarm();
+      continue;
+    }
+    host.seen.add(step.grantId);
+    host.armed = step.grantId;
+    armedController = step.controllerId;
+    useCalls.setState({ hostArmedFor: step.controllerId });
+    tauri("share_play_arm", {
+      grantId: step.grantId.toString(),
+      controllerId: step.controllerId.toString(),
+      requestId: step.requestId.toString(),
+    }).catch((e: unknown) => {
+      console.warn("share play arm", e);
+      if (host.armed === step.grantId) hostLost("Couldn't start remote control");
+    });
+    return;
+  }
+}
+
+function hostLost(reason?: string) {
+  if (host.armed === null && armedController === null) return;
+  disarm();
+  if (reason) useCalls.setState({ error: reason });
+  const ws = liveWs;
+  if (ws) void useCalls.getState().revokeControl(ws);
+}
+
+function onRemoteInput(data: unknown, lossy: boolean) {
+  if (!(data instanceof ArrayBuffer) || armedController === null) return;
+  const msg = decodeTagged(data);
+  if (msg?.sender !== armedController || msg.grantId !== host.armed) return;
+  let event: unknown;
+  try {
+    event = JSON.parse(msg.json);
+  } catch {
+    return;
+  }
+  // INVARIANT: the Rust side checks the grant again before touching the OS.
+  void tauri("share_play_input", {
+    sender: msg.sender.toString(),
+    grantId: msg.grantId.toString(),
+    lossy,
+    event,
+  }).catch(() => {});
+}
+
 function hangUpMedia() {
+  disarm();
+  inputCh = moveCh = null;
   pc?.close();
   for (const t of [...(mic?.getTracks() ?? []), ...(screen?.getTracks() ?? [])]) t.stop();
   pc = mic = screen = screenIn = null;
@@ -71,6 +194,14 @@ export const useCalls = create<CallsState>((set, get) => {
     pc.addTransceiver(micTrack, { direction: "sendrecv", streams: [mic] });
     // WARN: the idle video slot avoids renegotiation, which only works for 1:1 calls.
     videoSender = pc.addTransceiver("video", { direction: "sendrecv" }).sender;
+    inputCh = pc.createDataChannel(RELIABLE, { ordered: true });
+    moveCh = pc.createDataChannel(LATEST, { ordered: false, maxRetransmits: 0 });
+    for (const ch of [inputCh, moveCh]) {
+      ch.binaryType = "arraybuffer";
+      const lossy = ch === moveCh;
+      ch.onmessage = (e: MessageEvent) => onRemoteInput(e.data, lossy);
+      ch.onclose = () => hostLost("Remote control ended: connection lost");
+    }
     pc.ontrack = (e) => {
       const track = e.track;
       if (track.kind === "audio") {
@@ -81,6 +212,9 @@ export const useCalls = create<CallsState>((set, get) => {
       showScreen(get().current);
     };
     pc.onconnectionstatechange = () => {
+      const state = pc?.connectionState;
+      if (state === "disconnected" || state === "failed" || state === "closed")
+        hostLost("Remote control ended: connection lost");
       if (pc?.connectionState === "connected") set({ joined: true });
       if (pc?.connectionState === "failed")
         set({ error: "Audio connection failed", joined: false });
@@ -118,13 +252,13 @@ export const useCalls = create<CallsState>((set, get) => {
     if (get().remoteScreen !== remoteScreen) set({ remoteScreen });
   }
 
-  async function announceShare(ws: WsClient, sharing: boolean) {
+  async function announceShare(ws: WsClient, sharing: boolean, controllable = false) {
     const call = get().current;
     if (!call) return;
     await ws
       .request({
         case: "callScreenShare",
-        value: createProto(CallScreenShareSchema, { callId: call.id, sharing }),
+        value: createProto(CallScreenShareSchema, { callId: call.id, sharing, controllable }),
       })
       .catch((e: unknown) => console.warn("callScreenShare", e));
   }
@@ -133,6 +267,7 @@ export const useCalls = create<CallsState>((set, get) => {
     for (const t of screen?.getTracks() ?? []) t.stop();
     screen = null;
     set({ sharing: false });
+    syncHost(get().current, false);
     await videoSender?.replaceTrack(null);
     await announceShare(ws, false);
   }
@@ -165,6 +300,7 @@ export const useCalls = create<CallsState>((set, get) => {
         if (current?.id === call.id) {
           set({ current: call });
           showScreen(call);
+          syncHost(call, get().sharing);
         }
         if (
           incoming?.id === call.id &&
@@ -187,6 +323,24 @@ export const useCalls = create<CallsState>((set, get) => {
     }
   }
 
+  async function sendControl(ws: WsClient, action: CallControlAction, userId = 0n, requestId = 0n) {
+    const call = get().current;
+    if (!call) return;
+    try {
+      const reply = await ws.request({
+        case: "callControl",
+        value: createProto(CallControlSchema, { callId: call.id, action, userId, requestId }),
+      });
+      if (reply.case === "callResult" && reply.value.call && get().current?.id === call.id) {
+        set({ current: reply.value.call });
+        syncHost(reply.value.call, get().sharing);
+      }
+    } catch (e) {
+      if (action === CallControlAction.GRANT && host.armed === null) disarm();
+      set({ error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
   return {
     current: null,
     incoming: null,
@@ -195,9 +349,28 @@ export const useCalls = create<CallsState>((set, get) => {
     sharing: false,
     remoteScreen: null,
     error: null,
+    hostArmedFor: null,
 
     attach: (ws, myId) => {
       me = myId;
+      liveWs = ws;
+      const prevClose = ws.onClose;
+      ws.onClose = (code) => {
+        if (liveWs === ws) liveWs = null;
+        hostLost();
+        prevClose(code);
+      };
+      if (platform.kind === "desktop") {
+        unlistenHotkey?.();
+        unlistenHotkey = null;
+        void import("@tauri-apps/api/event").then(async ({ listen }) => {
+          const off = await listen("share-play://revoked", () => {
+            hostLost("Remote control ended");
+            void get().revokeControl(ws);
+          });
+          unlistenHotkey = off;
+        });
+      }
       const chatPush = ws.onPush;
       ws.onPush = (p) => {
         onPush(p, myId);
@@ -305,6 +478,9 @@ export const useCalls = create<CallsState>((set, get) => {
       screen = picked;
       const track = picked.getVideoTracks()[0];
       if (!track) return;
+      const settings = track.getSettings();
+      screenSize = { width: settings.width ?? 0, height: settings.height ?? 0 };
+      const controllable = settings.displaySurface === "monitor" && (await canHost());
       track.contentHint = "detail";
       track.onended = () => void stopShare(ws);
       await sender.replaceTrack(track);
@@ -316,7 +492,41 @@ export const useCalls = create<CallsState>((set, get) => {
       params.degradationPreference = "maintain-framerate";
       await sender.setParameters(params).catch((e: unknown) => console.warn("setParameters", e));
       set({ sharing: true });
-      await announceShare(ws, true);
+      await announceShare(ws, true, controllable);
+    },
+
+    requestControl: (ws, hostId) => sendControl(ws, CallControlAction.REQUEST, hostId),
+
+    answerControl: async (ws, requestId, approve, monitor) => {
+      const c = get().current?.control;
+      if (!c || c.hostId !== me || c.granted || c.requestId !== requestId) return;
+      if (approve) {
+        try {
+          if (!monitor) throw new Error("Pick the shared screen first");
+          await tauri("share_play_approve", {
+            controllerId: c.controllerId.toString(),
+            requestId: requestId.toString(),
+            monitor,
+          });
+        } catch (e) {
+          disarm();
+          set({ error: e instanceof Error ? e.message : String(e) });
+          await sendControl(ws, CallControlAction.DENY, c.controllerId, requestId);
+          return;
+        }
+      }
+      if (!approve) disarm();
+      await sendControl(
+        ws,
+        approve ? CallControlAction.GRANT : CallControlAction.DENY,
+        c.controllerId,
+        requestId,
+      );
+    },
+
+    revokeControl: async (ws) => {
+      if (host.armed !== null) disarm();
+      if (get().current?.control) await sendControl(ws, CallControlAction.REVOKE);
     },
   };
 });

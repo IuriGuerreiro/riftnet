@@ -142,13 +142,23 @@ pub async fn build(
         std::time::Duration::from_secs(60 * 60),
     );
 
+    let media = Arc::new(NatsMediaClient::connect(&config.nats_url).await?);
     let calls = Arc::new(CallService::new(
         Arc::new(MemoryCallStore::default()),
         conversation_repo.clone(),
-        Arc::new(NatsMediaClient::connect(&config.nats_url).await?),
+        media.clone(),
         events.clone(),
         ids.clone(),
     ));
+    {
+        let calls = calls.clone();
+        media
+            .notices(move |n| {
+                let calls = calls.clone();
+                async move { calls.media_notice(n).await }
+            })
+            .await?;
+    }
 
     let state = AppState {
         settings: Arc::new(SettingsService::new(

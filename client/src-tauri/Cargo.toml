@@ -20,3 +20,11 @@ serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
 tauri = { version = "2.12.5" }
 tauri-plugin-log = "2"
+tauri-plugin-global-shortcut = "2"
+
+# Share Play: remote input on the host (Windows + X11 only, see issue #56).
+[target.'cfg(any(windows, target_os = "linux"))'.dependencies]
+enigo = { version = "0.6", default-features = false, features = ["x11rb"] }
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.61", features = ["Win32_UI_WindowsAndMessaging"] }

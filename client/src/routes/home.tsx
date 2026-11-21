@@ -2,6 +2,7 @@ import { useSearch } from "@tanstack/react-router";
 import { useState } from "react";
 
 import { IncomingCall, RemoteScreen } from "../call/CallBar";
+import { ControlBanner } from "../call/SharePlay";
 import { ProfilePanel } from "../components/ProfilePanel";
 import { useFriendActivityWatch } from "../features/activity/activity";
 import { ChatPane } from "../features/chat/ChatPane";
@@ -31,8 +32,9 @@ export function HomePage() {
 
   return (
     <div className="flex h-full w-full overflow-hidden bg-surface-0 text-fg">
-      <RemoteScreen />
+      <RemoteScreen ws={ws} nameFor={(id) => nameFor(id)} />
       <IncomingCall ws={ws} callerName={(id) => nameFor(id)} />
+      <ControlBanner ws={ws} nameFor={(id) => nameFor(id)} />
       {editingProfile && me && (
         <ProfilePanel myId={me.id.toString()} onClose={() => setEditingProfile(false)} />
       )}
