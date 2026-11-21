@@ -58,6 +58,7 @@ export function AudioSettings({ onClose }: { onClose: () => void }) {
     releaseDelay,
     update,
   } = useAudioSettings();
+  const shareAudio = useAudioSettings((state) => state.shareAudio);
   const joined = useCalls((state) => state.joined);
   const shortcutStatus = useCalls((state) => state.shortcutStatus);
   const activeError = useCalls((state) => (state.current ? state.audioError : null));
@@ -374,6 +375,14 @@ export function AudioSettings({ onClose }: { onClose: () => void }) {
           </>
         )}
       </section>
+      <section className="space-y-3 border-t border-surface-3 pt-4">
+        <h3 className="font-semibold">Screen sharing</h3>
+        <Toggle
+          label="Include screen audio when available"
+          checked={shareAudio}
+          onChange={(value) => update({ shareAudio: value })}
+        />
+      </section>
       <details className="space-y-3 border-t border-surface-3 pt-4">
         <summary className="cursor-pointer font-semibold">Advanced microphone</summary>
         <div className="flex flex-wrap gap-2" aria-label="Microphone presets">
@@ -485,6 +494,7 @@ function AudioDiagnostics({ output }: { output?: string }) {
       const stats = await peerConnection()?.getStats();
       if (!stats || !alive) return;
       const snapshot: NonNullable<typeof readout> = { sending: false };
+      let sent = 0;
       stats.forEach(
         (report: {
           type: string;
@@ -502,19 +512,22 @@ function AudioDiagnostics({ output }: { output?: string }) {
           )
             snapshot.rtt = Math.round(report.currentRoundTripTime * 1000);
           if (report.type === "inbound-rtp" && report.kind === "audio") {
-            if (report.jitter !== undefined) snapshot.jitter = Math.round(report.jitter * 1000);
-            snapshot.lost = report.packetsLost;
+            if (report.jitter !== undefined)
+              snapshot.jitter = Math.max(snapshot.jitter ?? 0, Math.round(report.jitter * 1000));
+            if (report.packetsLost !== undefined)
+              snapshot.lost = (snapshot.lost ?? 0) + report.packetsLost;
           }
           if (
             report.type === "outbound-rtp" &&
             report.kind === "audio" &&
             report.packetsSent !== undefined
           ) {
-            snapshot.sending = lastSent !== undefined && report.packetsSent > lastSent;
-            lastSent = report.packetsSent;
+            sent += report.packetsSent;
           }
         },
       );
+      snapshot.sending = lastSent !== undefined && sent > lastSent;
+      lastSent = sent;
       setReadout(snapshot);
     }
     const update = () => void sample().catch(() => {});

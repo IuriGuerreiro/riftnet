@@ -16,6 +16,10 @@ export const audioDefaults = {
   sensitivity: 45,
   pushKey: "F8" as const,
   releaseDelay: 150,
+  shareAudio: false,
+  streamVolume: 100,
+  normalizeVoices: false,
+  duckStreams: false,
 };
 export const pushKeys = ["F6", "F7", "F8", "F9", "F10"] as const;
 
@@ -32,6 +36,11 @@ const schema = z.object({
   sensitivity: percent.catch(45),
   pushKey: z.enum(pushKeys).catch("F8"),
   releaseDelay: z.number().min(0).max(1000).catch(150),
+  shareAudio: z.boolean().catch(false),
+  streamVolume: percent.catch(100),
+  normalizeVoices: z.boolean().catch(false),
+  duckStreams: z.boolean().catch(false),
+  mutedPeople: z.record(z.string(), z.boolean()).catch({}),
   people: z.record(z.string(), z.number().min(0).max(200)).catch({}),
 });
 
@@ -39,6 +48,7 @@ export type AudioPreferences = z.infer<typeof schema>;
 type AudioSettings = AudioPreferences & {
   update: (prefs: Partial<AudioPreferences>) => void;
   setPersonVolume: (id: bigint, volume: number) => void;
+  togglePersonMute: (id: bigint) => void;
   reset: () => void;
 };
 
@@ -47,10 +57,15 @@ export const useAudioSettings = create<AudioSettings>()(
     (set) => ({
       ...audioDefaults,
       people: {},
+      mutedPeople: {},
       update: (prefs) => set(prefs),
       setPersonVolume: (id, volume) =>
         set(({ people }) => ({ people: { ...people, [id.toString()]: volume } })),
-      reset: () => set({ ...audioDefaults, people: {} }),
+      togglePersonMute: (id) => set(({ mutedPeople }) => {
+        const key = id.toString();
+        return { mutedPeople: { ...mutedPeople, [key]: !mutedPeople[key] } };
+      }),
+      reset: () => set({ ...audioDefaults, people: {}, mutedPeople: {} }),
     }),
     {
       name: "voice-audio",
@@ -61,4 +76,8 @@ export const useAudioSettings = create<AudioSettings>()(
 
 export function participantVolume(prefs: AudioPreferences, userId?: bigint) {
   return userId === undefined ? 100 : (prefs.people[userId.toString()] ?? 100);
+}
+
+export function isParticipantMuted(prefs: AudioPreferences, userId?: bigint) {
+  return userId !== undefined && (prefs.mutedPeople[userId.toString()] ?? false);
 }

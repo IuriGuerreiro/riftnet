@@ -150,36 +150,46 @@ export async function routeOutput(audio: HTMLAudioElement, device: string) {
 
 export class CallPlayback {
   private readonly audio = new Audio();
+  private readonly sourceAudio = new Audio();
   private context: AudioContext | null = null;
   private gain: GainNode | null = null;
+  private analyser: AnalyserNode | null = null;
+  private readonly samples = new Float32Array(1024);
   private volume = 1;
   private outputId = "";
 
   constructor() {
     this.audio.autoplay = true;
+    this.sourceAudio.autoplay = true;
   }
 
   attach(track: MediaStreamTrack) {
     this.close();
     const stream = new MediaStream([track]);
-    this.audio.srcObject = stream;
+    this.sourceAudio.srcObject = stream;
     try {
       const context = new AudioContext();
       this.context = context;
       const source = context.createMediaStreamSource(stream);
+      const analyser = context.createAnalyser();
+      analyser.fftSize = this.samples.length;
       const gain = context.createGain();
+      gain.gain.value = this.volume;
       const limiter = context.createDynamicsCompressor();
       limiter.threshold.value = -3;
       limiter.knee.value = 0;
       limiter.ratio.value = 20;
       limiter.attack.value = 0.003;
       const output = context.createMediaStreamDestination();
-      source.connect(gain).connect(limiter).connect(output);
+      source.connect(analyser).connect(gain).connect(limiter).connect(output);
       void context
         .resume()
         .then(() => {
           if (this.context !== context || context.state !== "running") return;
+          // Chromium keeps decoding the remote track while this element plays it.
+          this.sourceAudio.volume = 0;
           this.gain = gain;
+          this.analyser = analyser;
           this.audio.srcObject = output.stream;
           this.applyVolume();
           void this.audio.play().catch(() => {});
@@ -189,31 +199,46 @@ export class CallPlayback {
       this.closeGraph();
     }
     this.applyVolume();
-    void this.audio.play().catch(() => {});
+    void this.sourceAudio.play().catch(() => {});
+  }
+
+  level() {
+    if (!this.analyser) return 0;
+    this.analyser.getFloatTimeDomainData(this.samples);
+    return Math.sqrt(
+      this.samples.reduce((sum, value) => sum + value * value, 0) / this.samples.length,
+    );
   }
 
   configure(volume: number, outputId: string) {
-    this.volume = volume;
-    this.applyVolume();
+    if (this.volume !== volume) {
+      this.volume = volume;
+      this.applyVolume();
+    }
     if (this.outputId !== outputId) {
       this.outputId = outputId;
-      void routeOutput(this.audio, outputId).catch(() => {});
+      for (const audio of [this.sourceAudio, this.audio])
+        void routeOutput(audio, outputId).catch(() => {});
     }
   }
 
   private applyVolume() {
-    if (this.gain)
-      this.gain.gain.setTargetAtTime(this.volume, this.gain.context.currentTime, 0.015);
-    this.audio.volume = this.gain ? 1 : Math.min(1, this.volume);
+    if (this.gain) {
+      const now = this.gain.context.currentTime;
+      this.gain.gain.cancelScheduledValues(now);
+      this.gain.gain.setTargetAtTime(this.volume, now, 0.015);
+    }
+    this.sourceAudio.volume = this.gain ? 0 : Math.min(1, this.volume);
   }
 
   private closeGraph() {
     if (this.context) void this.context.close().catch(() => {});
-    this.context = this.gain = null;
+    this.context = this.gain = this.analyser = null;
   }
 
   close() {
     this.closeGraph();
     this.audio.srcObject = null;
+    this.sourceAudio.srcObject = null;
   }
 }

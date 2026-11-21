@@ -13,7 +13,7 @@ import type { WsClient } from "../api/ws";
 import { Button, IconButton, Modal } from "../components/ui";
 import { useNameFor } from "../features/session/useRealtime";
 import { CallState, myId, peerConnection, useCalls } from "../stores/calls";
-import { participantVolume, useAudioSettings } from "./audioPreferences";
+import { isParticipantMuted, participantVolume, useAudioSettings } from "./audioPreferences";
 import { VolumeControl } from "./AudioSettings";
 import { ControlButton } from "./SharePlay";
 import { controlView, useControlInput } from "./useControlInput";
@@ -21,6 +21,7 @@ import { controlView, useControlInput } from "./useControlInput";
 export function CallBar({ ws, conversationId }: { ws: WsClient | null; conversationId: bigint }) {
   const { current, joined, muted, sharing, error, call, leave, toggleMute, toggleShare } =
     useCalls();
+  const audioError = useCalls((state) => state.audioError);
   const [mixer, setMixer] = useState(false);
   const here = current?.conversationId === conversationId;
   const info = useStats(here && joined);
@@ -48,6 +49,11 @@ export function CallBar({ ws, conversationId }: { ws: WsClient | null; conversat
   return (
     <div className="flex items-center gap-2 text-xs font-normal text-fg-muted">
       {info && <span>{info}</span>}
+      {audioError && (
+        <span role="status" className="text-warning">
+          {audioError}
+        </span>
+      )}
       <span>{status}</span>
       <IconButton
         label={muted ? "Unmute" : "Mute"}
@@ -65,7 +71,7 @@ export function CallBar({ ws, conversationId }: { ws: WsClient | null; conversat
         label={sharing ? "Stop sharing" : "Share screen"}
         icon={sharing ? <ScreenShareOff size={18} /> : <ScreenShare size={18} />}
         active={sharing}
-        disabled={!joined}
+        disabled={!joined || (!sharing && current.sharingUserIds.some((id) => id !== myId()))}
         onClick={() => ws && void toggleShare(ws)}
       />
       <Button variant="danger" size="sm" disabled={!ws} onClick={() => ws && leave(ws)}>
@@ -78,10 +84,9 @@ export function CallBar({ ws, conversationId }: { ws: WsClient | null; conversat
 
 function CallMixer({ people, onClose }: { people: bigint[]; onClose: () => void }) {
   const prefs = useAudioSettings();
-  const { deafened, toggleDeafen } = useCalls();
+  const { deafened, speaking, toggleDeafen } = useCalls();
   const localUser = myId();
   const nameFor = useNameFor();
-  const [unmuteVolumes, setUnmuteVolumes] = useState<Record<string, number>>({});
   return (
     <Modal open title="Call mixer" onClose={onClose}>
       <VolumeControl
@@ -90,16 +95,38 @@ function CallMixer({ people, onClose }: { people: bigint[]; onClose: () => void 
         onChange={(voiceVolume) => prefs.update({ voiceVolume })}
       />
       <Button size="sm" variant="secondary" aria-pressed={deafened} onClick={toggleDeafen}>
-        Deafen
+        {deafened ? "Undeafen" : "Deafen"}
       </Button>
+      <VolumeControl
+        label="Stream volume"
+        value={prefs.streamVolume}
+        onChange={(streamVolume) => prefs.update({ streamVolume })}
+      />
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={prefs.normalizeVoices}
+          onChange={(event) => prefs.update({ normalizeVoices: event.currentTarget.checked })}
+        />
+        Balance voice loudness
+      </label>
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={prefs.duckStreams}
+          onChange={(event) => prefs.update({ duckStreams: event.currentTarget.checked })}
+        />
+        Lower stream audio while someone speaks
+      </label>
       {people
         .filter((id) => id !== localUser)
         .map((id) => {
           const volume = participantVolume(prefs, id);
+          const muted = isParticipantMuted(prefs, id);
           return (
             <section key={id.toString()} className="space-y-2 border-t border-surface-3 pt-3">
               <VolumeControl
-                label={nameFor(id)}
+                label={speaking.includes(id) ? `${nameFor(id)} · Speaking` : nameFor(id)}
                 value={volume}
                 max={200}
                 onChange={(next) => prefs.setPersonVolume(id, next)}
@@ -108,18 +135,14 @@ function CallMixer({ people, onClose }: { people: bigint[]; onClose: () => void 
                 <Button
                   size="sm"
                   variant="secondary"
-                  onClick={() => {
-                    if (volume) {
-                      setUnmuteVolumes((previous) => ({ ...previous, [id.toString()]: volume }));
-                      prefs.setPersonVolume(id, 0);
-                    } else {
-                      prefs.setPersonVolume(id, unmuteVolumes[id.toString()] ?? 100);
-                    }
-                  }}
+                  onClick={() => prefs.togglePersonMute(id)}
                 >
-                  {volume ? "Mute locally" : "Unmute locally"}
+                  {muted ? "Unmute locally" : "Mute locally"}
                 </Button>
-                <Button size="sm" variant="ghost" onClick={() => prefs.setPersonVolume(id, 100)}>
+                <Button size="sm" variant="ghost" onClick={() => {
+                  prefs.setPersonVolume(id, 100);
+                  if (muted) prefs.togglePersonMute(id);
+                }}>
                   Reset volume
                 </Button>
               </div>
@@ -243,8 +266,8 @@ function useStats(active: boolean) {
         if (r.type === "candidate-pair" && r.nominated)
           rtt = Math.round((r.currentRoundTripTime ?? 0) * 1000);
         if (r.type === "inbound-rtp" && r.kind === "audio") {
-          got = r.packetsReceived ?? 0;
-          lost = r.packetsLost ?? 0;
+          got += r.packetsReceived ?? 0;
+          lost += r.packetsLost ?? 0;
         }
         if (r.type === "inbound-rtp" && r.kind === "video" && r.framesPerSecond) {
           video = `⬇ ${r.frameWidth}x${r.frameHeight}@${r.framesPerSecond} ${mbps(r)} · ${r.packetsLost ?? 0} lost`;
