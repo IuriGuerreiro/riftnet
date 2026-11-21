@@ -2,8 +2,13 @@ import { create as createProto } from "@bufbuild/protobuf";
 import { create } from "zustand";
 
 import type { WsClient } from "../api/ws";
-import { participantVolume, useAudioSettings } from "../call/audioPreferences";
+import {
+  type AudioPreferences,
+  participantVolume,
+  useAudioSettings,
+} from "../call/audioPreferences";
 import { CallPlayback, captureMicrophone, type Microphone } from "../call/callAudio";
+import { startVoiceActivation } from "../call/micActivation";
 import {
   decodeTagged,
   encodeInput,
@@ -39,6 +44,7 @@ interface CallsState {
   deafened: boolean;
   audioError: string | null;
   audioStatus: string | null;
+  shortcutStatus: string | null;
   toggleDeafen: () => void;
   sharing: boolean;
   remoteScreen: MediaStream | null;
@@ -67,6 +73,12 @@ let mic: Microphone | null = null;
 let micSender: RTCRtpSender | null = null;
 let micChanges = Promise.resolve();
 let mediaGeneration = 0;
+let stopVoiceActivation: (() => void) | undefined;
+let shortcutUpdates = Promise.resolve();
+let shortcutKey: string | null = null;
+let shortcutDown = false;
+let releaseTimer = 0;
+let stopShortcutEvents: (() => void) | undefined;
 let screen: MediaStream | null = null;
 let videoSender: RTCRtpSender | null = null;
 let picking = false;
@@ -85,6 +97,12 @@ const speaker = new CallPlayback();
 
 export function peerConnection() {
   return pc;
+}
+
+export function activeAudioDevices() {
+  return {
+    input: mic?.input.label,
+  };
 }
 
 export function myId() {
@@ -181,12 +199,18 @@ function hangUpMedia() {
   disarm();
   inputCh = moveCh = null;
   mediaGeneration++;
+  stopVoiceActivation?.();
+  stopVoiceActivation = undefined;
+  stopShortcutEvents?.();
+  stopShortcutEvents = undefined;
+  resetPushToTalk();
   pc?.close();
   mic?.close();
   for (const t of screen?.getTracks() ?? []) t.stop();
   pc = mic = micSender = screen = screenIn = null;
   videoSender = null;
   speaker.close();
+  updateShortcut();
   useCalls.setState({ deafened: false, audioError: null, audioStatus: null });
 }
 
@@ -205,12 +229,13 @@ export const useCalls = create<CallsState>((set, get) => {
     mic = captured;
     const connection = new RTCPeerConnection();
     pc = connection;
-    mic.track.enabled = !get().muted && !get().deafened;
+    syncMicrophoneMute();
     micSender = pc.addTransceiver(mic.track, { direction: "sendrecv" }).sender;
     watchMicrophone(mic, prefs);
+    bindPushToTalk();
+    updateShortcut();
     const latest = useAudioSettings.getState();
-    if (prefs.inputId !== latest.inputId || prefs.suppression !== latest.suppression)
-      refreshMicrophone();
+    if (captureChanged(prefs, latest)) refreshMicrophone();
     else if (mic.gain) mic.gain.gain.value = latest.inputVolume / 100;
     // WARN: the idle video slot avoids renegotiation, which only works for 1:1 calls.
     videoSender = pc.addTransceiver("video", { direction: "sendrecv" }).sender;
@@ -239,8 +264,7 @@ export const useCalls = create<CallsState>((set, get) => {
       if (state === "disconnected" || state === "failed" || state === "closed")
         hostLost("Remote control ended: connection lost");
       if (state === "connected") set({ joined: true });
-      if (state === "failed")
-        set({ error: "Audio connection failed", joined: false });
+      if (state === "failed") set({ error: "Audio connection failed", joined: false });
     };
     const offer = await pc.createOffer();
     offer.sdp = offer.sdp?.replace(/(a=fmtp:111 [^\r\n]*)/, "$1;usedtx=1;maxaveragebitrate=64000");
@@ -375,6 +399,7 @@ export const useCalls = create<CallsState>((set, get) => {
     deafened: false,
     audioError: null,
     audioStatus: null,
+    shortcutStatus: null,
     toggleDeafen: () => {
       set(({ deafened }) => ({ deafened: !deafened }));
       syncMicrophoneMute();
@@ -567,7 +592,7 @@ export { CallState };
 
 function syncMicrophoneMute() {
   const { muted, deafened } = useCalls.getState();
-  if (mic) mic.track.enabled = !muted && !deafened;
+  if (mic) mic.track.enabled = microphoneEnabled(muted, deafened);
 }
 
 function configureSpeaker() {
@@ -586,6 +611,8 @@ function watchMicrophone(
   microphone: Microphone,
   prefs: ReturnType<typeof useAudioSettings.getState>,
 ) {
+  stopVoiceActivation?.();
+  stopVoiceActivation = startVoiceActivation(microphone, useAudioSettings.getState);
   const usingDefault = prefs.inputId && microphone.input.getSettings().deviceId !== prefs.inputId;
   const enhancedUnavailable = prefs.suppression === "enhanced" && !microphone.enhanced;
   useCalls.setState({
@@ -594,6 +621,9 @@ function watchMicrophone(
       [
         usingDefault ? "Using the system microphone." : "",
         enhancedUnavailable ? "Enhanced suppression is unavailable. Using Standard." : "",
+        !microphone.analyser
+          ? "Microphone gain and voice activation are unavailable on this client."
+          : "",
       ]
         .filter(Boolean)
         .join(" ") || null,
@@ -620,7 +650,8 @@ function refreshMicrophone(allowDefault = false) {
         next.close();
         return;
       }
-      next.track.enabled = !useCalls.getState().muted && !useCalls.getState().deafened;
+      const { muted, deafened } = useCalls.getState();
+      next.track.enabled = microphoneEnabled(muted, deafened);
       try {
         await sender.replaceTrack(next.track);
       } catch (error) {
@@ -654,6 +685,97 @@ useAudioSettings.subscribe((prefs, previous) => {
   configureSpeaker();
   if (mic?.gain && prefs.inputVolume !== previous.inputVolume)
     mic.gain.gain.setTargetAtTime(prefs.inputVolume / 100, mic.gain.context.currentTime, 0.015);
-  if (prefs.inputId !== previous.inputId || prefs.suppression !== previous.suppression)
-    refreshMicrophone();
+  if (captureChanged(prefs, previous)) refreshMicrophone();
+  if (prefs.inputMode !== previous.inputMode || prefs.pushKey !== previous.pushKey) {
+    resetPushToTalk();
+    updateShortcut();
+  }
 });
+
+function captureChanged(prefs: AudioPreferences, previous: AudioPreferences) {
+  return (
+    prefs.inputId !== previous.inputId ||
+    prefs.suppression !== previous.suppression ||
+    prefs.echoCancellation !== previous.echoCancellation ||
+    prefs.autoGainControl !== previous.autoGainControl
+  );
+}
+
+function microphoneEnabled(muted: boolean, deafened: boolean) {
+  return !muted && !deafened && (useAudioSettings.getState().inputMode !== "push" || shortcutDown);
+}
+
+function resetPushToTalk() {
+  window.clearTimeout(releaseTimer);
+  shortcutDown = false;
+  syncMicrophoneMute();
+}
+
+function setPushToTalk(pressed: boolean) {
+  window.clearTimeout(releaseTimer);
+  if (pressed) {
+    shortcutDown = true;
+    syncMicrophoneMute();
+  } else {
+    releaseTimer = window.setTimeout(resetPushToTalk, useAudioSettings.getState().releaseDelay);
+  }
+}
+
+function bindPushToTalk() {
+  const controller = new AbortController();
+  const { signal } = controller;
+  let unlisten: (() => void) | undefined;
+  function key(event: KeyboardEvent) {
+    const prefs = useAudioSettings.getState();
+    if (shortcutKey || prefs.inputMode !== "push" || event.code !== prefs.pushKey) return;
+    if (
+      event.type === "keydown" &&
+      (event.altKey || event.metaKey || event.ctrlKey || event.shiftKey)
+    )
+      return;
+    event.preventDefault();
+    if (!event.repeat) setPushToTalk(event.type === "keydown");
+  }
+  window.addEventListener("keydown", key, { signal });
+  window.addEventListener("keyup", key, { signal });
+  window.addEventListener("blur", resetPushToTalk, { signal });
+  if (platform.kind === "desktop")
+    void import("@tauri-apps/api/event")
+      .then(({ listen }) =>
+        listen<[string, boolean]>("voice://push-to-talk", ({ payload: [key, pressed] }) => {
+          if (!signal.aborted && shortcutKey === key) setPushToTalk(pressed);
+        }),
+      )
+      .then((off) => {
+        if (signal.aborted) off();
+        else unlisten = off;
+      })
+      .catch(() => {});
+  stopShortcutEvents = () => {
+    controller.abort();
+    unlisten?.();
+  };
+}
+
+function updateShortcut() {
+  if (platform.kind !== "desktop") return;
+  const prefs = useAudioSettings.getState();
+  const key = mic && prefs.inputMode === "push" ? prefs.pushKey : null;
+  shortcutKey = null;
+  shortcutUpdates = shortcutUpdates.then(async () => {
+    try {
+      await tauri("voice_shortcut", { key });
+      const latest = useAudioSettings.getState();
+      if (key && mic && latest.inputMode === "push" && latest.pushKey === key) {
+        shortcutKey = key;
+        useCalls.setState({ shortcutStatus: null });
+      }
+    } catch {
+      useCalls.setState({
+        shortcutStatus: key
+          ? "Global shortcut unavailable. Push-to-talk works while the app is focused."
+          : null,
+      });
+    }
+  });
+}

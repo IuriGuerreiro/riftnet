@@ -5,6 +5,7 @@ export interface Microphone {
   input: MediaStreamTrack;
   analyser: AnalyserNode | null;
   gain: GainNode | null;
+  gate: GainNode | null;
   enhanced: boolean;
   close: () => void;
 }
@@ -16,10 +17,11 @@ function stop(stream: MediaStream) {
 export async function captureMicrophone(
   prefs: AudioPreferences,
   allowDefault = false,
+  preview = false,
 ): Promise<Microphone> {
   const constraints: MediaTrackConstraints = {
-    echoCancellation: true,
-    autoGainControl: true,
+    echoCancellation: prefs.echoCancellation,
+    autoGainControl: prefs.autoGainControl,
     noiseSuppression: prefs.suppression === "standard",
     channelCount: { ideal: 1 },
   };
@@ -71,7 +73,9 @@ export async function captureMicrophone(
       source.connect(node);
       tail = node;
     }
-    tail.connect(gain).connect(analyser).connect(output);
+    const gate = context.createGain();
+    gate.gain.value = Number(preview || prefs.inputMode !== "voice");
+    tail.connect(gain).connect(analyser).connect(gate).connect(output);
     const audioContext = context;
     const track = output.stream.getAudioTracks()[0];
     if (!track) throw new Error("Could not create the microphone stream");
@@ -80,6 +84,7 @@ export async function captureMicrophone(
       track,
       analyser,
       gain,
+      gate,
       enhanced: Boolean(suppressor),
       close: () => {
         stop(raw);
@@ -92,13 +97,14 @@ export async function captureMicrophone(
     if (context) void context.close().catch(() => {});
     if (prefs.suppression === "enhanced") {
       stop(raw);
-      return captureMicrophone({ ...prefs, suppression: "standard" }, allowDefault);
+      return captureMicrophone({ ...prefs, suppression: "standard" }, allowDefault, preview);
     }
     return {
       track: input,
       input,
       analyser: null,
       gain: null,
+      gate: null,
       enhanced: false,
       close: () => stop(raw),
     };

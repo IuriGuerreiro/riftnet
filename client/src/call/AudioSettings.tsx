@@ -1,8 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 
 import { Button, ErrorText, Modal } from "../components/ui";
-import { useCalls } from "../stores/calls";
-import { audioDefaults, useAudioSettings } from "./audioPreferences";
+import { activeAudioDevices, peerConnection, useCalls } from "../stores/calls";
+import {
+  audioDefaults,
+  type AudioPreferences,
+  pushKeys,
+  useAudioSettings,
+} from "./audioPreferences";
 import { canSelectOutput, captureMicrophone, routeOutput } from "./callAudio";
 
 const selectClass = "w-full rounded-control bg-surface-1 px-3 py-2 text-sm text-fg";
@@ -38,7 +43,23 @@ export function VolumeControl({
 }
 
 export function AudioSettings({ onClose }: { onClose: () => void }) {
-  const { inputId, outputId, inputVolume, voiceVolume, suppression, update } = useAudioSettings();
+  const {
+    inputId,
+    outputId,
+    inputVolume,
+    voiceVolume,
+    suppression,
+    echoCancellation,
+    autoGainControl,
+    inputMode,
+    automaticSensitivity,
+    sensitivity,
+    pushKey,
+    releaseDelay,
+    update,
+  } = useAudioSettings();
+  const joined = useCalls((state) => state.joined);
+  const shortcutStatus = useCalls((state) => state.shortcutStatus);
   const activeError = useCalls((state) => (state.current ? state.audioError : null));
   const activeStatus = useCalls((state) => (state.current ? state.audioStatus : null));
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
@@ -69,8 +90,14 @@ export function AudioSettings({ onClose }: { onClose: () => void }) {
     let dispose = () => {};
     let cancelled = false;
     let frame = 0;
-    const prefs = { ...useAudioSettings.getState(), inputId, suppression };
-    void captureMicrophone(prefs)
+    const prefs = {
+      ...useAudioSettings.getState(),
+      inputId,
+      suppression,
+      echoCancellation,
+      autoGainControl,
+    };
+    void captureMicrophone(prefs, false, true)
       .then(async (mic) => {
         if (cancelled) {
           mic.close();
@@ -112,7 +139,7 @@ export function AudioSettings({ onClose }: { onClose: () => void }) {
       monitor.srcObject = null;
       dispose();
     };
-  }, [test, inputId, suppression]);
+  }, [test, inputId, suppression, echoCancellation, autoGainControl]);
 
   useEffect(() => {
     if (gainRef.current) gainRef.current.gain.value = inputVolume / 100;
@@ -274,6 +301,115 @@ export function AudioSettings({ onClose }: { onClose: () => void }) {
           Play test sound
         </Button>
       </section>
+      <section className="space-y-3 border-t border-surface-3 pt-4">
+        <h3 className="font-semibold">Input mode</h3>
+        <label className="block space-y-1 text-sm">
+          <span>When to transmit</span>
+          <select
+            className={selectClass}
+            value={inputMode}
+            onChange={(event) => {
+              const value = event.currentTarget.value;
+              if (value === "open" || value === "voice" || value === "push")
+                update({ inputMode: value });
+            }}
+          >
+            <option value="open">Open mic</option>
+            <option value="voice">Voice activation</option>
+            <option value="push">Push to talk</option>
+          </select>
+        </label>
+        {inputMode === "voice" && (
+          <>
+            <Toggle
+              label="Automatic sensitivity"
+              checked={automaticSensitivity}
+              onChange={(value) => update({ automaticSensitivity: value })}
+            />
+            {!automaticSensitivity && (
+              <VolumeControl
+                label="Sensitivity"
+                value={sensitivity}
+                onChange={(value) => update({ sensitivity: value })}
+              />
+            )}
+          </>
+        )}
+        {inputMode === "push" && (
+          <>
+            <label className="block space-y-1 text-sm">
+              <span>Push-to-talk key</span>
+              <select
+                className={selectClass}
+                value={pushKey}
+                onChange={(event) => {
+                  const key = pushKeys.find((value) => value === event.currentTarget.value);
+                  if (key) update({ pushKey: key });
+                }}
+              >
+                {pushKeys.map((key) => (
+                  <option key={key}>{key}</option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-sm">
+              <span className="flex justify-between">
+                Release delay <span>{releaseDelay} ms</span>
+              </span>
+              <input
+                type="range"
+                min={0}
+                max={1000}
+                step={25}
+                value={releaseDelay}
+                onChange={(event) => update({ releaseDelay: event.currentTarget.valueAsNumber })}
+                className="mt-1 w-full accent-current"
+              />
+            </label>
+            {shortcutStatus && (
+              <p role="status" className="text-xs text-fg-subtle">
+                {shortcutStatus}
+              </p>
+            )}
+          </>
+        )}
+      </section>
+      <details className="space-y-3 border-t border-surface-3 pt-4">
+        <summary className="cursor-pointer font-semibold">Advanced microphone</summary>
+        <div className="flex flex-wrap gap-2" aria-label="Microphone presets">
+          {Object.entries(presets).map(([label, prefs]) => (
+            <Button
+              key={label}
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                setStatus(null);
+                update(prefs);
+              }}
+            >
+              {label}
+            </Button>
+          ))}
+        </div>
+        <Toggle
+          label="Echo cancellation"
+          checked={echoCancellation}
+          onChange={(value) => update({ echoCancellation: value })}
+        />
+        <Toggle
+          label="Automatic microphone gain"
+          checked={autoGainControl}
+          onChange={(value) => update({ autoGainControl: value })}
+        />
+        {test && level >= 0.98 && (
+          <p role="status" className="text-sm text-warning">
+            Your mic is clipping. Lower the input volume.
+          </p>
+        )}
+      </details>
+      {joined && (
+        <AudioDiagnostics output={devices.find((device) => device.deviceId === outputId)?.label} />
+      )}
       {(status ?? activeStatus) && (
         <p role="status" className="text-sm text-fg-subtle">
           {status ?? activeStatus}
@@ -284,5 +420,132 @@ export function AudioSettings({ onClose }: { onClose: () => void }) {
         Reset audio defaults
       </Button>
     </Modal>
+  );
+}
+
+const presets: Record<string, Partial<AudioPreferences>> = {
+  Headset: {
+    echoCancellation: false,
+    autoGainControl: true,
+    suppression: "standard",
+    inputMode: "open",
+    inputVolume: 100,
+  },
+  Speakers: {
+    echoCancellation: true,
+    autoGainControl: true,
+    suppression: "standard",
+    inputMode: "open",
+    inputVolume: 100,
+  },
+  Music: {
+    echoCancellation: false,
+    autoGainControl: false,
+    suppression: "off",
+    inputMode: "open",
+    inputVolume: 100,
+  },
+};
+
+function Toggle({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label className="flex items-center gap-2 text-sm">
+      <input
+        type="checkbox"
+        className="accent-current"
+        checked={checked}
+        onChange={(event) => onChange(event.currentTarget.checked)}
+      />
+      {label}
+    </label>
+  );
+}
+
+function AudioDiagnostics({ output }: { output?: string }) {
+  const [readout, setReadout] = useState<{
+    rtt?: number;
+    jitter?: number;
+    lost?: number;
+    sending: boolean;
+  } | null>(null);
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    let lastSent: number | undefined;
+    async function sample() {
+      const stats = await peerConnection()?.getStats();
+      if (!stats || !alive) return;
+      const snapshot: NonNullable<typeof readout> = { sending: false };
+      stats.forEach(
+        (report: {
+          type: string;
+          nominated?: boolean;
+          currentRoundTripTime?: number;
+          kind?: string;
+          jitter?: number;
+          packetsLost?: number;
+          packetsSent?: number;
+        }) => {
+          if (
+            report.type === "candidate-pair" &&
+            report.nominated &&
+            report.currentRoundTripTime !== undefined
+          )
+            snapshot.rtt = Math.round(report.currentRoundTripTime * 1000);
+          if (report.type === "inbound-rtp" && report.kind === "audio") {
+            if (report.jitter !== undefined) snapshot.jitter = Math.round(report.jitter * 1000);
+            snapshot.lost = report.packetsLost;
+          }
+          if (
+            report.type === "outbound-rtp" &&
+            report.kind === "audio" &&
+            report.packetsSent !== undefined
+          ) {
+            snapshot.sending = lastSent !== undefined && report.packetsSent > lastSent;
+            lastSent = report.packetsSent;
+          }
+        },
+      );
+      setReadout(snapshot);
+    }
+    const update = () => void sample().catch(() => {});
+    update();
+    const timer = window.setInterval(update, 1000);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+    };
+  }, [open]);
+  const { input } = activeAudioDevices();
+  return (
+    <details
+      className="space-y-3 border-t border-surface-3 pt-4"
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+    >
+      <summary className="cursor-pointer font-semibold">Call diagnostics</summary>
+      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+        <dt>Microphone</dt>
+        <dd>{input ?? "Unavailable"}</dd>
+        <dt>Output selection</dt>
+        <dd>{output ?? "System default"}</dd>
+        <dt>Outgoing audio</dt>
+        <dd>{readout?.sending ? "Packets sending" : "Waiting for packets"}</dd>
+        <dt>Round-trip time</dt>
+        <dd>{readout?.rtt === undefined ? "—" : `${readout.rtt} ms`}</dd>
+        <dt>Jitter</dt>
+        <dd>{readout?.jitter === undefined ? "—" : `${readout.jitter} ms`}</dd>
+        <dt>Packets lost</dt>
+        <dd>{readout?.lost ?? "—"}</dd>
+      </dl>
+    </details>
   );
 }

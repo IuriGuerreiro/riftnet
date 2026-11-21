@@ -1,4 +1,5 @@
 mod share_play;
+mod voice_shortcut;
 
 use tauri::Manager;
 
@@ -12,6 +13,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
+            app.manage(voice_shortcut::VoiceShortcut::default());
             app.manage(share_play::SharePlay::start(app.handle().clone()));
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -24,6 +26,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             core_ping,
+            voice_shortcut::voice_shortcut,
             share_play::share_play_supported,
             share_play::share_play_monitors,
             share_play::share_play_approve,

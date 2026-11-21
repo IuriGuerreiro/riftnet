@@ -9,13 +9,29 @@ export const audioDefaults = {
   inputVolume: 100,
   voiceVolume: 100,
   suppression: "standard" as const,
+  echoCancellation: true,
+  autoGainControl: true,
+  inputMode: "open" as const,
+  automaticSensitivity: true,
+  sensitivity: 45,
+  pushKey: "F8" as const,
+  releaseDelay: 150,
 };
+export const pushKeys = ["F6", "F7", "F8", "F9", "F10"] as const;
+
 const schema = z.object({
   inputId: z.string().catch(""),
   outputId: z.string().catch(""),
   inputVolume: z.number().min(0).max(200).catch(100),
   voiceVolume: percent.catch(100),
   suppression: z.enum(["off", "standard", "enhanced"]).catch("standard"),
+  echoCancellation: z.boolean().catch(true),
+  autoGainControl: z.boolean().catch(true),
+  inputMode: z.enum(["open", "voice", "push"]).catch("open"),
+  automaticSensitivity: z.boolean().catch(true),
+  sensitivity: percent.catch(45),
+  pushKey: z.enum(pushKeys).catch("F8"),
+  releaseDelay: z.number().min(0).max(1000).catch(150),
   people: z.record(z.string(), z.number().min(0).max(200)).catch({}),
 });
 
