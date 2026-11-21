@@ -1,4 +1,3 @@
-//! Profile images (avatar, banner): check, crop, resize and re-encode.
 //! Re-encoding from raw pixels drops all metadata (EXIF, GPS, ICC, comments).
 
 use std::io::Cursor;

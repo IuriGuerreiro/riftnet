@@ -8,8 +8,8 @@ import type { User } from "./types";
 export type AvatarSize = 128 | 512;
 
 export interface ProfileUpdate {
-  display_name: string;
-  bio: string;
+  display_name?: string;
+  bio?: string;
   custom_status?: string;
   pronouns?: string;
   accent_color?: string;
@@ -55,10 +55,11 @@ export function useRemoveBanner() {
   });
 }
 
-export function useLoadProfile(userId: string, known: boolean) {
+export function useLoadProfile(userId: string) {
   return useQuery({
     queryKey: ["user", userId],
-    enabled: !known && !!userId,
+    enabled: !!userId,
+    staleTime: 30_000,
     queryFn: async () => {
       const u = await http<User>(`/users/${userId}`);
       useProfiles.getState().put([fromJson(u)]);

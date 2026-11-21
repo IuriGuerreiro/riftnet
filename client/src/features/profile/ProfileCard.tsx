@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { useBannerUrl, useLoadProfile } from "../../api/profile";
 import { Avatar } from "../../components/Avatar";
@@ -30,34 +30,47 @@ function FloatingCard({
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const profile = useProfile(userId);
-  const load = useLoadProfile(userId, !!profile);
+  const load = useLoadProfile(userId);
+  const width = Math.min(CARD_WIDTH, window.innerWidth - 16);
 
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
     const place = () =>
-      setPos(placeCard(anchor, CARD_WIDTH, el.offsetHeight, window.innerWidth, window.innerHeight));
+      setPos(placeCard(anchor, width, el.offsetHeight, window.innerWidth, window.innerHeight));
     place();
     const ro = new ResizeObserver(place);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [anchor]);
+  }, [anchor, width]);
+
+  const visible = pos !== null;
+  useEffect(() => {
+    if (visible) ref.current?.focus();
+  }, [visible]);
 
   useLayoutEffect(() => {
-    ref.current?.focus();
+    const card = ref.current;
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const onDown = (e: MouseEvent) => {
       const t = e.target as Element;
       if (ref.current?.contains(t) || t.closest(`[${TRIGGER_ATTR}]`)) return;
       onClose();
     };
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    const onScroll = (e: Event) => {
+      if (!ref.current?.contains(e.target as Node)) onClose();
+    };
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
+    document.addEventListener("scroll", onScroll, true);
     window.addEventListener("resize", onClose);
     return () => {
       document.removeEventListener("mousedown", onDown);
       document.removeEventListener("keydown", onKey);
+      document.removeEventListener("scroll", onScroll, true);
       window.removeEventListener("resize", onClose);
+      if (opener?.isConnected && card?.contains(document.activeElement)) opener.focus();
     };
   }, [onClose]);
 
@@ -67,8 +80,10 @@ function FloatingCard({
       role="dialog"
       aria-label={`Profile of ${nameOf(profile)}`}
       tabIndex={-1}
-      style={{ width: CARD_WIDTH, top: pos?.top ?? anchor.top, left: pos?.left ?? anchor.right }}
-      className={`fixed z-50 outline-none ${pos ? "" : "invisible"}`}
+      style={{ width, top: pos?.top ?? anchor.top, left: pos?.left ?? anchor.right }}
+      className={`fixed z-50 max-h-[calc(100vh-16px)] overflow-y-auto rounded-panel outline-none ${
+        visible ? "" : "invisible"
+      }`}
     >
       {profile ? (
         <ProfileCardBody profile={profile} />

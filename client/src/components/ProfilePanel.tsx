@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 
 import {
+  type ProfileUpdate,
   useRemoveAvatar,
   useRemoveBanner,
   useUpdateProfile,
@@ -91,9 +92,14 @@ export function ProfilePanel({ myId, onClose }: { myId: string; onClose: () => v
   const accent = draft.accent_color?.trim().toLowerCase() ?? "";
   const accentValid = /^#[0-9a-f]{6}$/.test(accent);
 
-  const onSave = form.handleSubmit((values) =>
-    update.mutate(values, { onSuccess: () => form.reset(values) }),
-  );
+  const onSave = form.handleSubmit((values) => {
+    const dirty = form.formState.dirtyFields;
+    const changed = Object.fromEntries(
+      Object.entries(values).filter(([k]) => dirty[k as keyof ProfileForm]),
+    ) as ProfileUpdate;
+    if (Object.keys(changed).length === 0) return;
+    update.mutate(changed, { onSuccess: () => form.reset(values) });
+  });
 
   const previewProfile = me && {
     ...me,

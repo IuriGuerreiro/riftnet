@@ -128,7 +128,8 @@ impl UserService {
         Ok(user)
     }
 
-    /// upload body so waiting uploads never pile up in memory.
+    // INVARIANT: take a slot before reading the upload body, so waiting
+    // uploads never pile up in memory.
     pub fn image_slot(&self) -> Result<OwnedSemaphorePermit, ApiError> {
         self.image_slots
             .clone()
@@ -155,8 +156,8 @@ impl UserService {
         .await
         .map_err(anyhow::Error::from)??;
 
-        // Every upload gets its own id, so its files are never shared with
-        // even when the same image is uploaded twice at once.
+        // INVARIANT: every upload gets its own id, so cleanup of an old image
+        // can't hit the live one, even when the same image is uploaded twice.
         let hash = upload_id(&processed.hash);
         let hash_hex = hex(&hash);
         for (width, bytes) in processed.files {
@@ -181,10 +182,12 @@ impl UserService {
                 return Err(err.into());
             }
         };
+        // WARN: announce before the slow cleanup. A stalled cleanup must not
+        // push a stale snapshot after a later change (no profile version yet).
+        self.announce(&user).await;
         if let Some(old) = old {
             self.delete_files(me, kind, &old).await;
         }
-        self.announce(&user).await;
         Ok(user)
     }
 
@@ -196,8 +199,8 @@ impl UserService {
             .await?
             .ok_or(ApiError::NotFound)?;
         if let Some(old) = old {
-            self.delete_files(me, kind, &old).await;
             self.announce(&user).await;
+            self.delete_files(me, kind, &old).await;
         }
         Ok(user)
     }
