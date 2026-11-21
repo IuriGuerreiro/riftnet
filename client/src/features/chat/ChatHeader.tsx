@@ -9,6 +9,7 @@ import { useCalls } from "../../stores/calls";
 import { isGroup, useChat } from "../../stores/chat";
 import { useConnection } from "../../stores/connection";
 import { useUi } from "../../stores/ui";
+import { ProfileTrigger } from "../profile/ProfileTrigger";
 import { useNameFor } from "../session/useRealtime";
 import { otherMember } from "../sidebar/conversation";
 
@@ -35,7 +36,9 @@ export function ChatHeader({ conversation: c }: { conversation: Conversation }) 
       <h1 className="truncate font-semibold text-fg">{group ? c.name : nameFor(other?.id)}</h1>
       {!group && other && (
         <span className="ml-1 hidden sm:inline-flex">
-          <AvatarWithStatus userId={other.id} size="xs" />
+          <ProfileTrigger userId={other.id} label={nameFor(other.id)} className="rounded-full">
+            <AvatarWithStatus userId={other.id} size="xs" />
+          </ProfileTrigger>
         </span>
       )}
       {group && (

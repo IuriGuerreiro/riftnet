@@ -7,6 +7,7 @@ import { ProfilePanel } from "../components/ProfilePanel";
 import { useFriendActivityWatch } from "../features/activity/activity";
 import { ChatPane } from "../features/chat/ChatPane";
 import { FriendsPage } from "../features/friends/FriendsPage";
+import { ProfileCardHost } from "../features/profile/ProfileCard";
 import { ServerPanel } from "../features/servers/ServerView";
 import { useKnownUsers, useNameFor, useRealtime } from "../features/session/useRealtime";
 import {
@@ -38,6 +39,7 @@ export function HomePage() {
       {editingProfile && me && (
         <ProfilePanel myId={me.id.toString()} onClose={() => setEditingProfile(false)} />
       )}
+      <ProfileCardHost />
       {creating && <NewConversationDialog kind={creating} onClose={() => setCreating(null)} />}
       <ServerRail onCreateGroup={() => setCreating("group")} />
       <Sidebar onEditProfile={() => setEditingProfile(true)} onNew={setCreating} />
