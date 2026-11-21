@@ -16,6 +16,7 @@ export function ControlBanner({ ws, nameFor }: { ws: WsClient | null; nameFor: N
   const { answerControl, revokeControl } = useCalls();
   const view = controlView(current, myId());
   const pending = view.role === "host" && !view.granted && sharing;
+  const requestId = current?.control?.requestId;
   if (!ws || (armedFor === null && !pending)) return null;
 
   return (
@@ -34,10 +35,12 @@ export function ControlBanner({ ws, nameFor }: { ws: WsClient | null; nameFor: N
           </Button>
         </>
       ) : (
-        view.role === "host" && (
+        view.role === "host" &&
+        requestId !== undefined && (
           <ApproveRequest
+            key={requestId.toString()}
             name={nameFor(view.other)}
-            onAnswer={(approve, monitor) => void answerControl(ws, approve, monitor)}
+            onAnswer={(approve, monitor) => void answerControl(ws, requestId, approve, monitor)}
           />
         )
       )}

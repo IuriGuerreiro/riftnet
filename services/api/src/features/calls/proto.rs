@@ -29,6 +29,7 @@ impl From<&Call> for v1::Call {
                 controller_id: k.controller_id as u64,
                 granted: k.granted,
                 grant_id: k.grant_id as u64,
+                request_id: k.request_id as u64,
             }),
         }
     }

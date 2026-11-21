@@ -28,6 +28,9 @@ message CallControlState {
   bool granted = 3;
   // Unique per approval, 0 while pending. The host arms each id at most once.
   uint64 grant_id = 4;
+  // Unique per request. The host's GRANT/DENY must name it, so an approval
+  // can't be spent on a different (replacement) request.
+  uint64 request_id = 5;
 }
 
 message CallStart {
@@ -66,6 +69,8 @@ message CallControl {
   uint64 call_id = 1;
   CallControlAction action = 2;
   uint64 user_id = 3;
+  // GRANT/DENY: CallControlState.request_id being answered.
+  uint64 request_id = 4;
 }
 
 message CallResult {

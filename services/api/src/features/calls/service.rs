@@ -248,14 +248,14 @@ impl CallService {
         action: ControlAction,
     ) -> Result<Call, ApiError> {
         self.member_call(me, call_id).await?;
-        let grant_id = self.ids.next_id() as i64;
+        let new_id = self.ids.next_id() as i64;
         let (tx, rx) = std::sync::mpsc::channel();
         let call = self
             .store
             .update(
                 call_id,
                 Box::new(move |c| {
-                    let _ = tx.send(c.apply_control(me, connection_id, action, grant_id));
+                    let _ = tx.send(c.apply_control(me, connection_id, action, new_id));
                 }),
             )
             .await
@@ -285,13 +285,17 @@ impl CallService {
                         .await;
                 }
             }
-            MediaNotice::RouteFailed { room_id } => {
-                tracing::warn!(call.id = room_id, "share play input route failed");
-                if let Some(call) = self
-                    .store
-                    .update(room_id, Box::new(|c| c.control = None))
-                    .await
-                {
+            MediaNotice::RouteFailed { room_id, grant_id } => {
+                tracing::warn!(call.id = room_id, grant_id, "share play input route failed");
+                // Only the grant that failed: a newer grant stays.
+                let clear = move |c: &mut Call| {
+                    if c.control
+                        .is_some_and(|k| k.granted && k.grant_id == grant_id)
+                    {
+                        c.control = None;
+                    }
+                };
+                if let Some(call) = self.store.update(room_id, Box::new(clear)).await {
                     self.push_updated(&call).await;
                 }
             }
@@ -552,7 +556,7 @@ mod tests {
         left: Mutex<Vec<u64>>,
         routes: Mutex<Vec<RouteLog>>,
     }
-    type RouteLog = (i64, Option<(u64, u64)>);
+    type RouteLog = (i64, Option<(u64, u64, u64)>);
     #[async_trait]
     impl MediaClient for FakeMedia {
         async fn join(&self, _: i64, _: i64, _: String) -> anyhow::Result<(u64, String)> {
@@ -563,7 +567,7 @@ mod tests {
             self.left.lock().unwrap().push(peer_id);
             Ok(())
         }
-        async fn route(&self, room: i64, route: Option<(u64, u64)>) -> anyhow::Result<()> {
+        async fn route(&self, room: i64, route: Option<(u64, u64, u64)>) -> anyhow::Result<()> {
             self.routes.lock().unwrap().push((room, route));
             Ok(())
         }
@@ -899,12 +903,26 @@ mod tests {
         svc.control(BOB, 20, id, ControlAction::Request { host_id: ALICE })
             .await
             .unwrap();
-        svc.control(ALICE, 10, id, ControlAction::Grant { viewer_id: BOB })
+        svc.control(ALICE, 10, id, grant(svc, id).await)
             .await
             .unwrap()
     }
 
-    fn last_route(media: &FakeMedia) -> Option<(u64, u64)> {
+    /// Grant naming the request currently pending (0 if none).
+    async fn grant(svc: &CallService, id: i64) -> ControlAction {
+        let request_id = svc
+            .store
+            .get(id)
+            .await
+            .and_then(|c| c.control)
+            .map_or(0, |k| k.request_id);
+        ControlAction::Grant {
+            viewer_id: BOB,
+            request_id,
+        }
+    }
+
+    fn last_route(media: &FakeMedia) -> Option<(u64, u64, u64)> {
         media.routes.lock().unwrap().last().unwrap().1
     }
 
@@ -912,7 +930,7 @@ mod tests {
     async fn share_play_request_grant_and_errors() {
         let (svc, media, id) = share_play_call().await;
         let err = svc
-            .control(BOB, 20, id, ControlAction::Grant { viewer_id: BOB })
+            .control(BOB, 20, id, grant(&svc, id).await)
             .await
             .unwrap_err();
         assert_eq!(err.describe().1, "control_not_allowed");
@@ -922,7 +940,7 @@ mod tests {
         assert_ne!(control.grant_id, 0);
         assert_eq!(
             last_route(&media),
-            Some((2, 1)),
+            Some((2, 1, control.grant_id as u64)),
             "SFU relays Bob -> Alice only"
         );
         let err = svc
@@ -939,7 +957,7 @@ mod tests {
             .await
             .unwrap();
         let err = svc
-            .control(ALICE, 11, id, ControlAction::Grant { viewer_id: BOB })
+            .control(ALICE, 11, id, grant(&svc, id).await)
             .await
             .unwrap_err();
         assert_eq!(err.describe().1, "control_not_allowed");
@@ -983,7 +1001,7 @@ mod tests {
 
         // A stale grant from before the disconnect can't come back.
         let err = svc
-            .control(ALICE, 10, id, ControlAction::Grant { viewer_id: BOB })
+            .control(ALICE, 10, id, grant(&svc, id).await)
             .await
             .unwrap_err();
         assert_eq!(err.describe().1, "control_not_allowed");
@@ -993,7 +1011,7 @@ mod tests {
             .await
             .unwrap();
         let again = svc
-            .control(ALICE, 10, id, ControlAction::Grant { viewer_id: BOB })
+            .control(ALICE, 10, id, grant(&svc, id).await)
             .await
             .unwrap()
             .control
@@ -1016,12 +1034,51 @@ mod tests {
     async fn share_play_route_failure_revokes() {
         let (svc, media, id) = share_play_call().await;
         grant_bob(&svc, id).await;
-        svc.media_notice(MediaNotice::RouteFailed { room_id: id })
-            .await;
+        let grant_id = svc.store.get(id).await.unwrap().control.unwrap().grant_id;
+        svc.media_notice(MediaNotice::RouteFailed {
+            room_id: id,
+            grant_id,
+        })
+        .await;
         let call = svc.store.get(id).await.unwrap();
         assert_eq!(call.control, None);
         assert_eq!(call.participant_user_ids(), [ALICE, BOB, EVE]);
         assert_eq!(last_route(&media), None);
+    }
+
+    #[tokio::test]
+    async fn share_play_stale_route_failure_keeps_the_newer_grant() {
+        let (svc, _, id) = share_play_call().await;
+        let old = grant_bob(&svc, id).await.control.unwrap().grant_id;
+        svc.control(BOB, 20, id, ControlAction::Revoke)
+            .await
+            .unwrap();
+        let new = grant_bob(&svc, id).await.control.unwrap();
+        assert_ne!(new.grant_id, old);
+        svc.media_notice(MediaNotice::RouteFailed {
+            room_id: id,
+            grant_id: old,
+        })
+        .await;
+        assert_eq!(svc.store.get(id).await.unwrap().control, Some(new));
+    }
+
+    #[tokio::test]
+    async fn share_play_approval_cannot_grant_a_replacement_request() {
+        let (svc, _, id) = share_play_call().await;
+        svc.control(BOB, 20, id, ControlAction::Request { host_id: ALICE })
+            .await
+            .unwrap();
+        let approved = grant(&svc, id).await;
+        svc.control(BOB, 20, id, ControlAction::Revoke)
+            .await
+            .unwrap();
+        svc.control(BOB, 20, id, ControlAction::Request { host_id: ALICE })
+            .await
+            .unwrap();
+        let err = svc.control(ALICE, 10, id, approved).await.unwrap_err();
+        assert_eq!(err.describe().1, "control_not_allowed");
+        assert!(!svc.store.get(id).await.unwrap().control.unwrap().granted);
     }
 
     #[tokio::test]

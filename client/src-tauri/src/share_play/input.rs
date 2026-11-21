@@ -39,6 +39,14 @@ pub trait Backend {
     fn location(&self) -> Option<(i32, i32)>;
 }
 
+/// Where one input event came from, per the SFU tag and channel.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Tag {
+    pub sender: u64,
+    pub grant_id: u64,
+    pub lossy: bool,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Grant {
     pub grant_id: u64,
@@ -49,6 +57,7 @@ pub struct Grant {
 #[derive(Debug, Clone, Copy)]
 struct Approval {
     controller_id: u64,
+    request_id: u64,
     target: Rect,
     at: Instant,
 }
@@ -60,11 +69,13 @@ pub enum Rejected {
     Unknown,
     /// Coordinates missing / outside the share, or the cursor didn't get there.
     OffTarget,
+    /// Not a pointer move, but arrived on the lossy channel.
+    WrongChannel,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum ArmError {
-    /// No fresh local Approve click for this viewer.
+    /// No fresh local Approve click for this viewer and request.
     NotApproved,
     /// This grant id was armed before (stale update after a revoke).
     Stale,
@@ -86,21 +97,23 @@ impl Controller {
         self.grant
     }
 
-    /// The host clicked Approve here, for this viewer and this monitor.
-    pub fn approve(&mut self, controller_id: u64, target: Rect, now: Instant) {
+    /// The host clicked Approve here, for this request and this monitor.
+    pub fn approve(&mut self, controller_id: u64, request_id: u64, target: Rect, now: Instant) {
         self.approval = Some(Approval {
             controller_id,
+            request_id,
             target,
             at: now,
         });
     }
 
     /// The server confirmed a grant. Arms only once per grant id, and only
-    /// with a fresh local approval for the same viewer (which it consumes).
+    /// with a fresh local approval of that exact request (which it consumes).
     pub fn arm(
         &mut self,
         grant_id: u64,
         controller_id: u64,
+        request_id: u64,
         now: Instant,
         os: &mut impl Backend,
     ) -> Result<(), ArmError> {
@@ -110,7 +123,7 @@ impl Controller {
         let approval = self
             .approval
             .take()
-            .filter(|a| a.controller_id == controller_id)
+            .filter(|a| a.controller_id == controller_id && a.request_id == request_id)
             .filter(|a| now.saturating_duration_since(a.at) <= APPROVAL_TTL)
             .ok_or(ArmError::NotApproved)?;
         self.used_grants.insert(grant_id);
@@ -169,27 +182,34 @@ impl Controller {
         }
     }
 
-    /// Move to the event's point and confirm the cursor is there.
+    /// Move to the event's point and confirm the cursor is there. If the OS
+    /// can't say where the cursor is, that's a refusal too.
     fn point(&self, target: Rect, x: f64, y: f64, os: &mut impl Backend) -> Result<(), Rejected> {
         let (px, py) = to_pixels(target, x, y).ok_or(Rejected::OffTarget)?;
         os.move_to(px, py);
         match os.location() {
-            Some(at) if at != (px, py) => Err(Rejected::OffTarget),
-            _ => Ok(()),
+            Some(at) if at == (px, py) => Ok(()),
+            _ => Err(Rejected::OffTarget),
         }
     }
 
+    /// `sender` and `grant_id` come from the SFU tag. Input relayed under
+    /// an older grant is dropped, even from the same viewer. `lossy` = it
+    /// came on the unordered channel, which may only carry moves.
     pub fn apply(
         &mut self,
-        sender: u64,
+        from: Tag,
         event: InputEvent,
         now: Instant,
         os: &mut impl Backend,
     ) -> Result<(), Rejected> {
         let grant = self
             .grant
-            .filter(|g| g.controller_id == sender)
+            .filter(|g| g.controller_id == from.sender && g.grant_id == from.grant_id)
             .ok_or(Rejected::NotGranted)?;
+        if from.lossy && !matches!(event, InputEvent::Move { .. }) {
+            return Err(Rejected::WrongChannel);
+        }
         self.lease_until = Some(now + LEASE);
         match event {
             InputEvent::Ping => {}
@@ -277,6 +297,12 @@ mod tests {
 
     const VIEWER: u64 = 7;
     const GRANT: u64 = 900;
+    const REQ: u64 = 300;
+    const FROM: Tag = Tag {
+        sender: VIEWER,
+        grant_id: GRANT,
+        lossy: false,
+    };
     const SCREEN: Rect = Rect {
         x: 100,
         y: 0,
@@ -291,8 +317,8 @@ mod tests {
             ..Rec::default()
         };
         let now = Instant::now();
-        c.approve(VIEWER, SCREEN, now);
-        c.arm(GRANT, VIEWER, now, &mut os).unwrap();
+        c.approve(VIEWER, REQ, SCREEN, now);
+        c.arm(GRANT, VIEWER, REQ, now, &mut os).unwrap();
         (c, os, now)
     }
 
@@ -312,7 +338,7 @@ mod tests {
         let mut c = Controller::default();
         let mut os = Rec::default();
         assert_eq!(
-            c.apply(VIEWER, key("KeyW", true), Instant::now(), &mut os),
+            c.apply(FROM, key("KeyW", true), Instant::now(), &mut os),
             Err(Rejected::NotGranted)
         );
         assert!(os.log.is_empty());
@@ -324,20 +350,21 @@ mod tests {
         let mut os = Rec::default();
         let now = Instant::now();
         assert_eq!(
-            c.arm(GRANT, VIEWER, now, &mut os),
+            c.arm(GRANT, VIEWER, REQ, now, &mut os),
             Err(ArmError::NotApproved)
         );
-        c.approve(8, SCREEN, now);
+        c.approve(8, REQ, SCREEN, now);
         assert_eq!(
-            c.arm(GRANT, VIEWER, now, &mut os),
+            c.arm(GRANT, VIEWER, REQ, now, &mut os),
             Err(ArmError::NotApproved),
             "other viewer"
         );
-        c.approve(VIEWER, SCREEN, now);
+        c.approve(VIEWER, REQ, SCREEN, now);
         assert_eq!(
             c.arm(
                 GRANT,
                 VIEWER,
+                REQ,
                 now + APPROVAL_TTL + Duration::from_secs(1),
                 &mut os
             ),
@@ -351,15 +378,21 @@ mod tests {
         let (mut c, mut os, now) = granted();
         c.revoke(&mut os);
         // A queued CallUpdated replays the old grant.
-        assert_eq!(c.arm(GRANT, VIEWER, now, &mut os), Err(ArmError::Stale));
+        assert_eq!(
+            c.arm(GRANT, VIEWER, REQ, now, &mut os),
+            Err(ArmError::Stale)
+        );
         // Even with a new approval, the old id stays dead.
-        c.approve(VIEWER, SCREEN, now);
-        assert_eq!(c.arm(GRANT, VIEWER, now, &mut os), Err(ArmError::Stale));
+        c.approve(VIEWER, REQ, SCREEN, now);
+        assert_eq!(
+            c.arm(GRANT, VIEWER, REQ, now, &mut os),
+            Err(ArmError::Stale)
+        );
         // A new grant id needs that fresh approval, and it's single-use.
-        c.arm(GRANT + 1, VIEWER, now, &mut os).unwrap();
+        c.arm(GRANT + 1, VIEWER, REQ, now, &mut os).unwrap();
         c.revoke(&mut os);
         assert_eq!(
-            c.arm(GRANT + 2, VIEWER, now, &mut os),
+            c.arm(GRANT + 2, VIEWER, REQ, now, &mut os),
             Err(ArmError::NotApproved)
         );
     }
@@ -369,10 +402,10 @@ mod tests {
         let mut c = Controller::default();
         let mut os = Rec::default();
         let now = Instant::now();
-        c.approve(VIEWER, SCREEN, now);
+        c.approve(VIEWER, REQ, SCREEN, now);
         c.revoke(&mut os);
         assert_eq!(
-            c.arm(GRANT, VIEWER, now, &mut os),
+            c.arm(GRANT, VIEWER, REQ, now, &mut os),
             Err(ArmError::NotApproved)
         );
     }
@@ -381,19 +414,19 @@ mod tests {
     fn only_the_granted_sender_applies() {
         let (mut c, mut os, now) = granted();
         assert_eq!(
-            c.apply(99, key("KeyW", true), now, &mut os),
+            c.apply(Tag { sender: 99, ..FROM }, key("KeyW", true), now, &mut os),
             Err(Rejected::NotGranted)
         );
-        c.apply(VIEWER, key("KeyW", true), now, &mut os).unwrap();
+        c.apply(FROM, key("KeyW", true), now, &mut os).unwrap();
         assert_eq!(os.log, ["key Char('w') true"]);
     }
 
     #[test]
     fn lease_expires_and_releases_everything() {
         let (mut c, mut os, now) = granted();
-        c.apply(VIEWER, key("KeyW", true), now, &mut os).unwrap();
+        c.apply(FROM, key("KeyW", true), now, &mut os).unwrap();
         assert!(!c.tick(now + LEASE / 2, &mut os));
-        c.apply(VIEWER, InputEvent::Ping, now + LEASE / 2, &mut os)
+        c.apply(FROM, InputEvent::Ping, now + LEASE / 2, &mut os)
             .unwrap();
         assert!(!c.tick(now + LEASE, &mut os), "ping renewed it");
         os.log.clear();
@@ -405,11 +438,11 @@ mod tests {
     #[test]
     fn move_maps_into_the_shared_screen_and_refuses_outside() {
         let (mut c, mut os, now) = granted();
-        c.apply(VIEWER, InputEvent::Move { x: 0.5, y: 1.0 }, now, &mut os)
+        c.apply(FROM, InputEvent::Move { x: 0.5, y: 1.0 }, now, &mut os)
             .unwrap();
         assert_eq!(os.log, ["move 600 500"]);
         assert_eq!(
-            c.apply(VIEWER, InputEvent::Move { x: 1.5, y: 0.0 }, now, &mut os),
+            c.apply(FROM, InputEvent::Move { x: 1.5, y: 0.0 }, now, &mut os),
             Err(Rejected::OffTarget)
         );
     }
@@ -417,12 +450,11 @@ mod tests {
     #[test]
     fn click_carries_its_position_and_lands_there() {
         let (mut c, mut os, now) = granted();
-        c.apply(VIEWER, click(true, 0.0, 0.0), now, &mut os)
-            .unwrap();
+        c.apply(FROM, click(true, 0.0, 0.0), now, &mut os).unwrap();
         assert_eq!(os.log, ["move 100 0", "button 0 true"]);
         assert_eq!(
             c.apply(
-                VIEWER,
+                FROM,
                 InputEvent::Wheel {
                     dx: 0,
                     dy: 3,
@@ -441,7 +473,7 @@ mod tests {
         let (mut c, mut os, now) = granted();
         os.stuck = true;
         assert_eq!(
-            c.apply(VIEWER, click(true, 0.5, 0.5), now, &mut os),
+            c.apply(FROM, click(true, 0.5, 0.5), now, &mut os),
             Err(Rejected::OffTarget)
         );
         assert!(!os.log.iter().any(|l| l.starts_with("button")));
@@ -450,11 +482,9 @@ mod tests {
     #[test]
     fn button_up_always_releases() {
         let (mut c, mut os, now) = granted();
-        c.apply(VIEWER, click(true, 0.5, 0.5), now, &mut os)
-            .unwrap();
+        c.apply(FROM, click(true, 0.5, 0.5), now, &mut os).unwrap();
         os.log.clear();
-        c.apply(VIEWER, click(false, 9.0, 9.0), now, &mut os)
-            .unwrap();
+        c.apply(FROM, click(false, 9.0, 9.0), now, &mut os).unwrap();
         assert_eq!(os.log, ["button 0 false"]);
     }
 
@@ -462,31 +492,31 @@ mod tests {
     fn os_key_delete_and_ctrl_alt_combos_are_blocked() {
         let (mut c, mut os, now) = granted();
         assert_eq!(
-            c.apply(VIEWER, key("MetaLeft", true), now, &mut os),
+            c.apply(FROM, key("MetaLeft", true), now, &mut os),
             Err(Rejected::Blocked)
         );
         assert_eq!(
-            c.apply(VIEWER, key("Delete", true), now, &mut os),
+            c.apply(FROM, key("Delete", true), now, &mut os),
             Err(Rejected::Blocked),
             "always"
         );
         assert_eq!(
-            c.apply(VIEWER, key("NumpadDecimal", true), now, &mut os),
+            c.apply(FROM, key("NumpadDecimal", true), now, &mut os),
             Err(Rejected::Blocked)
         );
         assert_eq!(
-            c.apply(VIEWER, key("Key\u{7f}", true), now, &mut os),
+            c.apply(FROM, key("Key\u{7f}", true), now, &mut os),
             Err(Rejected::Unknown)
         );
-        c.apply(VIEWER, key("ControlRight", true), now, &mut os)
+        c.apply(FROM, key("ControlRight", true), now, &mut os)
             .unwrap();
-        c.apply(VIEWER, key("AltLeft", true), now, &mut os).unwrap();
+        c.apply(FROM, key("AltLeft", true), now, &mut os).unwrap();
         assert_eq!(
-            c.apply(VIEWER, key("Backspace", true), now, &mut os),
+            c.apply(FROM, key("Backspace", true), now, &mut os),
             Err(Rejected::Blocked)
         );
         assert_eq!(
-            c.apply(VIEWER, key("F2", true), now, &mut os),
+            c.apply(FROM, key("F2", true), now, &mut os),
             Err(Rejected::Blocked)
         );
         assert!(
@@ -495,28 +525,24 @@ mod tests {
                 .any(|e| e.contains("Delete") || e.contains("Backspace") || e.contains("F("))
         );
         c.release_all(&mut os);
-        c.apply(VIEWER, key("Backspace", true), now, &mut os)
-            .unwrap();
+        c.apply(FROM, key("Backspace", true), now, &mut os).unwrap();
     }
 
     #[test]
     fn modifiers_are_tracked_canonically() {
         let (mut c, mut os, now) = granted();
-        c.apply(VIEWER, key("ControlLeft", true), now, &mut os)
+        c.apply(FROM, key("ControlLeft", true), now, &mut os)
             .unwrap();
-        c.apply(VIEWER, key("AltRight", true), now, &mut os)
-            .unwrap();
+        c.apply(FROM, key("AltRight", true), now, &mut os).unwrap();
         assert!(c.blocked(Key::Named(Named::F(1))));
     }
 
     #[test]
     fn revoke_releases_everything_held() {
         let (mut c, mut os, now) = granted();
-        c.apply(VIEWER, key("KeyW", true), now, &mut os).unwrap();
-        c.apply(VIEWER, key("ShiftLeft", true), now, &mut os)
-            .unwrap();
-        c.apply(VIEWER, click(true, 0.1, 0.1), now, &mut os)
-            .unwrap();
+        c.apply(FROM, key("KeyW", true), now, &mut os).unwrap();
+        c.apply(FROM, key("ShiftLeft", true), now, &mut os).unwrap();
+        c.apply(FROM, click(true, 0.1, 0.1), now, &mut os).unwrap();
         os.log.clear();
         c.revoke(&mut os);
         assert_eq!(
@@ -528,7 +554,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            c.apply(VIEWER, key("KeyW", true), now, &mut os),
+            c.apply(FROM, key("KeyW", true), now, &mut os),
             Err(Rejected::NotGranted)
         );
         os.log.clear();
@@ -539,15 +565,15 @@ mod tests {
     #[test]
     fn stray_key_up_is_ignored_and_unknown_keys_rejected() {
         let (mut c, mut os, now) = granted();
-        c.apply(VIEWER, key("KeyA", false), now, &mut os).unwrap();
+        c.apply(FROM, key("KeyA", false), now, &mut os).unwrap();
         assert!(os.log.is_empty());
         assert_eq!(
-            c.apply(VIEWER, key("LaunchMail", true), now, &mut os),
+            c.apply(FROM, key("LaunchMail", true), now, &mut os),
             Err(Rejected::Unknown)
         );
         assert_eq!(
             c.apply(
-                VIEWER,
+                FROM,
                 InputEvent::Button {
                     b: 4,
                     down: true,
@@ -559,6 +585,95 @@ mod tests {
             ),
             Err(Rejected::Unknown)
         );
+    }
+
+    #[test]
+    fn click_and_wheel_need_a_known_cursor_position() {
+        let (mut c, mut os, now) = granted();
+        os.cursor = None;
+        os.stuck = true;
+        assert_eq!(
+            c.apply(FROM, click(true, 0.5, 0.5), now, &mut os),
+            Err(Rejected::OffTarget)
+        );
+        assert_eq!(
+            c.apply(
+                FROM,
+                InputEvent::Wheel {
+                    dx: 0,
+                    dy: 1,
+                    x: 0.5,
+                    y: 0.5
+                },
+                now,
+                &mut os
+            ),
+            Err(Rejected::OffTarget)
+        );
+        assert!(
+            !os.log
+                .iter()
+                .any(|l| l.starts_with("button") || l.starts_with("scroll"))
+        );
+    }
+
+    #[test]
+    fn approval_is_for_one_request() {
+        let mut c = Controller::default();
+        let mut os = Rec::default();
+        let now = Instant::now();
+        c.approve(VIEWER, REQ, SCREEN, now);
+        // The viewer re-requested; the server grants the new request.
+        assert_eq!(
+            c.arm(GRANT, VIEWER, REQ + 1, now, &mut os),
+            Err(ArmError::NotApproved)
+        );
+        assert!(c.armed().is_none());
+    }
+
+    #[test]
+    fn input_from_an_older_grant_is_dropped() {
+        let (mut c, mut os, now) = granted();
+        c.revoke(&mut os);
+        c.approve(VIEWER, REQ, SCREEN, now);
+        c.arm(GRANT + 1, VIEWER, REQ, now, &mut os).unwrap();
+        // Queued before the revoke, tagged with the old grant.
+        assert_eq!(
+            c.apply(FROM, key("KeyW", true), now, &mut os),
+            Err(Rejected::NotGranted)
+        );
+        let new = Tag {
+            grant_id: GRANT + 1,
+            ..FROM
+        };
+        c.apply(new, key("KeyW", true), now, &mut os).unwrap();
+        assert_eq!(os.log, ["key Char('w') true"]);
+    }
+
+    #[test]
+    fn lossy_channel_takes_moves_only() {
+        let (mut c, mut os, now) = granted();
+        let lossy = Tag {
+            lossy: true,
+            ..FROM
+        };
+        for e in [
+            key("KeyW", true),
+            click(true, 0.5, 0.5),
+            InputEvent::Ping,
+            InputEvent::Wheel {
+                dx: 0,
+                dy: 1,
+                x: 0.5,
+                y: 0.5,
+            },
+        ] {
+            assert_eq!(c.apply(lossy, e, now, &mut os), Err(Rejected::WrongChannel));
+        }
+        assert!(os.log.is_empty());
+        c.apply(lossy, InputEvent::Move { x: 0.0, y: 0.0 }, now, &mut os)
+            .unwrap();
+        assert_eq!(os.log, ["move 100 0"]);
     }
 
     #[test]

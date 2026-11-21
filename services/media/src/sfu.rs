@@ -26,7 +26,7 @@ pub struct Sfu {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Notice {
     PeerGone { peer_id: u64 },
-    RouteFailed { room: u64 },
+    RouteFailed { room: u64, grant: u64 },
 }
 
 /// Share Play limits on relayed input.
@@ -62,6 +62,54 @@ impl RateLimit {
     }
 }
 
+/// The one input route of a room, for one grant.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Route {
+    pub controller: u64,
+    pub host: u64,
+    pub grant: u64,
+}
+
+/// A room's route plus the highest grant ever closed there. Grant ids only
+/// grow, so a late or replayed update for a closed grant is ignored.
+#[derive(Debug, Default)]
+struct RouteSlot {
+    active: Option<Route>,
+    closed: u64,
+}
+
+impl RouteSlot {
+    fn set(&mut self, route: Option<Route>) {
+        let Some(r) = route else {
+            self.close();
+            return;
+        };
+        if r.grant == 0 || r.grant <= self.closed {
+            return;
+        }
+        match self.active {
+            Some(a) if r.grant < a.grant => {}
+            Some(a) if r.grant > a.grant => {
+                self.close();
+                self.active = Some(r);
+            }
+            _ => self.active = Some(r),
+        }
+    }
+
+    fn close(&mut self) -> Option<Route> {
+        let a = self.active.take()?;
+        self.closed = self.closed.max(a.grant);
+        Some(a)
+    }
+}
+
+/// The lossy channel carries pointer moves only. A key or click there could
+/// lose its release, so anything else is dropped.
+fn is_move(data: &[u8]) -> bool {
+    data.starts_with(br#"{"t":"move","#)
+}
+
 #[derive(Debug, PartialEq, Eq)]
 enum Relay {
     /// Send to this host peer.
@@ -74,20 +122,20 @@ enum Relay {
 
 /// Only the granted controller's input reaches only its host.
 fn relay_decision(
-    route: Option<(u64, u64)>,
+    route: Option<Route>,
     from: u64,
     label: &str,
-    len: usize,
+    data: &[u8],
     allowed: bool,
 ) -> Relay {
-    let Some((_, host)) = route.filter(|(c, _)| *c == from) else {
+    let Some(r) = route.filter(|r| r.controller == from) else {
         return Relay::Drop;
     };
-    let ok = len <= MAX_INPUT_BYTES && allowed;
+    let ok = data.len() <= MAX_INPUT_BYTES && allowed;
     match label {
-        RELIABLE if ok => Relay::To(host),
+        RELIABLE if ok => Relay::To(r.host),
         RELIABLE => Relay::Fail,
-        LATEST if ok => Relay::To(host),
+        LATEST if ok && is_move(data) => Relay::To(r.host),
         _ => Relay::Drop,
     }
 }
@@ -105,7 +153,7 @@ enum Cmd {
     },
     Route {
         room: u64,
-        route: Option<(u64, u64)>,
+        route: Option<Route>,
     },
 }
 
@@ -164,11 +212,12 @@ fn is_relayed(label: &str) -> bool {
     label.starts_with("input")
 }
 
-/// Prefix the sender's user id (8 bytes, big endian) so the receiver can
-/// check it against the granted controller.
-fn tag(user_id: u64, data: &[u8]) -> Vec<u8> {
-    let mut out = Vec::with_capacity(8 + data.len());
+/// Prefix the sender's user id and the grant it was relayed under (8 bytes
+/// each, big endian) so the host checks both before applying it.
+fn tag(user_id: u64, grant: u64, data: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(16 + data.len());
     out.extend_from_slice(&user_id.to_be_bytes());
+    out.extend_from_slice(&grant.to_be_bytes());
     out.extend_from_slice(data);
     out
 }
@@ -213,7 +262,7 @@ impl Sfu {
     }
 
     /// Share Play: the one input route of a room (controller peer, host peer).
-    pub fn route(&self, room: u64, route: Option<(u64, u64)>) {
+    pub fn route(&self, room: u64, route: Option<Route>) {
         let _ = self.cmds.send(Cmd::Route { room, route });
     }
 }
@@ -223,7 +272,7 @@ fn run(
     cmds: Receiver<Cmd>,
     notices: tokio::sync::mpsc::UnboundedSender<Notice>,
 ) {
-    let mut routes: HashMap<u64, (u64, u64)> = HashMap::new();
+    let mut routes: HashMap<u64, RouteSlot> = HashMap::new();
     let local = socket.local_addr().expect("socket address");
     let mut peers: Vec<Peer> = Vec::new();
     let mut buf = vec![0u8; 2000];
@@ -287,14 +336,7 @@ fn run(
                         p.end("left");
                     }
                 }
-                Cmd::Route { room, route } => match route {
-                    Some(r) => {
-                        routes.insert(room, r);
-                    }
-                    None => {
-                        routes.remove(&room);
-                    }
-                },
+                Cmd::Route { room, route } => routes.entry(room).or_default().set(route),
             }
         }
         if joined {
@@ -303,9 +345,9 @@ fn run(
 
         let mut forward: Vec<(u64, u64, MediaKind, MediaData)> = Vec::new();
         let mut keyframes: Vec<(u64, u64, KeyframeRequestKind)> = Vec::new();
-        // (room, host peer, label, payload tagged with the sender's user id)
-        let mut relay: Vec<(u64, u64, String, Vec<u8>)> = Vec::new();
-        let mut failed_rooms: Vec<u64> = Vec::new();
+        // (room, grant, host peer, label, tagged payload)
+        let mut relay: Vec<(u64, u64, u64, String, Vec<u8>)> = Vec::new();
+        let mut failed: Vec<(u64, u64)> = Vec::new();
         let mut next_timeout = Instant::now() + Duration::from_millis(100);
         for p in &mut peers {
             while p.rtc.is_alive() {
@@ -396,15 +438,19 @@ fn run(
                             else {
                                 continue;
                             };
-                            let route = routes.get(&p.room).copied();
-                            let allowed = route.is_some_and(|(c, _)| c == p.id)
+                            let route = routes.get(&p.room).and_then(|s| s.active);
+                            let allowed = route.is_some_and(|r| r.controller == p.id)
                                 && p.limiter.allow(Instant::now());
-                            match relay_decision(route, p.id, &label, d.data.len(), allowed) {
-                                Relay::To(host) => {
-                                    relay.push((p.room, host, label, tag(p.user_id, &d.data)))
-                                }
-                                Relay::Drop => {}
-                                Relay::Fail => failed_rooms.push(p.room),
+                            match (route, relay_decision(route, p.id, &label, &d.data, allowed)) {
+                                (Some(r), Relay::To(host)) => relay.push((
+                                    p.room,
+                                    r.grant,
+                                    host,
+                                    label,
+                                    tag(p.user_id, r.grant, &d.data),
+                                )),
+                                (Some(r), Relay::Fail) => failed.push((p.room, r.grant)),
+                                _ => {}
                             }
                         }
                         Event::Connected => tracing::info!(peer.id = p.id, "peer connected"),
@@ -468,8 +514,8 @@ fn run(
             }
         }
 
-        for (room, host, label, data) in &relay {
-            if failed_rooms.contains(room) {
+        for (room, grant, host, label, data) in &relay {
+            if failed.contains(&(*room, *grant)) {
                 continue;
             }
             let written = peers
@@ -482,15 +528,19 @@ fn run(
                 })
                 .unwrap_or(false);
             if !written && label == RELIABLE {
-                failed_rooms.push(*room);
+                failed.push((*room, *grant));
             }
         }
-        failed_rooms.sort_unstable();
-        failed_rooms.dedup();
-        for room in failed_rooms {
-            if routes.remove(&room).is_some() {
-                tracing::warn!(room.id = room, "share play route failed");
-                let _ = notices.send(Notice::RouteFailed { room });
+        failed.sort_unstable();
+        failed.dedup();
+        for (room, grant) in failed {
+            let Some(slot) = routes.get_mut(&room) else {
+                continue;
+            };
+            if slot.active.is_some_and(|r| r.grant == grant) {
+                slot.close();
+                tracing::warn!(room.id = room, grant, "share play route failed");
+                let _ = notices.send(Notice::RouteFailed { room, grant });
             }
         }
 
@@ -501,11 +551,21 @@ fn run(
             for p in gone {
                 let reason = p.end_reason.unwrap_or("closed");
                 tracing::info!(peer.id = p.id, reason, "peer removed");
-                routes.retain(|_, (c, h)| *c != p.id && *h != p.id);
+                for slot in routes.values_mut() {
+                    if slot
+                        .active
+                        .is_some_and(|r| r.controller == p.id || r.host == p.id)
+                    {
+                        slot.close();
+                    }
+                }
                 if reason != "left" {
                     let _ = notices.send(Notice::PeerGone { peer_id: p.id });
                 }
                 metrics::counter!(m::PEER_SESSIONS_ENDED, "reason" => reason).increment(1);
+                if !peers.iter().any(|o| o.room == p.room) {
+                    routes.remove(&p.room);
+                }
                 if !peers.iter().any(|o| o.room == p.room)
                     && let Some(started) = rooms.remove(&p.room)
                 {
@@ -567,32 +627,41 @@ mod tests {
         assert!(!is_relayed("chat"));
     }
 
-    const NOW_ROUTE: Option<(u64, u64)> = Some((2, 1));
+    const NOW_ROUTE: Option<Route> = Some(Route {
+        controller: 2,
+        host: 1,
+        grant: 50,
+    });
+    const MOVE: &[u8] = br#"{"t":"move","x":0.5,"y":0.5}"#;
+    const KEY: &[u8] = br#"{"t":"key","code":"KeyW","down":true}"#;
 
     #[test]
     fn only_the_granted_controller_reaches_only_its_host() {
         assert_eq!(
-            relay_decision(NOW_ROUTE, 2, RELIABLE, 30, true),
+            relay_decision(NOW_ROUTE, 2, RELIABLE, KEY, true),
             Relay::To(1)
         );
-        assert_eq!(relay_decision(NOW_ROUTE, 2, LATEST, 30, true), Relay::To(1));
         assert_eq!(
-            relay_decision(NOW_ROUTE, 3, RELIABLE, 30, true),
+            relay_decision(NOW_ROUTE, 2, LATEST, MOVE, true),
+            Relay::To(1)
+        );
+        assert_eq!(
+            relay_decision(NOW_ROUTE, 3, RELIABLE, KEY, true),
             Relay::Drop,
             "bystander"
         );
         assert_eq!(
-            relay_decision(NOW_ROUTE, 1, RELIABLE, 30, true),
+            relay_decision(NOW_ROUTE, 1, RELIABLE, KEY, true),
             Relay::Drop,
             "host"
         );
         assert_eq!(
-            relay_decision(None, 2, RELIABLE, 30, true),
+            relay_decision(None, 2, RELIABLE, KEY, true),
             Relay::Drop,
             "pending/no grant"
         );
         assert_eq!(
-            relay_decision(NOW_ROUTE, 2, "input-x", 30, true),
+            relay_decision(NOW_ROUTE, 2, "input-x", KEY, true),
             Relay::Drop
         );
     }
@@ -600,15 +669,15 @@ mod tests {
     #[test]
     fn oversize_or_rate_limited_input_breaks_the_reliable_route() {
         assert_eq!(
-            relay_decision(NOW_ROUTE, 2, RELIABLE, MAX_INPUT_BYTES + 1, true),
+            relay_decision(NOW_ROUTE, 2, RELIABLE, &[b'x'; MAX_INPUT_BYTES + 1], true),
             Relay::Fail
         );
         assert_eq!(
-            relay_decision(NOW_ROUTE, 2, RELIABLE, 30, false),
+            relay_decision(NOW_ROUTE, 2, RELIABLE, KEY, false),
             Relay::Fail
         );
         assert_eq!(
-            relay_decision(NOW_ROUTE, 2, LATEST, 30, false),
+            relay_decision(NOW_ROUTE, 2, LATEST, MOVE, false),
             Relay::Drop,
             "moves are lossy"
         );
@@ -629,6 +698,66 @@ mod tests {
 
     #[test]
     fn tag_prefixes_sender() {
-        assert_eq!(tag(0x0102, b"hi"), [0, 0, 0, 0, 0, 0, 1, 2, b'h', b'i']);
+        assert_eq!(
+            tag(0x0102, 0x03, b"hi"),
+            [0, 0, 0, 0, 0, 0, 1, 2, 0, 0, 0, 0, 0, 0, 0, 3, b'h', b'i']
+        );
+    }
+
+    #[test]
+    fn lossy_channel_carries_moves_only() {
+        assert_eq!(
+            relay_decision(NOW_ROUTE, 2, LATEST, MOVE, true),
+            Relay::To(1)
+        );
+        for bad in [
+            KEY,
+            br#"{"t":"button","b":0,"down":true,"x":0,"y":0}"#.as_slice(),
+            br#"{"t":"ping"}"#,
+            br#" {"t":"move","x":0,"y":0}"#,
+        ] {
+            assert_eq!(relay_decision(NOW_ROUTE, 2, LATEST, bad, true), Relay::Drop);
+        }
+        assert_eq!(
+            relay_decision(NOW_ROUTE, 2, RELIABLE, KEY, true),
+            Relay::To(1),
+            "keys go on the reliable channel"
+        );
+    }
+
+    fn route(grant: u64) -> Option<Route> {
+        Some(Route {
+            controller: 2,
+            host: 1,
+            grant,
+        })
+    }
+
+    #[test]
+    fn closed_grant_never_reopens() {
+        let mut slot = RouteSlot::default();
+        slot.set(route(50));
+        assert_eq!(slot.active, route(50));
+        // The route failed: SFU closes grant 50.
+        assert_eq!(slot.close(), route(50));
+        // A late update for 50 (sent before the failure) arrives now.
+        slot.set(route(50));
+        assert_eq!(slot.active, None, "stale update can't undo the failure");
+        // An api clear also closes; older grants stay dead.
+        slot.set(route(60));
+        slot.set(None);
+        slot.set(route(55));
+        slot.set(route(60));
+        assert_eq!(slot.active, None);
+        // A newer grant opens, an older one can't replace it.
+        slot.set(route(70));
+        slot.set(route(65));
+        assert_eq!(slot.active, route(70));
+        // A newer grant replaces and closes the old one.
+        slot.set(route(80));
+        slot.set(route(70));
+        assert_eq!(slot.active, route(80));
+        slot.set(route(0));
+        assert_eq!(slot.active, route(80), "grant 0 is never a route");
     }
 }

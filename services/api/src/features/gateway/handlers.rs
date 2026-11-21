@@ -442,8 +442,14 @@ async fn call_control(
     let user = req.user_id as i64;
     let action = match A::try_from(req.action).unwrap_or(A::Unspecified) {
         A::Request => ControlAction::Request { host_id: user },
-        A::Grant => ControlAction::Grant { viewer_id: user },
-        A::Deny => ControlAction::Deny { viewer_id: user },
+        A::Grant => ControlAction::Grant {
+            viewer_id: user,
+            request_id: req.request_id as i64,
+        },
+        A::Deny => ControlAction::Deny {
+            viewer_id: user,
+            request_id: req.request_id as i64,
+        },
         A::Revoke => ControlAction::Revoke,
         A::Unspecified => {
             return Err(ApiError::bad_request(

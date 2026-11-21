@@ -48,7 +48,12 @@ interface CallsState {
   toggleMute: () => void;
   toggleShare: (ws: WsClient) => Promise<void>;
   requestControl: (ws: WsClient, hostId: bigint) => Promise<void>;
-  answerControl: (ws: WsClient, approve: boolean, monitor?: Rect) => Promise<void>;
+  answerControl: (
+    ws: WsClient,
+    requestId: bigint,
+    approve: boolean,
+    monitor?: Rect,
+  ) => Promise<void>;
   revokeControl: (ws: WsClient) => Promise<void>;
 }
 
@@ -125,6 +130,7 @@ function syncHost(call: Call | null, sharing: boolean) {
     tauri("share_play_arm", {
       grantId: step.grantId.toString(),
       controllerId: step.controllerId.toString(),
+      requestId: step.requestId.toString(),
     }).catch((e: unknown) => {
       console.warn("share play arm", e);
       if (host.armed === step.grantId) hostLost("Couldn't start remote control");
@@ -141,10 +147,10 @@ function hostLost(reason?: string) {
   if (ws) void useCalls.getState().revokeControl(ws);
 }
 
-function onRemoteInput(data: unknown) {
+function onRemoteInput(data: unknown, lossy: boolean) {
   if (!(data instanceof ArrayBuffer) || armedController === null) return;
   const msg = decodeTagged(data);
-  if (msg?.sender !== armedController) return;
+  if (msg?.sender !== armedController || msg.grantId !== host.armed) return;
   let event: unknown;
   try {
     event = JSON.parse(msg.json);
@@ -152,7 +158,12 @@ function onRemoteInput(data: unknown) {
     return;
   }
   // INVARIANT: the Rust side checks the grant again before touching the OS.
-  void tauri("share_play_input", { sender: msg.sender.toString(), event }).catch(() => {});
+  void tauri("share_play_input", {
+    sender: msg.sender.toString(),
+    grantId: msg.grantId.toString(),
+    lossy,
+    event,
+  }).catch(() => {});
 }
 
 function hangUpMedia() {
@@ -183,7 +194,8 @@ export const useCalls = create<CallsState>((set, get) => {
     moveCh = pc.createDataChannel(LATEST, { ordered: false, maxRetransmits: 0 });
     for (const ch of [inputCh, moveCh]) {
       ch.binaryType = "arraybuffer";
-      ch.onmessage = (e: MessageEvent) => onRemoteInput(e.data);
+      const lossy = ch === moveCh;
+      ch.onmessage = (e: MessageEvent) => onRemoteInput(e.data, lossy);
       ch.onclose = () => hostLost("Remote control ended: connection lost");
     }
     pc.ontrack = (e) => {
@@ -307,13 +319,13 @@ export const useCalls = create<CallsState>((set, get) => {
     }
   }
 
-  async function sendControl(ws: WsClient, action: CallControlAction, userId = 0n) {
+  async function sendControl(ws: WsClient, action: CallControlAction, userId = 0n, requestId = 0n) {
     const call = get().current;
     if (!call) return;
     try {
       const reply = await ws.request({
         case: "callControl",
-        value: createProto(CallControlSchema, { callId: call.id, action, userId }),
+        value: createProto(CallControlSchema, { callId: call.id, action, userId, requestId }),
       });
       if (reply.case === "callResult" && reply.value.call && get().current?.id === call.id) {
         set({ current: reply.value.call });
@@ -480,16 +492,20 @@ export const useCalls = create<CallsState>((set, get) => {
 
     requestControl: (ws, hostId) => sendControl(ws, CallControlAction.REQUEST, hostId),
 
-    answerControl: async (ws, approve, monitor) => {
+    answerControl: async (ws, requestId, approve, monitor) => {
       const c = get().current?.control;
-      if (!c || c.hostId !== me || c.granted) return;
+      if (!c || c.hostId !== me || c.granted || c.requestId !== requestId) return;
       if (approve) {
         try {
           if (!monitor) throw new Error("Pick the shared screen first");
-          await tauri("share_play_approve", { controllerId: c.controllerId.toString(), monitor });
+          await tauri("share_play_approve", {
+            controllerId: c.controllerId.toString(),
+            requestId: requestId.toString(),
+            monitor,
+          });
         } catch (e) {
           set({ error: e instanceof Error ? e.message : String(e) });
-          await sendControl(ws, CallControlAction.DENY, c.controllerId);
+          await sendControl(ws, CallControlAction.DENY, c.controllerId, requestId);
           return;
         }
       }
@@ -497,6 +513,7 @@ export const useCalls = create<CallsState>((set, get) => {
         ws,
         approve ? CallControlAction.GRANT : CallControlAction.DENY,
         c.controllerId,
+        requestId,
       );
     },
 

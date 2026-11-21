@@ -24,6 +24,7 @@ interface ControlLike {
   controllerId: bigint;
   granted: boolean;
   grantId: bigint;
+  requestId: bigint;
 }
 
 export interface HostState {
@@ -32,7 +33,9 @@ export interface HostState {
 }
 
 export type HostStep =
-  { kind: "none" } | { kind: "revoke" } | { kind: "arm"; grantId: bigint; controllerId: bigint };
+  | { kind: "none" }
+  | { kind: "revoke" }
+  | { kind: "arm"; grantId: bigint; controllerId: bigint; requestId: bigint };
 
 export function hostStep(
   s: HostState,
@@ -50,7 +53,12 @@ export function hostStep(
       : null;
   if (s.armed !== null && want?.grantId !== s.armed) return { kind: "revoke" };
   if (s.armed === null && want && !s.seen.has(want.grantId))
-    return { kind: "arm", grantId: want.grantId, controllerId: want.controllerId };
+    return {
+      kind: "arm",
+      grantId: want.grantId,
+      controllerId: want.controllerId,
+      requestId: want.requestId,
+    };
   return { kind: "none" };
 }
 
@@ -97,8 +105,18 @@ export function encode(e: InputEvent): string {
   return JSON.stringify(e);
 }
 
-export function decodeTagged(data: ArrayBuffer): { sender: bigint; json: string } | null {
-  if (data.byteLength < 9) return null;
-  const sender = new DataView(data).getBigUint64(0, false);
-  return { sender, json: new TextDecoder().decode(new Uint8Array(data, 8)) };
+export interface Tagged {
+  sender: bigint;
+  grantId: bigint;
+  json: string;
+}
+
+export function decodeTagged(data: ArrayBuffer): Tagged | null {
+  if (data.byteLength < 17) return null;
+  const view = new DataView(data);
+  return {
+    sender: view.getBigUint64(0, false),
+    grantId: view.getBigUint64(8, false),
+    json: new TextDecoder().decode(new Uint8Array(data, 16)),
+  };
 }

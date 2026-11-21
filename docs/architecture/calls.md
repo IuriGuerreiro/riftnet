@@ -92,7 +92,7 @@ Client ↔ api: `proto/v1/calls.proto`. **Envelope fields 100–139 are reserved
 | 102 | `CallDecline {call_id}` | request → `CallResult` |
 | 103 | `CallJoin {call_id, sdp_offer}` | request → `CallJoined {call, sdp_answer}` |
 | 105 | `CallLeave {call_id}` | request → `CallResult` |
-| 106 | `CallControl {call_id, action, user_id}` | Share Play request/grant/deny/revoke → `CallResult` |
+| 106 | `CallControl {call_id, action, user_id, request_id}` | Share Play request/grant/deny/revoke → `CallResult` |
 | 120 | `CallResult {call}` | reply |
 | 121 | `CallJoined {call, sdp_answer}` | reply |
 | 130 | `CallIncoming {call}` | push: ring |
@@ -186,16 +186,17 @@ Not done yet: native video *rendering* in Tauri, macOS (untested, no Mac), Wayla
 
 A viewer drives the sharer's keyboard and mouse. Windows and X11 hosts only (Wayland: issue #56).
 
-- **State** (api, `Call.control`): one control per call. A request binds the viewer's joined connection and media peer, and the host's sharing connection, media peer and share instance (`share_id`). Only that sharing connection may grant or deny; each grant gets a fresh `grant_id`. Either user may revoke. `Call::settle_control` drops it when any bound piece changes.
+- **State** (api, `Call.control`): one control per call. A request binds the viewer's joined connection and media peer, and the host's sharing connection, media peer and share instance (`share_id`). Each request gets a fresh `request_id`; only that sharing connection may grant or deny, and it must name that `request_id`. Each grant gets a fresh `grant_id`. Either user may revoke. `Call::settle_control` drops it when any bound piece changes.
 - **Who can be controlled:** `CallScreenShare.controllable`: the desktop app on a supported OS, sharing a whole monitor.
-- **Input path:** data channels `input` (reliable, ordered: keys, clicks with position, wheel with position, ping) and `input-move` (lossy pointer). The api tells the SFU the one allowed route (`media.route`: controller peer → host peer). The SFU drops all other input. It also enforces 256 bytes per message and 200 msg/s (burst 400). A reliable message that is too big, over the rate, or not written (str0m `Err` or `Ok(false)`) breaks the route.
-- **SFU → api** (`media.event`): `PEER_GONE` (a peer dropped on its own) removes that participant; `ROUTE_FAILED` clears control. Both push `CallUpdated`, so the host releases input.
+- **Input path:** data channels `input` (reliable, ordered: keys, clicks with position, wheel with position, ping) and `input-move` (lossy, pointer moves only: the SFU and the host drop anything else there). The api tells the SFU the one allowed route (`media.route`: controller peer → host peer, `grant_id`). Grant ids only grow, and the SFU never reopens a grant it closed, so a late route update can't undo a failure. The SFU drops all other input and tags each relayed message with the sender's user id and the grant id (8 bytes each, big endian). It also enforces 256 bytes per message and 200 msg/s (burst 400). A reliable message that is too big, over the rate, or not written (str0m `Err` or `Ok(false)`) breaks the route.
+- **SFU → api** (`media.event`): `PEER_GONE` (a peer dropped on its own) removes that participant; `ROUTE_FAILED` (with its `grant_id`) clears control only if that grant is still the current one. Both push `CallUpdated`, so the host releases input.
 - **Host** (Tauri `share_play`):
   - Approve needs a local click on the sharing desktop, with the shared monitor picked there. It is refused unless the revoke hotkey (Ctrl+Shift+F12) registered.
-  - Each `grant_id` arms once and consumes that approval, so a stale update can't re-arm.
+  - Each `grant_id` arms once and consumes the approval of that exact `request_id`, so a stale update or a replacement request can't use it.
+  - Input is applied only if its tag names the armed controller and grant, so input queued under an old grant is dropped.
   - One input thread runs control messages before queued input. The input queue is bounded at 256; overflow revokes.
   - A 2 s lease is renewed by viewer pings every 500 ms. It also ends on transport loss.
-  - Strict key allowlist. Delete is always blocked; Backspace and F-keys are blocked while Ctrl+Alt are held. Clicks only land after the cursor is confirmed at their position.
+  - Strict key allowlist. Delete is always blocked; Backspace and F-keys are blocked while Ctrl+Alt are held. Clicks and wheel only land after the OS confirms the cursor is at their position; if it can't say, they are refused.
 
 ## 9. Risks / open questions
 

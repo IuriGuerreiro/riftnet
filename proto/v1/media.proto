@@ -28,11 +28,13 @@ message MediaLeave {
 }
 
 // Share Play: the only input route the SFU relays in a room.
-// controller_peer_id = 0 clears it.
+// controller_peer_id = 0 clears it. grant_id orders updates: the SFU never
+// re-opens a grant it already closed, so a late update can't undo a failure.
 message MediaRoute {
   uint64 room_id = 1;
   uint64 controller_peer_id = 2;
   uint64 host_peer_id = 3;
+  uint64 grant_id = 4;
 }
 
 enum MediaEventKind {
@@ -47,4 +49,6 @@ message MediaEvent {
   MediaEventKind kind = 1;
   uint64 peer_id = 2;
   uint64 room_id = 3;
+  // ROUTE_FAILED: the grant whose route broke.
+  uint64 grant_id = 4;
 }

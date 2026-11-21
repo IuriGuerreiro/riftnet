@@ -22,14 +22,14 @@ pub trait MediaClient: Send + Sync {
     ) -> anyhow::Result<(u64, String)>;
     async fn leave(&self, peer_id: u64) -> anyhow::Result<()>;
     /// Share Play: set (or clear with None) the one input route of a room.
-    async fn route(&self, room_id: i64, route: Option<(u64, u64)>) -> anyhow::Result<()>;
+    async fn route(&self, room_id: i64, route: Option<(u64, u64, u64)>) -> anyhow::Result<()>;
 }
 
 /// What the SFU tells us about peers it dropped on its own.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MediaNotice {
     PeerGone { peer_id: u64 },
-    RouteFailed { room_id: i64 },
+    RouteFailed { room_id: i64, grant_id: i64 },
 }
 
 impl MediaNotice {
@@ -39,6 +39,7 @@ impl MediaNotice {
             MediaEventKind::PeerGone => Some(Self::PeerGone { peer_id: e.peer_id }),
             MediaEventKind::RouteFailed => Some(Self::RouteFailed {
                 room_id: e.room_id as i64,
+                grant_id: e.grant_id as i64,
             }),
             MediaEventKind::Unspecified => None,
         }
@@ -110,12 +111,13 @@ impl MediaClient for NatsMediaClient {
         Ok(())
     }
 
-    async fn route(&self, room_id: i64, route: Option<(u64, u64)>) -> anyhow::Result<()> {
-        let (controller_peer_id, host_peer_id) = route.unwrap_or((0, 0));
+    async fn route(&self, room_id: i64, route: Option<(u64, u64, u64)>) -> anyhow::Result<()> {
+        let (controller_peer_id, host_peer_id, grant_id) = route.unwrap_or((0, 0, 0));
         let req = MediaRoute {
             room_id: room_id as u64,
             controller_peer_id,
             host_peer_id,
+            grant_id,
         };
         self.client
             .publish(ROUTE, req.encode_to_vec().into())
@@ -134,6 +136,7 @@ mod tests {
             kind: MediaEventKind::PeerGone as i32,
             peer_id: 4,
             room_id: 0,
+            grant_id: 0,
         };
         assert_eq!(
             MediaNotice::decode(&gone.encode_to_vec()),
@@ -143,10 +146,14 @@ mod tests {
             kind: MediaEventKind::RouteFailed as i32,
             peer_id: 0,
             room_id: 9,
+            grant_id: 5,
         };
         assert_eq!(
             MediaNotice::decode(&failed.encode_to_vec()),
-            Some(MediaNotice::RouteFailed { room_id: 9 })
+            Some(MediaNotice::RouteFailed {
+                room_id: 9,
+                grant_id: 5
+            })
         );
         assert_eq!(
             MediaNotice::decode(&MediaEvent::default().encode_to_vec()),

@@ -47,20 +47,25 @@ describe("wire format", () => {
     expect(sendable("KeyW")).toBe(true);
   });
 
-  it("decodes the SFU sender tag", () => {
+  it("decodes the SFU sender and grant tag", () => {
     const json = encode({ t: "key", code: "KeyW", down: true });
     const body = new TextEncoder().encode(json);
-    const buf = new Uint8Array(8 + body.length);
+    const buf = new Uint8Array(16 + body.length);
     new DataView(buf.buffer).setBigUint64(0, 123456789012345678n, false);
-    buf.set(body, 8);
-    expect(decodeTagged(buf.buffer)).toEqual({ sender: 123456789012345678n, json });
-    expect(decodeTagged(new ArrayBuffer(4))).toBeNull();
+    new DataView(buf.buffer).setBigUint64(8, 900n, false);
+    buf.set(body, 16);
+    expect(decodeTagged(buf.buffer)).toEqual({ sender: 123456789012345678n, grantId: 900n, json });
+    expect(decodeTagged(new ArrayBuffer(16))).toBeNull();
+  });
+
+  it("encodes moves the way the SFU's move-only channel expects", () => {
+    expect(encode({ t: "move", x: 0.5, y: 0.25 }).startsWith('{"t":"move",')).toBe(true);
   });
 });
 
 describe("hostStep", () => {
   const me = 1n;
-  const grant = { hostId: me, controllerId: 2n, granted: true, grantId: 900n };
+  const grant = { hostId: me, controllerId: 2n, granted: true, grantId: 900n, requestId: 300n };
   const fresh = (): HostState => ({ armed: null, seen: new Set() });
 
   it("arms a new grant once", () => {
@@ -68,6 +73,7 @@ describe("hostStep", () => {
       kind: "arm",
       grantId: 900n,
       controllerId: 2n,
+      requestId: 300n,
     });
     expect(hostStep({ armed: 900n, seen: new Set([900n]) }, grant, me, true)).toEqual({
       kind: "none",

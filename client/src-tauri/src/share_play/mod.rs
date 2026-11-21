@@ -21,7 +21,7 @@ use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 
 pub use input::InputEvent;
-use input::{ArmError, Backend, Controller};
+use input::{ArmError, Backend, Controller, Tag};
 use mapping::Rect;
 
 /// Local panic button: ends control even while a game has focus.
@@ -36,11 +36,13 @@ const TICK: Duration = Duration::from_millis(50);
 enum Ctrl {
     Approve {
         controller_id: u64,
+        request_id: u64,
         target: Rect,
     },
     Arm {
         grant_id: u64,
         controller_id: u64,
+        request_id: u64,
         reply: Sender<Result<(), ArmError>>,
     },
     Revoke,
@@ -48,7 +50,7 @@ enum Ctrl {
 
 pub struct SharePlay {
     ctrl: Sender<Ctrl>,
-    input: SyncSender<(u64, InputEvent)>,
+    input: SyncSender<(Tag, InputEvent)>,
     /// Set the moment a revoke is requested, before it is queued, so input
     /// already in the queue is never applied after it.
     revoking: Arc<AtomicBool>,
@@ -103,16 +105,24 @@ impl<B: Backend, F: Fn(&'static str)> Worker<B, F> {
         match msg {
             Ctrl::Approve {
                 controller_id,
+                request_id,
                 target,
-            } => self.ctl.approve(controller_id, target, Instant::now()),
+            } => self
+                .ctl
+                .approve(controller_id, request_id, target, Instant::now()),
             Ctrl::Arm {
                 grant_id,
                 controller_id,
+                request_id,
                 reply,
             } => {
-                let r = self
-                    .ctl
-                    .arm(grant_id, controller_id, Instant::now(), &mut self.os);
+                let r = self.ctl.arm(
+                    grant_id,
+                    controller_id,
+                    request_id,
+                    Instant::now(),
+                    &mut self.os,
+                );
                 let _ = reply.send(r);
             }
             Ctrl::Revoke => {
@@ -138,7 +148,7 @@ impl<B: Backend, F: Fn(&'static str)> Worker<B, F> {
         true
     }
 
-    fn run(mut self, ctrl: Receiver<Ctrl>, input: Receiver<(u64, InputEvent)>) {
+    fn run(mut self, ctrl: Receiver<Ctrl>, input: Receiver<(Tag, InputEvent)>) {
         loop {
             if !self.drain(&ctrl) {
                 break;
@@ -147,12 +157,12 @@ impl<B: Backend, F: Fn(&'static str)> Worker<B, F> {
                 (self.on_revoked)("lease");
             }
             match input.recv_timeout(TICK) {
-                Ok((sender, event)) => {
+                Ok((from, event)) => {
                     // Control goes first: a revoke queued meanwhile wins.
                     if !self.drain(&ctrl) {
                         break;
                     }
-                    if let Err(why) = self.ctl.apply(sender, event, Instant::now(), &mut self.os) {
+                    if let Err(why) = self.ctl.apply(from, event, Instant::now(), &mut self.os) {
                         log::debug!("share play input dropped: {why:?}");
                     }
                 }
@@ -217,8 +227,8 @@ impl SharePlay {
     }
 
     /// Queue one event. A full queue means the host can't keep up: revoke.
-    fn push(&self, sender: u64, event: InputEvent) -> Result<(), &'static str> {
-        match self.input.try_send((sender, event)) {
+    fn push(&self, from: Tag, event: InputEvent) -> Result<(), &'static str> {
+        match self.input.try_send((from, event)) {
             Ok(()) => Ok(()),
             Err(TrySendError::Full(_)) => {
                 self.revoke();
@@ -307,13 +317,14 @@ pub fn share_play_monitors<R: Runtime>(app: AppHandle<R>, width: u32, height: u3
     }
 }
 
-/// The host clicked Approve on this machine, for this viewer and monitor.
+/// The host clicked Approve on this machine, for this request and monitor.
 /// Refused unless the revoke hotkey is registered.
 #[tauri::command]
 pub fn share_play_approve<R: Runtime>(
     app: AppHandle<R>,
     state: State<'_, SharePlay>,
     controller_id: String,
+    request_id: String,
     monitor: Rect,
 ) -> Result<(), String> {
     if !supported() {
@@ -325,18 +336,21 @@ pub fn share_play_approve<R: Runtime>(
     hotkey(&app, true)?;
     let _ = state.ctrl.send(Ctrl::Approve {
         controller_id: parse_id(&controller_id)?,
+        request_id: parse_id(&request_id)?,
         target: monitor,
     });
     Ok(())
 }
 
-/// The server confirmed grant `grant_id`. Arms once, only after a local approval.
+/// The server confirmed grant `grant_id` for request `request_id`. Arms
+/// once, only after a local approval of that same request.
 #[tauri::command]
 pub fn share_play_arm<R: Runtime>(
     app: AppHandle<R>,
     state: State<'_, SharePlay>,
     grant_id: String,
     controller_id: String,
+    request_id: String,
 ) -> Result<(), String> {
     if let Err(e) = hotkey(&app, true) {
         state.revoke();
@@ -346,6 +360,7 @@ pub fn share_play_arm<R: Runtime>(
     let _ = state.ctrl.send(Ctrl::Arm {
         grant_id: parse_id(&grant_id)?,
         controller_id: parse_id(&controller_id)?,
+        request_id: parse_id(&request_id)?,
         reply,
     });
     match rx.recv_timeout(Duration::from_secs(1)) {
@@ -364,16 +379,24 @@ pub fn share_play_revoke<R: Runtime>(app: AppHandle<R>, state: State<'_, SharePl
     let _ = hotkey(&app, false);
 }
 
-/// One event from the data channel. The sender id comes from the SFU tag,
-/// not from the viewer, and is checked against the grant on the input thread.
+/// One event from the data channel. Sender and grant come from the SFU tag,
+/// not from the viewer, and are checked against the grant on the input
+/// thread when the event is applied. `lossy` = the unordered move channel.
 #[tauri::command]
 pub fn share_play_input<R: Runtime>(
     app: AppHandle<R>,
     state: State<'_, SharePlay>,
     sender: String,
+    grant_id: String,
+    lossy: bool,
     event: InputEvent,
 ) -> Result<(), String> {
-    state.push(parse_id(&sender)?, event).map_err(|why| {
+    let from = Tag {
+        sender: parse_id(&sender)?,
+        grant_id: parse_id(&grant_id)?,
+        lossy,
+    };
+    state.push(from, event).map_err(|why| {
         let _ = app.emit(REVOKE_EVENT, why);
         why.to_string()
     })
@@ -433,17 +456,25 @@ mod tests {
         };
         w.handle(Ctrl::Approve {
             controller_id: 7,
+            request_id: 3,
             target: SCREEN,
         });
         let (reply, ok) = mpsc::channel();
         w.handle(Ctrl::Arm {
             grant_id: 1,
             controller_id: 7,
+            request_id: 3,
             reply,
         });
         ok.recv().unwrap().unwrap();
         (w, rec, rx, tx)
     }
+
+    const FROM: Tag = Tag {
+        sender: 7,
+        grant_id: 1,
+        lossy: false,
+    };
 
     #[test]
     fn revoke_beats_queued_input() {
@@ -453,7 +484,7 @@ mod tests {
             down,
         };
         w.ctl
-            .apply(7, key(true), Instant::now(), &mut w.os)
+            .apply(FROM, key(true), Instant::now(), &mut w.os)
             .unwrap();
         // Revoke flag raised (hotkey) while more input is already queued.
         w.revoking.store(true, Ordering::SeqCst);
@@ -461,7 +492,7 @@ mod tests {
         assert!(w.drain(&ctrl_rx));
         assert!(w.ctl.armed().is_none());
         assert_eq!(
-            w.ctl.apply(7, key(true), Instant::now(), &mut w.os),
+            w.ctl.apply(FROM, key(true), Instant::now(), &mut w.os),
             Err(input::Rejected::NotGranted)
         );
         assert_eq!(
@@ -486,6 +517,7 @@ mod tests {
         ctrl_tx
             .send(Ctrl::Approve {
                 controller_id: 7,
+                request_id: 3,
                 target: SCREEN,
             })
             .unwrap();
@@ -494,6 +526,7 @@ mod tests {
             .send(Ctrl::Arm {
                 grant_id: 2,
                 controller_id: 7,
+                request_id: 3,
                 reply,
             })
             .unwrap();
@@ -511,8 +544,8 @@ mod tests {
             input,
             revoking: Arc::new(AtomicBool::new(false)),
         };
-        assert!(sp.push(7, InputEvent::Ping).is_ok());
-        assert_eq!(sp.push(7, InputEvent::Ping), Err("overload"));
+        assert!(sp.push(FROM, InputEvent::Ping).is_ok());
+        assert_eq!(sp.push(FROM, InputEvent::Ping), Err("overload"));
         assert!(sp.revoking.load(Ordering::SeqCst));
         assert!(matches!(ctrl_rx.try_recv(), Ok(Ctrl::Revoke)));
     }

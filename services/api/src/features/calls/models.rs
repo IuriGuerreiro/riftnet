@@ -37,6 +37,8 @@ pub struct Control {
     pub granted: bool,
     /// Unique per approval; 0 while pending. The host arms each id once.
     pub grant_id: i64,
+    /// Unique per request. Grant/Deny must name it.
+    pub request_id: i64,
     /// Bound at request time: the exact sharing connection, media peer and
     /// share instance of the host, and the viewer's joined connection/peer.
     pub host_connection_id: u64,
@@ -49,8 +51,8 @@ pub struct Control {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ControlAction {
     Request { host_id: i64 },
-    Grant { viewer_id: i64 },
-    Deny { viewer_id: i64 },
+    Grant { viewer_id: i64, request_id: i64 },
+    Deny { viewer_id: i64, request_id: i64 },
     Revoke,
 }
 
@@ -119,11 +121,12 @@ impl Call {
             .find(|p| p.user_id == user_id && p.sharing_screen && p.controllable)
     }
 
-    /// Media route the SFU may relay input on: (controller peer, host peer).
-    pub fn control_route(&self) -> Option<(u64, u64)> {
+    /// Media route the SFU may relay input on:
+    /// (controller peer, host peer, grant id).
+    pub fn control_route(&self) -> Option<(u64, u64, u64)> {
         self.control
             .filter(|c| c.granted)
-            .map(|c| (c.controller_peer_id, c.host_peer_id))
+            .map(|c| (c.controller_peer_id, c.host_peer_id, c.grant_id as u64))
     }
 
     /// Apply a Share Play action by `me` on socket `connection_id`. Rules:
@@ -132,14 +135,15 @@ impl Call {
     ///   media peers and the host's current share;
     /// - one control (pending or granted) per call; asking twice is a no-op;
     /// - only the host's sharing connection grants or denies, only the pending
-    ///   request; each grant gets a fresh `grant_id`;
+    ///   request, named by its `request_id`; each request and each grant
+    ///   gets a fresh id (`new_id`);
     /// - the host or the controller may revoke from any connection.
     pub fn apply_control(
         &mut self,
         me: i64,
         connection_id: u64,
         action: ControlAction,
-        new_grant_id: i64,
+        new_id: i64,
     ) -> Result<(), ControlError> {
         match action {
             ControlAction::Request { host_id } => {
@@ -157,6 +161,7 @@ impl Call {
                     controller_id: me,
                     granted: false,
                     grant_id: 0,
+                    request_id: new_id,
                     host_connection_id: host.connection_id,
                     host_peer_id: host.peer_id,
                     host_share_id: host.share_id,
@@ -178,13 +183,21 @@ impl Call {
                     }
                 }
             }
-            ControlAction::Grant { viewer_id } | ControlAction::Deny { viewer_id } => {
+            ControlAction::Grant {
+                viewer_id,
+                request_id,
+            }
+            | ControlAction::Deny {
+                viewer_id,
+                request_id,
+            } => {
                 let Some(c) = self.control.as_mut() else {
                     return Err(ControlError::NotAllowed);
                 };
                 if c.host_id != me
                     || c.host_connection_id != connection_id
                     || c.controller_id != viewer_id
+                    || c.request_id != request_id
                     || c.granted
                 {
                     return Err(ControlError::NotAllowed);
@@ -193,7 +206,7 @@ impl Call {
                     self.control = None;
                 } else {
                     c.granted = true;
-                    c.grant_id = new_grant_id;
+                    c.grant_id = new_id;
                 }
                 Ok(())
             }
@@ -245,6 +258,7 @@ mod tests {
     // connection id = user id * 10, a second login = user id * 10 + 1
     const HOST_CONN: u64 = 10;
     const VIEWER_CONN: u64 = 20;
+    const REQ: i64 = 444;
 
     fn participant(user_id: i64, sharing: bool) -> Participant {
         Participant {
@@ -275,12 +289,51 @@ mod tests {
             VIEWER,
             VIEWER_CONN,
             ControlAction::Request { host_id: HOST },
-            0,
+            REQ,
         )
     }
 
     fn grant(c: &mut Call, conn: u64, id: i64) -> Result<(), ControlError> {
-        c.apply_control(HOST, conn, ControlAction::Grant { viewer_id: VIEWER }, id)
+        c.apply_control(
+            HOST,
+            conn,
+            ControlAction::Grant {
+                viewer_id: VIEWER,
+                request_id: REQ,
+            },
+            id,
+        )
+    }
+
+    #[test]
+    fn grant_must_name_the_current_request() {
+        let mut c = call();
+        request(&mut c).unwrap();
+        assert_eq!(c.control.unwrap().request_id, REQ);
+        // The viewer cancels and asks again: a new request id.
+        c.apply_control(VIEWER, VIEWER_CONN, ControlAction::Revoke, 0)
+            .unwrap();
+        c.apply_control(
+            VIEWER,
+            VIEWER_CONN,
+            ControlAction::Request { host_id: HOST },
+            REQ + 1,
+        )
+        .unwrap();
+        // The host's approval of the first request can't grant the second.
+        assert_eq!(grant(&mut c, HOST_CONN, 555), Err(ControlError::NotAllowed));
+        assert!(!c.control.unwrap().granted);
+        c.apply_control(
+            HOST,
+            HOST_CONN,
+            ControlAction::Grant {
+                viewer_id: VIEWER,
+                request_id: REQ + 1,
+            },
+            556,
+        )
+        .unwrap();
+        assert_eq!(c.control.unwrap().grant_id, 556);
     }
 
     fn granted(c: &mut Call) {
@@ -308,7 +361,7 @@ mod tests {
         let k = c.control.unwrap();
         assert!(k.granted);
         assert_eq!(k.grant_id, 555);
-        assert_eq!(c.control_route(), Some((200, 100)));
+        assert_eq!(c.control_route(), Some((200, 100, 555)));
     }
 
     #[test]
@@ -381,7 +434,10 @@ mod tests {
             c.apply_control(
                 VIEWER,
                 VIEWER_CONN,
-                ControlAction::Grant { viewer_id: VIEWER },
+                ControlAction::Grant {
+                    viewer_id: VIEWER,
+                    request_id: REQ,
+                },
                 1
             ),
             Err(ControlError::NotAllowed)
@@ -395,7 +451,10 @@ mod tests {
             c.apply_control(
                 HOST,
                 HOST_CONN,
-                ControlAction::Grant { viewer_id: OTHER },
+                ControlAction::Grant {
+                    viewer_id: OTHER,
+                    request_id: REQ,
+                },
                 1
             ),
             Err(ControlError::NotAllowed)
@@ -405,7 +464,10 @@ mod tests {
             c.apply_control(
                 HOST,
                 HOST_CONN + 1,
-                ControlAction::Deny { viewer_id: VIEWER },
+                ControlAction::Deny {
+                    viewer_id: VIEWER,
+                    request_id: REQ,
+                },
                 0
             ),
             Err(ControlError::NotAllowed)
@@ -419,7 +481,10 @@ mod tests {
         c.apply_control(
             HOST,
             HOST_CONN,
-            ControlAction::Deny { viewer_id: VIEWER },
+            ControlAction::Deny {
+                viewer_id: VIEWER,
+                request_id: REQ,
+            },
             0,
         )
         .unwrap();
