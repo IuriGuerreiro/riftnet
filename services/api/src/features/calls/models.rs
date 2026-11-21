@@ -68,6 +68,7 @@ pub enum ControlError {
 
 #[derive(Debug, Clone)]
 pub struct Call {
+    pub revision: u64,
     pub id: i64,
     pub conversation_id: i64,
     pub caller_id: i64,
@@ -274,6 +275,7 @@ mod tests {
 
     fn call() -> Call {
         Call {
+            revision: 1,
             id: 9,
             conversation_id: 9,
             caller_id: HOST,

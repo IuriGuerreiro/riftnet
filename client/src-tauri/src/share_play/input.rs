@@ -31,8 +31,8 @@ pub enum InputEvent {
 
 /// What actually touches the OS. Enigo in the app, a recorder in tests.
 pub trait Backend {
-    fn key(&mut self, key: Key, down: bool);
-    fn button(&mut self, b: u8, down: bool);
+    fn key(&mut self, key: Key, down: bool) -> bool;
+    fn button(&mut self, b: u8, down: bool) -> bool;
     fn move_to(&mut self, x: i32, y: i32);
     fn scroll(&mut self, dx: i32, dy: i32);
     /// Where the OS cursor is now, if the platform can tell.
@@ -71,6 +71,7 @@ pub enum Rejected {
     OffTarget,
     /// Not a pointer move, but arrived on the lossy channel.
     WrongChannel,
+    NativeFailure,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -79,6 +80,7 @@ pub enum ArmError {
     NotApproved,
     /// This grant id was armed before (stale update after a revoke).
     Stale,
+    CleanupPending,
 }
 
 #[derive(Default)]
@@ -128,6 +130,10 @@ impl Controller {
             .ok_or(ArmError::NotApproved)?;
         self.used_grants.insert(grant_id);
         self.release_all(os);
+        if !self.held_keys.is_empty() || !self.held_buttons.is_empty() {
+            self.grant = None;
+            return Err(ArmError::CleanupPending);
+        }
         self.grant = Some(Grant {
             grant_id,
             controller_id,
@@ -147,6 +153,9 @@ impl Controller {
 
     /// Revoke when the lease ran out. Returns true if it did.
     pub fn tick(&mut self, now: Instant, os: &mut impl Backend) -> bool {
+        if self.grant.is_none() {
+            self.release_all(os);
+        }
         if self.grant.is_some() && self.lease_until.is_some_and(|t| now > t) {
             self.revoke(os);
             return true;
@@ -155,12 +164,8 @@ impl Controller {
     }
 
     pub fn release_all(&mut self, os: &mut impl Backend) {
-        for key in std::mem::take(&mut self.held_keys) {
-            os.key(key, false);
-        }
-        for b in std::mem::take(&mut self.held_buttons) {
-            os.button(b, false);
-        }
+        self.held_keys.retain(|key| !os.key(*key, false));
+        self.held_buttons.retain(|b| !os.button(*b, false));
     }
 
     fn holding(&self, key: Key) -> bool {
@@ -169,14 +174,16 @@ impl Controller {
 
     /// Policy on canonical keys (after mapping, so no spelling gets around it).
     /// Delete is blocked outright: we can't verify the host's real modifier
-    /// state, so Ctrl+Alt+Del could otherwise be assembled. With Ctrl+Alt
-    /// held, also block Backspace (X11 zap) and F-keys (VT switch).
+    /// state, so Ctrl+Alt+Del could otherwise be assembled. On Linux,
+    /// Backspace and F-keys are also refused regardless of remote modifiers.
     fn blocked(&self, key: Key) -> bool {
-        let ctrl_alt =
-            self.holding(Key::Named(Named::Control)) && self.holding(Key::Named(Named::Alt));
         match key {
             Key::Named(Named::Delete) => true,
-            Key::Named(Named::Backspace | Named::F(_)) => ctrl_alt,
+            Key::Named(Named::Backspace | Named::F(_)) => {
+                cfg!(target_os = "linux")
+                    || (self.holding(Key::Named(Named::Control))
+                        && self.holding(Key::Named(Named::Alt)))
+            }
             Key::Char(c) => !c.is_ascii_graphic(),
             _ => false,
         }
@@ -229,8 +236,11 @@ impl Controller {
                 } else if !down && held {
                     // Always release, even off target: never leave it stuck.
                     let _ = self.point(grant.target, x, y, os);
-                    self.held_buttons.retain(|h| *h != b);
-                    os.button(b, false);
+                    if os.button(b, false) {
+                        self.held_buttons.retain(|h| *h != b);
+                    } else {
+                        return Err(Rejected::NativeFailure);
+                    }
                 }
             }
             InputEvent::Wheel { dx, dy, x, y } => {
@@ -254,8 +264,11 @@ impl Controller {
                         self.held_keys.push(key);
                     }
                 } else if held {
-                    self.held_keys.retain(|k| *k != key);
-                    os.key(key, false);
+                    if os.key(key, false) {
+                        self.held_keys.retain(|k| *k != key);
+                    } else {
+                        return Err(Rejected::NativeFailure);
+                    }
                 }
             }
         }
@@ -273,13 +286,16 @@ mod tests {
         cursor: Option<(i32, i32)>,
         /// Simulate the OS refusing/clamping the move.
         stuck: bool,
+        fail_release: bool,
     }
     impl Backend for Rec {
-        fn key(&mut self, key: Key, down: bool) {
+        fn key(&mut self, key: Key, down: bool) -> bool {
             self.log.push(format!("key {key:?} {down}"));
+            down || !self.fail_release
         }
-        fn button(&mut self, b: u8, down: bool) {
+        fn button(&mut self, b: u8, down: bool) -> bool {
             self.log.push(format!("button {b} {down}"));
+            down || !self.fail_release
         }
         fn move_to(&mut self, x: i32, y: i32) {
             self.log.push(format!("move {x} {y}"));
@@ -331,6 +347,26 @@ mod tests {
 
     fn click(down: bool, x: f64, y: f64) -> InputEvent {
         InputEvent::Button { b: 0, down, x, y }
+    }
+
+    #[test]
+    fn failed_releases_are_retried_and_block_rearming() {
+        let (mut c, mut os, now) = granted();
+        c.apply(FROM, key("KeyW", true), now, &mut os).unwrap();
+        c.apply(FROM, click(true, 0.1, 0.1), now, &mut os).unwrap();
+        os.fail_release = true;
+        c.revoke(&mut os);
+        assert_eq!(c.held_keys.len(), 1);
+        assert_eq!(c.held_buttons.len(), 1);
+        c.approve(VIEWER, REQ, SCREEN, now);
+        assert_eq!(
+            c.arm(GRANT + 1, VIEWER, REQ, now, &mut os),
+            Err(ArmError::CleanupPending)
+        );
+        os.fail_release = false;
+        c.tick(now, &mut os);
+        assert!(c.held_keys.is_empty());
+        assert!(c.held_buttons.is_empty());
     }
 
     #[test]
@@ -525,7 +561,10 @@ mod tests {
                 .any(|e| e.contains("Delete") || e.contains("Backspace") || e.contains("F("))
         );
         c.release_all(&mut os);
-        c.apply(FROM, key("Backspace", true), now, &mut os).unwrap();
+        assert_eq!(
+            c.apply(FROM, key("Backspace", true), now, &mut os).is_err(),
+            cfg!(target_os = "linux")
+        );
     }
 
     #[test]

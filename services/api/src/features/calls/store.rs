@@ -63,6 +63,7 @@ impl CallStore for MemoryCallStore {
         let mut calls = self.calls.lock().unwrap();
         let call = calls.get_mut(&call_id)?;
         change(call);
+        call.revision += 1;
         Some(call.clone())
     }
 
@@ -81,6 +82,7 @@ impl CallStore for MemoryCallStore {
             return Err(AddError::AlreadyIn);
         }
         call.participants.push(p);
+        call.revision += 1;
         if activate {
             call.state = CallState::Active;
         }
@@ -111,6 +113,7 @@ impl CallStore for MemoryCallStore {
             .position(|p| p.user_id == user_id)
             .map(|index| call.participants.remove(index));
         call.settle_control();
+        call.revision += 1;
         Some((call.clone(), participant))
     }
 

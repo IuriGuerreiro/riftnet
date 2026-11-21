@@ -84,8 +84,12 @@ pub fn supported() -> bool {
 /// Fallback backend: a platform we can't inject on. Drops everything.
 struct Nothing;
 impl Backend for Nothing {
-    fn key(&mut self, _: keymap::Key, _: bool) {}
-    fn button(&mut self, _: u8, _: bool) {}
+    fn key(&mut self, _: keymap::Key, _: bool) -> bool {
+        false
+    }
+    fn button(&mut self, _: u8, _: bool) -> bool {
+        true
+    }
     fn move_to(&mut self, _: i32, _: i32) {}
     fn scroll(&mut self, _: i32, _: i32) {}
     fn location(&self) -> Option<(i32, i32)> {
@@ -164,6 +168,10 @@ impl<B: Backend, F: Fn(&'static str)> Worker<B, F> {
                     }
                     if let Err(why) = self.ctl.apply(from, event, Instant::now(), &mut self.os) {
                         log::debug!("share play input dropped: {why:?}");
+                        if why == input::Rejected::NativeFailure {
+                            self.ctl.revoke(&mut self.os);
+                            (self.on_revoked)("native input failed");
+                        }
                     }
                 }
                 Err(RecvTimeoutError::Timeout) => {}
@@ -345,7 +353,7 @@ pub fn share_play_approve<R: Runtime>(
 /// The server confirmed grant `grant_id` for request `request_id`. Arms
 /// once, only after a local approval of that same request.
 #[tauri::command]
-pub fn share_play_arm<R: Runtime>(
+pub async fn share_play_arm<R: Runtime>(
     app: AppHandle<R>,
     state: State<'_, SharePlay>,
     grant_id: String,
@@ -363,7 +371,10 @@ pub fn share_play_arm<R: Runtime>(
         request_id: parse_id(&request_id)?,
         reply,
     });
-    match rx.recv_timeout(Duration::from_secs(1)) {
+    match tauri::async_runtime::spawn_blocking(move || rx.recv_timeout(Duration::from_secs(1)))
+        .await
+        .map_err(|e| e.to_string())?
+    {
         Ok(Ok(())) => Ok(()),
         Ok(Err(e)) => Err(format!("not armed: {e:?}")),
         Err(_) => {
@@ -383,7 +394,7 @@ pub fn share_play_revoke<R: Runtime>(app: AppHandle<R>, state: State<'_, SharePl
 /// not from the viewer, and are checked against the grant on the input
 /// thread when the event is applied. `lossy` = the unordered move channel.
 #[tauri::command]
-pub fn share_play_input<R: Runtime>(
+pub async fn share_play_input<R: Runtime>(
     app: AppHandle<R>,
     state: State<'_, SharePlay>,
     sender: String,
@@ -425,10 +436,13 @@ mod tests {
     #[derive(Clone, Default)]
     struct Rec(Rc<RefCell<Vec<String>>>);
     impl Backend for Rec {
-        fn key(&mut self, k: keymap::Key, down: bool) {
+        fn key(&mut self, k: keymap::Key, down: bool) -> bool {
             self.0.borrow_mut().push(format!("key {k:?} {down}"));
+            true
         }
-        fn button(&mut self, _: u8, _: bool) {}
+        fn button(&mut self, _: u8, _: bool) -> bool {
+            true
+        }
         fn move_to(&mut self, _: i32, _: i32) {}
         fn scroll(&mut self, _: i32, _: i32) {}
         fn location(&self) -> Option<(i32, i32)> {

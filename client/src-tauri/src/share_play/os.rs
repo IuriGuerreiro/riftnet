@@ -65,23 +65,21 @@ fn to_enigo(key: keymap::Key) -> Key {
 }
 
 impl Backend for Enigo {
-    fn key(&mut self, key: keymap::Key, down: bool) {
-        if let Err(e) = self.0.key(to_enigo(key), dir(down)) {
-            log::debug!("key {key:?}: {e}");
-        }
+    fn key(&mut self, key: keymap::Key, down: bool) -> bool {
+        self.0.key(to_enigo(key), dir(down)).is_ok()
     }
 
     fn location(&self) -> Option<(i32, i32)> {
         self.0.location().ok()
     }
 
-    fn button(&mut self, b: u8, down: bool) {
+    fn button(&mut self, b: u8, down: bool) -> bool {
         let b = match b {
             0 => Button::Left,
             1 => Button::Middle,
             _ => Button::Right,
         };
-        let _ = self.0.button(b, dir(down));
+        self.0.button(b, dir(down)).is_ok()
     }
 
     fn move_to(&mut self, x: i32, y: i32) {

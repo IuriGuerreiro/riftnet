@@ -58,7 +58,7 @@ pub async fn serve(
                         host: req.host_peer_id,
                         grant: req.grant_id,
                     });
-                    sfu.route(req.room_id, route);
+                    sfu.route(req.room_id, req.revision, route);
                 }
             }
             Some(n) = notices.recv() => {

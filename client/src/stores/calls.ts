@@ -4,7 +4,7 @@ import { create } from "zustand";
 import type { WsClient } from "../api/ws";
 import {
   decodeTagged,
-  encode,
+  encodeInput,
   type HostState,
   hostStep,
   type InputEvent,
@@ -99,7 +99,11 @@ function canHost(): Promise<boolean> {
 
 export function sendInput(e: InputEvent) {
   const ch = e.t === "move" ? moveCh : inputCh;
-  if (ch?.readyState === "open") ch.send(encode(e));
+  const control = useCalls.getState().current?.control;
+  if (!control?.granted || control.controllerId !== me) return;
+  if (ch?.readyState === "open") {
+    ch.send(encodeInput(e, control.grantId));
+  }
 }
 
 export function listMonitors(): Promise<{ monitors: MonitorInfo[]; suggested: number | null }> {
@@ -332,6 +336,7 @@ export const useCalls = create<CallsState>((set, get) => {
         syncHost(reply.value.call, get().sharing);
       }
     } catch (e) {
+      if (action === CallControlAction.GRANT && host.armed === null) disarm();
       set({ error: e instanceof Error ? e.message : String(e) });
     }
   }
@@ -504,11 +509,13 @@ export const useCalls = create<CallsState>((set, get) => {
             monitor,
           });
         } catch (e) {
+          disarm();
           set({ error: e instanceof Error ? e.message : String(e) });
           await sendControl(ws, CallControlAction.DENY, c.controllerId, requestId);
           return;
         }
       }
+      if (!approve) disarm();
       await sendControl(
         ws,
         approve ? CallControlAction.GRANT : CallControlAction.DENY,

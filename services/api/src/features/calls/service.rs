@@ -51,6 +51,7 @@ impl CallService {
             })?;
 
         let call = Call {
+            revision: 1,
             id: self.ids.next_id() as i64,
             conversation_id,
             caller_id: me,
@@ -378,7 +379,7 @@ impl CallService {
         for p in &call.participants {
             let _ = self.media.leave(p.peer_id).await;
         }
-        let _ = self.media.route(call_id, None).await;
+        let _ = self.media.route(call_id, u64::MAX, None).await;
         tracing::info!(call.id = call_id, ?reason, "call ended");
         self.push_ended(&call, &call.member_ids, reason).await;
     }
@@ -435,7 +436,11 @@ impl CallService {
         let Some(call) = self.store.get(call.id).await else {
             return;
         };
-        if let Err(e) = self.media.route(call.id, call.control_route()).await {
+        if let Err(e) = self
+            .media
+            .route(call.id, call.revision, call.control_route())
+            .await
+        {
             tracing::warn!(error = %e, "share play route update failed");
         }
         let payload = Payload::CallUpdated(v1::CallUpdated {
@@ -567,7 +572,12 @@ mod tests {
             self.left.lock().unwrap().push(peer_id);
             Ok(())
         }
-        async fn route(&self, room: i64, route: Option<(u64, u64, u64)>) -> anyhow::Result<()> {
+        async fn route(
+            &self,
+            room: i64,
+            _: u64,
+            route: Option<(u64, u64, u64)>,
+        ) -> anyhow::Result<()> {
             self.routes.lock().unwrap().push((room, route));
             Ok(())
         }
@@ -617,6 +627,7 @@ mod tests {
 
     fn test_call() -> Call {
         Call {
+            revision: 1,
             id: 1,
             conversation_id: DM,
             caller_id: ALICE,

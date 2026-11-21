@@ -22,7 +22,12 @@ pub trait MediaClient: Send + Sync {
     ) -> anyhow::Result<(u64, String)>;
     async fn leave(&self, peer_id: u64) -> anyhow::Result<()>;
     /// Share Play: set (or clear with None) the one input route of a room.
-    async fn route(&self, room_id: i64, route: Option<(u64, u64, u64)>) -> anyhow::Result<()>;
+    async fn route(
+        &self,
+        room_id: i64,
+        revision: u64,
+        route: Option<(u64, u64, u64)>,
+    ) -> anyhow::Result<()>;
 }
 
 /// What the SFU tells us about peers it dropped on its own.
@@ -111,9 +116,15 @@ impl MediaClient for NatsMediaClient {
         Ok(())
     }
 
-    async fn route(&self, room_id: i64, route: Option<(u64, u64, u64)>) -> anyhow::Result<()> {
+    async fn route(
+        &self,
+        room_id: i64,
+        revision: u64,
+        route: Option<(u64, u64, u64)>,
+    ) -> anyhow::Result<()> {
         let (controller_peer_id, host_peer_id, grant_id) = route.unwrap_or((0, 0, 0));
         let req = MediaRoute {
+            revision,
             room_id: room_id as u64,
             controller_peer_id,
             host_peer_id,

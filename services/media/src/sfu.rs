@@ -6,7 +6,7 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::{Duration, Instant};
 
 use str0m::change::SdpOffer;
-use str0m::channel::ChannelId;
+use str0m::channel::{ChannelId, Reliability};
 use str0m::media::{KeyframeRequestKind, MediaData, MediaKind, Mid};
 use str0m::net::{Protocol, Receive};
 use str0m::{Candidate, Event, IceConnectionState, Input, Output, Rtc};
@@ -76,9 +76,18 @@ pub struct Route {
 struct RouteSlot {
     active: Option<Route>,
     closed: u64,
+    revision: u64,
 }
 
 impl RouteSlot {
+    fn update(&mut self, revision: u64, route: Option<Route>) {
+        if revision <= self.revision {
+            return;
+        }
+        self.revision = revision;
+        self.set(route);
+    }
+
     fn set(&mut self, route: Option<Route>) {
         let Some(r) = route else {
             self.close();
@@ -140,6 +149,12 @@ fn relay_decision(
     }
 }
 
+// Bind events at production time, before SCTP buffering and route changes.
+fn input_for_grant(route: Option<Route>, packet: &[u8]) -> Option<&[u8]> {
+    let grant = u64::from_be_bytes(packet.get(..8)?.try_into().ok()?);
+    (route?.grant == grant).then(|| &packet[8..])
+}
+
 enum Cmd {
     Add {
         peer_id: u64,
@@ -153,6 +168,7 @@ enum Cmd {
     },
     Route {
         room: u64,
+        revision: u64,
         route: Option<Route>,
     },
 }
@@ -262,8 +278,12 @@ impl Sfu {
     }
 
     /// Share Play: the one input route of a room (controller peer, host peer).
-    pub fn route(&self, room: u64, route: Option<Route>) {
-        let _ = self.cmds.send(Cmd::Route { room, route });
+    pub fn route(&self, room: u64, revision: u64, route: Option<Route>) {
+        let _ = self.cmds.send(Cmd::Route {
+            room,
+            revision,
+            route,
+        });
     }
 }
 
@@ -336,7 +356,11 @@ fn run(
                         p.end("left");
                     }
                 }
-                Cmd::Route { room, route } => routes.entry(room).or_default().set(route),
+                Cmd::Route {
+                    room,
+                    revision,
+                    route,
+                } => routes.entry(room).or_default().update(revision, route),
             }
         }
         if joined {
@@ -381,7 +405,14 @@ fn run(
                             } else {
                                 MediaKind::Audio
                             };
-                            forward.push((p.id, p.room, kind, d));
+                            if kind != MediaKind::Video
+                                || routes
+                                    .get(&p.room)
+                                    .and_then(|s| s.active)
+                                    .is_none_or(|r| r.host == p.id)
+                            {
+                                forward.push((p.id, p.room, kind, d));
+                            }
                         }
                         Event::KeyframeRequest(r) => {
                             let kind = match r.kind {
@@ -425,9 +456,36 @@ fn run(
                             }
                         }
                         Event::ChannelOpen(id, label) => {
+                            if !is_relayed(&label) {
+                                continue;
+                            }
+                            let valid = p
+                                .rtc
+                                .channel(id)
+                                .and_then(|c| c.config().cloned())
+                                .is_some_and(|c| {
+                                    label != RELIABLE
+                                        || (c.ordered
+                                            && matches!(c.reliability, Reliability::Reliable))
+                                });
+                            if !valid || p.channels.contains_key(&label) {
+                                p.end("invalid_input_channel");
+                                continue;
+                            }
                             p.channels.insert(label, id);
                         }
-                        Event::ChannelClose(id) => p.channels.retain(|_, c| *c != id),
+                        Event::ChannelClose(id) => {
+                            if p.channels.get(RELIABLE) == Some(&id) {
+                                if let Some(r) = routes
+                                    .get(&p.room)
+                                    .and_then(|s| s.active)
+                                    .filter(|r| r.controller == p.id || r.host == p.id)
+                                {
+                                    failed.push((p.room, r.grant));
+                                }
+                            }
+                            p.channels.retain(|_, c| *c != id);
+                        }
                         Event::ChannelData(d) => {
                             let Some(label) = p
                                 .channels
@@ -439,15 +497,18 @@ fn run(
                                 continue;
                             };
                             let route = routes.get(&p.room).and_then(|s| s.active);
+                            let Some(data) = input_for_grant(route, &d.data) else {
+                                continue;
+                            };
                             let allowed = route.is_some_and(|r| r.controller == p.id)
                                 && p.limiter.allow(Instant::now());
-                            match (route, relay_decision(route, p.id, &label, &d.data, allowed)) {
+                            match (route, relay_decision(route, p.id, &label, data, allowed)) {
                                 (Some(r), Relay::To(host)) => relay.push((
                                     p.room,
                                     r.grant,
                                     host,
                                     label,
-                                    tag(p.user_id, r.grant, &d.data),
+                                    tag(p.user_id, r.grant, data),
                                 )),
                                 (Some(r), Relay::Fail) => failed.push((p.room, r.grant)),
                                 _ => {}
@@ -619,6 +680,29 @@ fn run(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn stale_clears_and_installs_cannot_replace_newer_routes() {
+        let mut slot = RouteSlot::default();
+        slot.update(2, route(50));
+        slot.update(1, None);
+        assert_eq!(slot.active, route(50));
+        slot.update(4, None);
+        slot.update(3, route(60));
+        assert_eq!(slot.active, None);
+        slot.update(5, route(70));
+        assert_eq!(slot.active, route(70));
+    }
+
+    #[test]
+    fn input_is_bound_to_its_original_grant() {
+        let mut packet = 50u64.to_be_bytes().to_vec();
+        packet.extend_from_slice(br#"{"t":"ping"}"#);
+        assert_eq!(input_for_grant(route(50), &packet), Some(&packet[8..]));
+        assert_eq!(input_for_grant(route(60), &packet), None);
+        assert_eq!(input_for_grant(None, &packet), None);
+        assert_eq!(input_for_grant(route(50), &[0; 7]), None);
+    }
 
     #[test]
     fn relays_only_input_channels() {

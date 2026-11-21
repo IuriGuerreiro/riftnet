@@ -101,7 +101,9 @@ export function RemoteScreen({
   const view = controlView(current, myId());
   const controlling = view.role === "viewer" && view.granted && stream !== null;
   useControlInput(ref, controlling);
-  const hostId = current?.sharingUserIds.find((id) => id !== myId());
+  const hostId = view.role === "viewer" && view.granted
+    ? view.other
+    : current?.sharingUserIds.find((id) => id !== myId());
   if (!stream) return null;
   return (
     <div className="fixed bottom-4 right-4 z-40 w-[48rem] max-w-[calc(100vw-2rem)]">

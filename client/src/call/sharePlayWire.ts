@@ -105,6 +105,14 @@ export function encode(e: InputEvent): string {
   return JSON.stringify(e);
 }
 
+export function encodeInput(e: InputEvent, grantId: bigint): Uint8Array<ArrayBuffer> {
+  const body = new TextEncoder().encode(encode(e));
+  const packet = new Uint8Array(8 + body.length);
+  new DataView(packet.buffer).setBigUint64(0, grantId, false);
+  packet.set(body, 8);
+  return packet;
+}
+
 export interface Tagged {
   sender: bigint;
   grantId: bigint;

@@ -35,6 +35,8 @@ message MediaRoute {
   uint64 controller_peer_id = 2;
   uint64 host_peer_id = 3;
   uint64 grant_id = 4;
+  // Orders both route installation and removal within a call.
+  uint64 revision = 5;
 }
 
 enum MediaEventKind {

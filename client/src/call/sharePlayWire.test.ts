@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   decodeTagged,
   encode,
+  encodeInput,
   type HostState,
   hostStep,
   normalizePointer,
@@ -99,4 +100,11 @@ describe("hostStep", () => {
     });
     expect(hostStep(fresh(), { ...grant, hostId: 3n }, me, true)).toEqual({ kind: "none" });
   });
+});
+
+it("binds viewer input to its original grant without losing bigint precision", () => {
+  const grant = 9007199254740993n;
+  const packet = encodeInput({ t: "ping" }, grant);
+  expect(new DataView(packet.buffer).getBigUint64(0, false)).toBe(grant);
+  expect(new TextDecoder().decode(packet.subarray(8))).toBe('{"t":"ping"}');
 });
