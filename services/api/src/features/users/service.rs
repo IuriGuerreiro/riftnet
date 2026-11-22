@@ -23,7 +23,6 @@ pub const MAX_PRONOUNS_CHARS: usize = 40;
 const IMAGE_URL_TTL: Duration = Duration::from_secs(5 * 60);
 const IMAGES_IN_FLIGHT: usize = 2;
 
-/// PATCH /me input. None = leave alone, Some("") = clear.
 #[derive(Debug, Default)]
 pub struct ProfileChanges {
     pub display_name: Option<String>,
@@ -60,7 +59,6 @@ impl UserService {
         }
     }
 
-    /// Any logged-in user may read any profile: search already shows everyone.
     #[tracing::instrument(name = "users.get", skip_all, fields(user.id = id))]
     pub async fn get(&self, id: i64) -> Result<User, ApiError> {
         self.repo.find_by_id(id).await?.ok_or(ApiError::NotFound)
@@ -128,8 +126,7 @@ impl UserService {
         Ok(user)
     }
 
-    // INVARIANT: take a slot before reading the upload body, so waiting
-    // uploads never pile up in memory.
+    // INVARIANT: take a slot before reading the upload body, so waiting uploads never pile up in memory.
     pub fn image_slot(&self) -> Result<OwnedSemaphorePermit, ApiError> {
         self.image_slots
             .clone()
@@ -137,8 +134,6 @@ impl UserService {
             .map_err(|_| ApiError::TooManyRequests)
     }
 
-    /// Checks and re-encodes the image, stores every size, then swaps it in
-    /// and deletes the old files.
     #[tracing::instrument(name = "users.set_image", skip_all, fields(user.id = me, kind = kind.name(), bytes = data.len()))]
     pub async fn set_image(
         &self,
@@ -147,8 +142,6 @@ impl UserService {
         data: Bytes,
         slot: OwnedSemaphorePermit,
     ) -> Result<User, ApiError> {
-        // The slot moves into the job: a cancelled request can't free it
-        // while the decode is still running.
         let processed = tokio::task::spawn_blocking(move || {
             let _slot = slot;
             image::process(kind, &data)
@@ -156,8 +149,7 @@ impl UserService {
         .await
         .map_err(anyhow::Error::from)??;
 
-        // INVARIANT: every upload gets its own id, so cleanup of an old image
-        // can't hit the live one, even when the same image is uploaded twice.
+        // INVARIANT: every upload gets its own id, so cleanup of an old image can't hit the live one, even when the same image is uploaded twice.
         let hash = upload_id(&processed.hash);
         let hash_hex = hex(&hash);
         for (width, bytes) in processed.files {
@@ -182,8 +174,6 @@ impl UserService {
                 return Err(err.into());
             }
         };
-        // WARN: announce before the slow cleanup. A stalled cleanup must not
-        // push a stale snapshot after a later change (no profile version yet).
         self.announce(&user).await;
         if let Some(old) = old {
             self.delete_files(me, kind, &old).await;
@@ -237,7 +227,6 @@ impl UserService {
             .await?)
     }
 
-    /// Best effort: a leftover file is only wasted space, never shown.
     async fn delete_files(&self, user_id: i64, kind: ProfileImage, hash: &[u8]) {
         let hash_hex = hex(hash);
         for width in kind.widths() {
@@ -251,7 +240,6 @@ impl UserService {
         }
     }
 
-    /// Pushes UserUpdated to the user, their friends and conversation members.
     async fn announce(&self, user: &User) {
         let mut receivers: Vec<i64> =
             match audience(&*self.friends, &*self.conversations, user.id).await {
@@ -330,7 +318,6 @@ fn prefix_upper_bound(prefix: &str) -> String {
     String::from_utf8(bytes).expect("ascii stays ascii")
 }
 
-/// BLAKE3 of the image plus a random nonce: unique per upload.
 fn upload_id(content_hash: &[u8; 32]) -> [u8; 32] {
     let nonce: [u8; 16] = rand::random();
     let mut h = blake3::Hasher::new();
@@ -352,8 +339,6 @@ fn parse_accent_color(raw: &str) -> Result<Option<i32>, ApiError> {
     i32::from_str_radix(digits, 16).map(Some).map_err(|_| bad())
 }
 
-/// Trims, rejects control characters (newlines allowed if `multiline`)
-/// and anything over `max` chars. Empty means "clear it": None.
 fn clean_text(
     raw: &str,
     max: usize,
@@ -618,7 +603,6 @@ mod tests {
         }
     }
 
-    /// (receivers sorted, pushed user)
     #[derive(Default)]
     struct FakeEvents(Mutex<Vec<(Vec<i64>, protocol::v1::User)>>);
 
@@ -677,7 +661,6 @@ mod tests {
         }
     }
 
-    /// ANA: friends with BOB, DM with CAT, pending request from DAN.
     fn setup() -> Setup {
         let users = FakeUsers::default();
         for id in [ANA, BOB, CAT, DAN] {
@@ -785,7 +768,6 @@ mod tests {
         );
         assert_eq!(pushes[0].1.display_name, "Ana B");
 
-        // Missing field kept, "" clears.
         let u = t
             .svc
             .update_profile(
@@ -860,7 +842,6 @@ mod tests {
         assert_eq!(pushes[0].0, vec![ANA, BOB, CAT]);
         assert_eq!(pushes[0].1.avatar_hash, h1);
 
-        // Same image again: its own new files, the old ones go.
         let again = t.svc.set_avatar_t(ANA, png(40, 30)).await.unwrap();
         let h1b = again.avatar_hex().unwrap();
         assert_ne!(h1, h1b, "every upload gets its own id");
@@ -872,7 +853,6 @@ mod tests {
             ]
         );
 
-        // New image: old files gone.
         let second = t.svc.set_avatar_t(ANA, png(50, 50)).await.unwrap();
         let h2 = second.avatar_hex().unwrap();
         assert_ne!(h1, h2);
@@ -890,7 +870,6 @@ mod tests {
         assert!(t.store.keys().is_empty());
         assert_eq!(t.pushes()[0].1.avatar_hash, "");
 
-        // Removing again is a no-op, no push.
         t.svc.remove_image(ANA, ProfileImage::Avatar).await.unwrap();
         assert!(t.pushes().is_empty());
     }

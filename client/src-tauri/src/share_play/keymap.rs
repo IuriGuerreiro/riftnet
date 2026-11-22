@@ -1,10 +1,5 @@
-//! DOM `KeyboardEvent.code` → a key we may press. Strict allowlist: anything
-//! not listed here is refused. Physical codes keep WASD in place whatever
-//! the viewer's layout is.
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Key {
-    /// a–z, 0–9 and a few punctuation keys, typed unshifted.
     Char(char),
     Named(Named),
 }

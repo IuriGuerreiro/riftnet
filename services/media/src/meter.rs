@@ -1,41 +1,24 @@
-//! Media server metric names and recorder setup.
-//!
-//! Labels stay low-cardinality: only `kind` (audio, video, pli, fir) and `reason`.
-//! Never add user, peer, room or call IDs.
-
 use metrics_exporter_prometheus::{
     Matcher, PrometheusBuilder, PrometheusHandle, PrometheusRecorder,
 };
 
 pub const ROOMS: &str = "media_rooms";
 pub const PEERS: &str = "media_peers";
-/// `media.join` request received -> first media from that peer.
 pub const JOIN_LATENCY_MS: &str = "media_join_latency_ms";
-/// Media frames written to a receiver, by `kind`.
 pub const FORWARDED: &str = "media_packets_forwarded_total";
-/// Frames not forwarded to a receiver, by `kind` and `reason`.
 pub const FORWARD_DROPPED: &str = "media_forward_dropped_total";
-/// RTP packets and bytes from str0m stats, by `kind`.
 pub const RTP_PACKETS_IN: &str = "media_rtp_packets_in_total";
 pub const RTP_PACKETS_OUT: &str = "media_rtp_packets_out_total";
 pub const RTP_BYTES_IN: &str = "media_rtp_bytes_in_total";
 pub const RTP_BYTES_OUT: &str = "media_rtp_bytes_out_total";
-/// Loss we see on media from a peer, by `kind`.
 pub const INGRESS_LOSS_PERCENT: &str = "media_ingress_loss_percent";
-/// Loss a peer reports on media we send it, by `kind`.
 pub const EGRESS_LOSS_PERCENT: &str = "media_egress_loss_percent";
-/// Jitter a peer reports on media we send it, by `kind`.
 pub const EGRESS_JITTER_MS: &str = "media_egress_jitter_ms";
 pub const PEER_RTT_MS: &str = "media_peer_rtt_ms";
-/// PLI/FIR requests from receivers, by `kind` (pli, fir).
 pub const KEYFRAME_REQUESTS: &str = "media_keyframe_requests_total";
-/// Work time of one SFU loop pass, socket wait excluded.
 pub const LOOP_ITERATION_US: &str = "media_sfu_loop_iteration_us";
-/// Share of wall time the SFU thread spends working (0..1). Near 1 = saturated.
 pub const LOOP_BUSY_RATIO: &str = "media_sfu_loop_busy_ratio";
-/// Peer sessions ended, by `reason`.
 pub const PEER_SESSIONS_ENDED: &str = "media_peer_sessions_ended_total";
-/// Room lifetime (first peer in -> last peer out), by end `reason` of the last peer.
 pub const CALL_DURATION_S: &str = "media_call_duration_seconds";
 
 const MS: &[f64] = &[
@@ -67,7 +50,6 @@ pub fn recorder() -> anyhow::Result<(PrometheusRecorder, PrometheusHandle)> {
     Ok((recorder, handle))
 }
 
-/// Minimal `GET /metrics` endpoint (Prometheus text) for local checks.
 pub async fn serve(addr: std::net::SocketAddr, handle: PrometheusHandle) -> anyhow::Result<()> {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     let listener = tokio::net::TcpListener::bind(addr).await?;

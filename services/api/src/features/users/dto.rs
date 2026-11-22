@@ -10,7 +10,6 @@ pub struct UserDto {
     pub display_name: Option<String>,
     pub bio: Option<String>,
     pub custom_status: Option<String>,
-    /// Hex BLAKE3. Image: GET /users/{id}/avatar/{avatar_hash}?size=128|512
     pub avatar_hash: Option<String>,
     pub banner_hash: Option<String>,
     pub accent_color: Option<String>,
@@ -63,7 +62,6 @@ pub struct SearchUsersQuery {
     pub limit: Option<u32>,
 }
 
-/// PATCH /me. A missing field is left alone; "" clears it.
 #[derive(Debug, Deserialize)]
 pub struct UpdateProfileRequest {
     pub display_name: Option<String>,

@@ -34,7 +34,6 @@ pub const REACTION_WINDOW: Duration = Duration::from_secs(10);
 pub struct MessageService {
     repo: Arc<dyn MessageRepo>,
     reactions: Arc<dyn ReactionRepo>,
-    /// user id -> (window start, changes in window)
     reaction_rate: Mutex<HashMap<i64, (Instant, u32)>>,
     conversations: Arc<dyn ConversationRepo>,
     events: Arc<dyn EventBus>,
@@ -96,8 +95,6 @@ impl MessageService {
             }
         }
 
-        // The original must exist and be in this conversation. The lookup is
-        // scoped to the conversation, so another conversation's id is just "not found".
         if reply_to != 0 && self.repo.get(conversation_id, reply_to).await?.is_none() {
             return Err(ApiError::bad_request(
                 "bad_reply",
@@ -105,8 +102,6 @@ impl MessageService {
             ));
         }
 
-        // Postgres first, then Scylla. If the Scylla write fails, the client's
-        // retry (same nonce, same id) claims the same files again, which is allowed.
         let attachments = self
             .attachments
             .attach(me, conversation_id, id, attachment_ids)
@@ -284,8 +279,6 @@ impl MessageService {
             return Err(not_your_message());
         }
 
-        // Files first: if this fails the message stays and a retry redoes both.
-        // (The other order could leave a deleted message's files downloadable.)
         if !message.attachments.is_empty() {
             self.attachments
                 .release(me, conversation_id, message_id)
@@ -303,8 +296,6 @@ impl MessageService {
         Ok(Some(seq))
     }
 
-    /// Adds or removes my reaction. Returns the message's reactions now and
-    /// the change's seq (0 = nothing changed).
     #[tracing::instrument(name = "messages.react", skip_all, fields(user.id = me, conversation.id = conversation_id, added = add))]
     pub async fn react(
         &self,
@@ -390,7 +381,6 @@ impl MessageService {
         Ok((now_counts, seq))
     }
 
-    /// Who reacted with `emoji`, oldest row order, max 100.
     #[tracing::instrument(name = "messages.reactors", skip_all, fields(user.id = me, conversation.id = conversation_id))]
     pub async fn reactors(
         &self,
@@ -439,8 +429,6 @@ impl MessageService {
         entry.1 <= REACTION_LIMIT
     }
 
-    /// Adds inline preview links to images/videos. Encrypted messages are
-    /// skipped: their files are ciphertext a browser can't show.
     async fn sign_previews(&self, messages: &mut [Message]) {
         for m in messages.iter_mut().filter(|m| m.encryption == 0) {
             if m.attachments.iter().any(|a| a.is_media()) {
@@ -481,7 +469,6 @@ impl MessageService {
     }
 }
 
-/// Text may be empty only when the message has files.
 fn check_content(content: &[u8], has_attachments: bool) -> Result<(), ApiError> {
     if content.is_empty() && !has_attachments {
         return Err(ApiError::bad_request("empty_message", "message is empty"));

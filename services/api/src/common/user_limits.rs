@@ -43,7 +43,6 @@ pub struct UserLimiter {
 }
 
 impl UserLimiter {
-    /// `enabled: false` (`RATE_LIMITS=off`) allows every hit without touching Redis.
     pub fn new(redis: ConnectionManager, enabled: bool) -> Self {
         Self {
             redis,
@@ -104,7 +103,6 @@ pub struct SocketSlots {
 }
 
 impl SocketSlots {
-    /// `enabled: false` (`RATE_LIMITS=off`) lifts the per-user socket cap without touching Redis.
     pub fn new(redis: ConnectionManager, ttl: Duration, enabled: bool) -> Self {
         Self {
             redis,

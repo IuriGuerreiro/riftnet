@@ -1,6 +1,3 @@
-//! File store over the S3 API: MinIO locally, Cloudflare R2 in production.
-//! Same code for both; only the endpoint and keys change.
-
 use std::time::Duration;
 
 use anyhow::Context;
@@ -14,9 +11,7 @@ use bytes::Bytes;
 
 #[async_trait]
 pub trait FileStore: Send + Sync {
-    /// Starts a multipart upload. Returns its upload id.
     async fn start_upload(&self, key: &str, content_type: &str) -> anyhow::Result<String>;
-    /// Stores one part. `part` is 0-based. Returns the part's etag.
     async fn put_part(
         &self,
         key: &str,
@@ -24,35 +19,28 @@ pub trait FileStore: Send + Sync {
         part: u32,
         data: Bytes,
     ) -> anyhow::Result<String>;
-    /// Joins the parts (etags in part order) into the final object.
     async fn finish_upload(
         &self,
         key: &str,
         upload_id: &str,
         etags: &[String],
     ) -> anyhow::Result<()>;
-    /// Parts S3 actually holds, in order: (0-based part, etag, size).
     async fn list_parts(
         &self,
         key: &str,
         upload_id: &str,
     ) -> anyhow::Result<Vec<(u32, String, i64)>>;
     async fn abort_upload(&self, key: &str, upload_id: &str) -> anyhow::Result<()>;
-    /// Size of a finished object, None if it doesn't exist.
     async fn object_size(&self, key: &str) -> anyhow::Result<Option<i64>>;
     async fn delete(&self, key: &str) -> anyhow::Result<()>;
-    /// Stores a small object in one request (no multipart).
     async fn put_object(&self, key: &str, content_type: &str, data: Bytes) -> anyhow::Result<()>;
-    /// A short-lived link that shows the object inline (e.g. an image).
     async fn view_url(&self, key: &str, ttl: Duration) -> anyhow::Result<String>;
-    /// A short-lived link anyone holding it can download from.
     async fn download_url(
         &self,
         key: &str,
         filename: &str,
         ttl: Duration,
     ) -> anyhow::Result<String>;
-    /// A short-lived link the browser shows inline (for <img>/<video>).
     async fn preview_url(
         &self,
         key: &str,
@@ -63,7 +51,6 @@ pub trait FileStore: Send + Sync {
 
 pub struct S3Config<'a> {
     pub endpoint: &'a str,
-    /// Host put in download links, when browsers reach S3 by another address.
     pub public_endpoint: Option<&'a str>,
     pub region: &'a str,
     pub bucket: &'a str,
@@ -86,7 +73,6 @@ impl S3FileStore {
                 .endpoint_url(endpoint)
                 .region(Region::new(cfg.region.to_string()))
                 .credentials_provider(creds)
-                // MinIO needs bucket-in-path; R2 accepts it too.
                 .force_path_style(true)
                 .build();
             Client::from_conf(conf)
@@ -98,7 +84,6 @@ impl S3FileStore {
         }
     }
 
-    /// Dev only: create the bucket if it's missing, so a fresh MinIO just works.
     pub async fn ensure_bucket(&self) -> anyhow::Result<()> {
         if self
             .client
@@ -148,7 +133,7 @@ impl FileStore for S3FileStore {
             .bucket(&self.bucket)
             .key(key)
             .upload_id(upload_id)
-            .part_number(part as i32 + 1) // S3 parts are 1-based
+            .part_number(part as i32 + 1)
             .body(ByteStream::from(data))
             .send()
             .await
@@ -324,7 +309,6 @@ impl FileStore for S3FileStore {
     }
 }
 
-/// `attachment; filename*=UTF-8''<percent-encoded>` so any filename is safe in a header.
 fn content_disposition(filename: &str) -> String {
     let mut encoded = String::new();
     for b in filename.bytes() {
@@ -350,8 +334,6 @@ mod tests {
     }
 }
 
-/// Needs MinIO: `docker compose -f infra/docker-compose.yml up -d minio`,
-/// then `cargo test -p api -- --ignored minio`.
 #[cfg(test)]
 mod minio_tests {
     use super::*;

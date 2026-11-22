@@ -78,7 +78,6 @@ pub async fn update_me(
 const IMAGE_LIMIT_PER_USER: u32 = 10;
 const IMAGE_WINDOW: Duration = Duration::from_secs(60 * 60);
 
-/// Body is the raw image; its type is read from the bytes, not the header.
 pub async fn put_avatar(
     auth: AuthUser,
     state: State<AppState>,
@@ -106,7 +105,6 @@ async fn put_image(
         IMAGE_LIMIT_PER_USER,
         IMAGE_WINDOW,
     )?;
-    // Slot first, body second: a busy server never buffers the upload.
     let slot = state.users.image_slot()?;
     let data = axum::body::to_bytes(body, MAX_IMAGE_BYTES)
         .await
@@ -159,7 +157,6 @@ pub async fn get_user(
     Ok(Json(state.users.get(id).await?.into()))
 }
 
-/// A short-lived (5 min) signed link to the image, like attachment downloads.
 pub async fn get_avatar(
     _auth: AuthUser,
     State(state): State<AppState>,

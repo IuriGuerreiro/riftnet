@@ -21,14 +21,12 @@ pub struct Sfu {
     cmds: Sender<Cmd>,
 }
 
-/// Things the SFU decided on its own that the api must know about.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Notice {
     PeerGone { peer_id: u64 },
     RouteFailed { room: u64, grant: u64 },
 }
 
-/// Share Play limits on relayed input.
 const MAX_INPUT_BYTES: usize = 256;
 const INPUT_RATE_PER_S: f64 = 200.0;
 const INPUT_BURST: f64 = 400.0;
@@ -169,7 +167,6 @@ fn with_screen_stereo(sdp: &str, input: Option<Mid>) -> String {
         .join("\r\nm=")
 }
 
-/// Token bucket for one peer's input messages.
 struct RateLimit {
     tokens: f64,
     at: Instant,
@@ -195,7 +192,6 @@ impl RateLimit {
     }
 }
 
-/// The one input route of a room, for one grant.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Route {
     pub controller: u64,
@@ -203,8 +199,6 @@ pub struct Route {
     pub grant: u64,
 }
 
-/// A room's route plus the highest grant ever closed there. Grant ids only
-/// grow, so a late or replayed update for a closed grant is ignored.
 #[derive(Debug, Default)]
 struct RouteSlot {
     active: Option<Route>,
@@ -246,23 +240,17 @@ impl RouteSlot {
     }
 }
 
-/// The lossy channel carries pointer moves only. A key or click there could
-/// lose its release, so anything else is dropped.
 fn is_move(data: &[u8]) -> bool {
     data.starts_with(br#"{"t":"move","#)
 }
 
 #[derive(Debug, PartialEq, Eq)]
 enum Relay {
-    /// Send to this host peer.
     To(u64),
-    /// Ignore (lossy channel, or not part of the active grant).
     Drop,
-    /// A reliable input message must not be lost: break the route.
     Fail,
 }
 
-/// Only the granted controller's input reaches only its host.
 fn relay_decision(
     route: Option<Route>,
     from: u64,
@@ -282,7 +270,6 @@ fn relay_decision(
     }
 }
 
-// Bind events at production time, before SCTP buffering and route changes.
 fn input_for_grant(route: Option<Route>, packet: &[u8]) -> Option<&[u8]> {
     let grant = u64::from_be_bytes(packet.get(..8)?.try_into().ok()?);
     (route?.grant == grant).then(|| &packet[8..])
@@ -311,16 +298,13 @@ struct Peer {
     room: u64,
     user_id: u64,
     rtc: Rtc,
-    /// Open data channels by label. Only `input*` labels are relayed.
     channels: HashMap<String, ChannelId>,
     limiter: RateLimit,
     audio: Option<Mid>,
     negotiated_audio: AudioNegotiation,
     video: Option<Mid>,
-    /// When `media.join` arrived. Cleared once the first media is seen.
     awaiting_media: Option<Instant>,
     end_reason: Option<&'static str>,
-    /// Last cumulative (bytes, packets) per mid, to turn str0m totals into deltas.
     rx_totals: HashMap<Mid, (u64, u64)>,
     tx_totals: HashMap<Mid, (u64, u64)>,
 }
@@ -334,7 +318,6 @@ impl Peer {
         }
     }
 
-    /// Disconnect, keeping the first reason given.
     fn end(&mut self, reason: &'static str) {
         self.end_reason.get_or_insert(reason);
         self.rtc.disconnect();
@@ -346,7 +329,6 @@ fn delta(totals: &mut HashMap<Mid, (u64, u64)>, mid: Mid, bytes: u64, packets: u
     (bytes.saturating_sub(last.0), packets.saturating_sub(last.1))
 }
 
-/// RTCP jitter is in RTP clock units: 48 kHz for Opus, 90 kHz for video.
 fn jitter_ms(kind: &str, units: u32) -> f64 {
     let hz = if kind == "video" { 90_000.0 } else { 48_000.0 };
     f64::from(units) * 1000.0 / hz
@@ -357,13 +339,10 @@ fn record_membership(peers: &[Peer], rooms: &HashMap<u64, Instant>) {
     metrics::gauge!(m::ROOMS).set(rooms.len() as f64);
 }
 
-/// Share Play input channels. Anything else a client opens is ignored.
 fn is_relayed(label: &str) -> bool {
     label.starts_with("input")
 }
 
-/// Prefix the sender's user id and the grant it was relayed under (8 bytes
-/// each, big endian) so the host checks both before applying it.
 fn tag(user_id: u64, grant: u64, data: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(16 + data.len());
     out.extend_from_slice(&user_id.to_be_bytes());
@@ -411,7 +390,6 @@ impl Sfu {
         let _ = self.cmds.send(Cmd::Remove { peer_id });
     }
 
-    /// Share Play: the one input route of a room (controller peer, host peer).
     pub fn route(&self, room: u64, revision: u64, route: Option<Route>) {
         let _ = self.cmds.send(Cmd::Route {
             room,
@@ -430,12 +408,10 @@ fn run(
     let local = socket.local_addr().expect("socket address");
     let mut peers: Vec<Peer> = Vec::new();
     let mut buf = vec![0u8; 2000];
-    // Room id -> when its first peer joined.
     let mut rooms: HashMap<u64, Instant> = HashMap::new();
     let mut roster: HashMap<u64, Vec<(u64, u64)>> = HashMap::new();
     record_membership(&peers, &rooms);
 
-    // Loop saturation: per-pass work time, plus busy share over a window.
     let mut pass_start: Option<Instant> = None;
     let mut waited = Duration::ZERO;
     let mut window_start = Instant::now();
@@ -506,7 +482,6 @@ fn run(
 
         let mut forward: Vec<(u64, u64, Source, MediaData)> = Vec::new();
         let mut keyframes: Vec<(u64, u64, KeyframeRequestKind)> = Vec::new();
-        // (room, grant, host peer, label, tagged payload)
         let mut relay: Vec<(u64, u64, u64, String, Vec<u8>)> = Vec::new();
         let mut failed: Vec<(u64, u64)> = Vec::new();
         let mut next_timeout = Instant::now() + Duration::from_millis(100);
@@ -634,14 +609,13 @@ fn run(
                             if p.negotiated_audio.channel == Some(id) {
                                 p.end("audio_channel_closed");
                             }
-                            if p.channels.get(RELIABLE) == Some(&id) {
-                                if let Some(r) = routes
+                            if p.channels.get(RELIABLE) == Some(&id)
+                                && let Some(r) = routes
                                     .get(&p.room)
                                     .and_then(|s| s.active)
                                     .filter(|r| r.controller == p.id || r.host == p.id)
-                                {
-                                    failed.push((p.room, r.grant));
-                                }
+                            {
+                                failed.push((p.room, r.grant));
                             }
                             p.channels.retain(|_, c| *c != id);
                         }
@@ -775,7 +749,6 @@ fn run(
                 .find(|p| p.id == *host && p.room == *room)
                 .and_then(|p| {
                     let id = *p.channels.get(label)?;
-                    // Ok(false) = str0m couldn't buffer it: as bad as an error.
                     p.rtc.channel(id)?.write(true, data).ok()
                 })
                 .unwrap_or(false);
@@ -1019,22 +992,17 @@ mod tests {
         let mut slot = RouteSlot::default();
         slot.set(route(50));
         assert_eq!(slot.active, route(50));
-        // The route failed: SFU closes grant 50.
         assert_eq!(slot.close(), route(50));
-        // A late update for 50 (sent before the failure) arrives now.
         slot.set(route(50));
         assert_eq!(slot.active, None, "stale update can't undo the failure");
-        // An api clear also closes; older grants stay dead.
         slot.set(route(60));
         slot.set(None);
         slot.set(route(55));
         slot.set(route(60));
         assert_eq!(slot.active, None);
-        // A newer grant opens, an older one can't replace it.
         slot.set(route(70));
         slot.set(route(65));
         assert_eq!(slot.active, route(70));
-        // A newer grant replaces and closes the old one.
         slot.set(route(80));
         slot.set(route(70));
         assert_eq!(slot.active, route(80));

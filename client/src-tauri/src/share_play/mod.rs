@@ -1,10 +1,3 @@
-//! Share Play host: a viewer drives this PC's keyboard and mouse.
-//!
-//! The webview receives input over a WebRTC data channel and forwards each
-//! event here. One thread owns all OS input. Control messages (approve, arm,
-//! revoke) always run before queued input, the input queue is bounded, and a
-//! lease ends control if the viewer goes quiet. Windows and X11 only (#56).
-
 mod input;
 mod keymap;
 mod mapping;
@@ -24,12 +17,8 @@ pub use input::InputEvent;
 use input::{ArmError, Backend, Controller, Tag};
 use mapping::Rect;
 
-/// Local panic button: ends control even while a game has focus.
 pub const REVOKE_HOTKEY: &str = "CommandOrControl+Shift+F12";
-/// Emitted to the webview whenever control ends on this side (hotkey,
-/// lease expired, overload), so it tells the server.
 pub const REVOKE_EVENT: &str = "share-play://revoked";
-/// ~2 s of input at the SFU's rate limit. Full = something is wrong: revoke.
 const INPUT_QUEUE: usize = 256;
 const ACTIVE_TICK: Duration = Duration::from_millis(8);
 const IDLE_TICK: Duration = Duration::from_millis(50);
@@ -53,13 +42,9 @@ enum Ctrl {
 pub struct SharePlay {
     ctrl: Sender<Ctrl>,
     input: SyncSender<QueuedInput>,
-    /// Set the moment a revoke is requested, before it is queued, so input
-    /// already in the queue is never applied after it.
     revoking: Arc<AtomicBool>,
 }
 
-/// Linux: X11 only. Under Wayland (even with XWayland) injected X11 input
-/// only reaches X11 apps, so we say no.
 pub fn linux_supported(session_type: Option<&str>, wayland: bool, x11: bool) -> bool {
     match session_type {
         Some("x11") => x11,
@@ -83,7 +68,6 @@ pub fn supported() -> bool {
     false
 }
 
-/// Fallback backend: a platform we can't inject on. Drops everything.
 struct Nothing;
 impl Backend for Nothing {
     fn key(&mut self, _: keymap::Key, _: bool) -> bool {
@@ -146,7 +130,6 @@ impl<B: Backend, F: Fn(&'static str)> Worker<B, F> {
         }
     }
 
-    /// Run every queued control message. Returns false when the app is gone.
     fn drain(&mut self, ctrl: &Receiver<Ctrl>) -> bool {
         loop {
             match ctrl.try_recv() {
@@ -155,7 +138,6 @@ impl<B: Backend, F: Fn(&'static str)> Worker<B, F> {
                 Err(TryRecvError::Disconnected) => return false,
             }
         }
-        // Revoke requested but its message isn't queued yet: act now anyway.
         if self.revoking.swap(false, Ordering::SeqCst) {
             self.ctl.revoke(&mut self.os);
         }
@@ -202,7 +184,6 @@ impl<B: Backend, F: Fn(&'static str)> Worker<B, F> {
             };
             match input.recv_timeout(tick) {
                 Ok((from, event, received_at)) => {
-                    // Control goes first: a revoke queued meanwhile wins.
                     if !self.drain(&ctrl) {
                         break;
                     }
@@ -221,7 +202,6 @@ impl<B: Backend, F: Fn(&'static str)> Worker<B, F> {
                 Err(RecvTimeoutError::Disconnected) => break,
             }
         }
-        // App shutting down: never leave keys stuck.
         self.ctl.revoke(&mut self.os);
     }
 }
@@ -277,7 +257,6 @@ impl SharePlay {
         let _ = self.ctrl.send(Ctrl::Revoke);
     }
 
-    /// Queue one event. A full queue means the host can't keep up: revoke.
     fn push(&self, from: Tag, event: InputEvent) -> Result<(), &'static str> {
         match self.input.try_send((from, event, Instant::now())) {
             Ok(()) => Ok(()),
@@ -299,7 +278,6 @@ pub struct MonitorInfo {
 #[derive(serde::Serialize)]
 pub struct Monitors {
     monitors: Vec<MonitorInfo>,
-    /// Index of the only monitor with the captured size, if exactly one.
     suggested: Option<usize>,
 }
 
@@ -357,7 +335,6 @@ pub fn share_play_supported() -> bool {
     supported()
 }
 
-/// Monitors to pick from before approving. `width`/`height` = capture size.
 #[tauri::command]
 pub fn share_play_monitors<R: Runtime>(app: AppHandle<R>, width: u32, height: u32) -> Monitors {
     let monitors = monitors(&app);
@@ -368,8 +345,6 @@ pub fn share_play_monitors<R: Runtime>(app: AppHandle<R>, width: u32, height: u3
     }
 }
 
-/// The host clicked Approve on this machine, for this request and monitor.
-/// Refused unless the revoke hotkey is registered.
 #[tauri::command]
 pub fn share_play_approve<R: Runtime>(
     app: AppHandle<R>,
@@ -397,8 +372,6 @@ pub fn share_play_approve<R: Runtime>(
     Ok(())
 }
 
-/// The server confirmed grant `grant_id` for request `request_id`. Arms
-/// once, only after a local approval of that same request.
 #[tauri::command]
 pub async fn share_play_arm<R: Runtime>(
     app: AppHandle<R>,
@@ -437,9 +410,6 @@ pub fn share_play_revoke<R: Runtime>(app: AppHandle<R>, state: State<'_, SharePl
     let _ = hotkey(&app, false);
 }
 
-/// One event from the data channel. Sender and grant come from the SFU tag,
-/// not from the viewer, and are checked against the grant on the input
-/// thread when the event is applied. `lossy` = the unordered move channel.
 #[tauri::command]
 pub async fn share_play_input<R: Runtime>(
     app: AppHandle<R>,
@@ -547,7 +517,6 @@ mod tests {
         w.ctl
             .apply(FROM, key(true), Instant::now(), &mut w.os)
             .unwrap();
-        // Revoke flag raised (hotkey) while more input is already queued.
         w.revoking.store(true, Ordering::SeqCst);
         ctrl_tx.send(Ctrl::Revoke).unwrap();
         assert!(w.drain(&ctrl_rx));
