@@ -11,6 +11,7 @@ import {
   useUploadBanner,
 } from "../api/profile";
 import { ProfileCardBody } from "../features/profile/ProfileCard";
+import { DesktopUpdateSettings } from "../features/updates/DesktopUpdates";
 import {
   AVATAR_TYPES,
   avatarFileProblem,
@@ -124,6 +125,7 @@ export function ProfilePanel({
       <Button variant="secondary" size="sm" onClick={onAudio}>
         Voice &amp; Audio
       </Button>
+      <DesktopUpdateSettings />
 
       {previewProfile && (
         <section aria-label="Profile preview">
