@@ -10,7 +10,6 @@ pub struct StartUploadBody {
     pub filename: String,
     pub content_type: String,
     pub size: i64,
-    /// BLAKE3 of the whole file, 64 hex characters.
     pub blake3: String,
 }
 
@@ -53,6 +52,5 @@ impl From<Attachment> for AttachmentDto {
 #[derive(Debug, Serialize)]
 pub struct DownloadDto {
     pub attachment: AttachmentDto,
-    /// Short-lived link (a few minutes). Ask again when it runs out.
     pub url: String,
 }

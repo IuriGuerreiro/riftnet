@@ -8,7 +8,10 @@ all-features = true
 # RustSec database. Vulnerable crates fail; unmaintained ones only in our direct deps.
 unmaintained = "workspace"
 yanked = "deny"
-ignore = []
+ignore = [
+  # chrono: unmaintained, not vulnerable. sqlx and scylla depend on it, so it cannot be dropped yet.
+  { id = "RUSTSEC-2026-0543", reason = "transitive via sqlx and scylla; unmaintained only" },
+]
 
 [licenses]
 # Project is AGPL-3.0; everything below is compatible with it.

@@ -1,50 +1,34 @@
-//! Host side of Share Play: local approval, single-use grants, a lease,
-//! the key policy, and tracking what is held so it can all be released.
-
 use std::collections::HashSet;
 use std::time::{Duration, Instant};
 
 use super::keymap::{Key, Named, to_key};
 use super::mapping::{Rect, to_pixels};
 
-/// The viewer pings every 500 ms; no traffic for this long ends control.
 pub const LEASE: Duration = Duration::from_secs(2);
 const HOST_MOUSE_PRIORITY: Duration = Duration::from_secs(2);
-/// A local Approve click is good for one grant within this window.
 pub const APPROVAL_TTL: Duration = Duration::from_secs(30);
 
-/// One input event from the viewer. Sent as JSON over the data channel.
-/// Clicks and wheel carry their own position so they can't land elsewhere.
 #[derive(Debug, Clone, PartialEq, serde::Deserialize)]
 #[serde(tag = "t", rename_all = "lowercase")]
 pub enum InputEvent {
-    /// Pointer position, 0–1 over the shared screen.
     Move { x: f64, y: f64 },
-    /// 0 = left, 1 = middle, 2 = right (DOM `MouseEvent.button`).
     Button { b: u8, down: bool, x: f64, y: f64 },
-    /// Wheel in "lines": positive = down / right.
     Wheel { dx: i32, dy: i32, x: f64, y: f64 },
-    /// DOM `KeyboardEvent.code` (physical key), e.g. "KeyW".
     Key { code: String, down: bool },
-    /// Viewer heartbeat: keeps the lease alive.
     Ping,
 }
 
-/// What actually touches the OS. Enigo in the app, a recorder in tests.
 pub trait Backend {
     fn key(&mut self, key: Key, down: bool) -> bool;
     fn button(&mut self, b: u8, down: bool) -> bool;
     fn move_to(&mut self, x: i32, y: i32);
     fn scroll(&mut self, dx: i32, dy: i32);
-    /// Read local activity independently of the input this backend injects.
     fn host_mouse_activity(&mut self) -> Result<bool, String> {
         Ok(false)
     }
-    /// Where the OS cursor is now, if the platform can tell.
     fn location(&self) -> Option<(i32, i32)>;
 }
 
-/// Where one input event came from, per the SFU tag and channel.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Tag {
     pub sender: u64,
@@ -72,19 +56,15 @@ pub enum Rejected {
     NotGranted,
     Blocked,
     Unknown,
-    /// Coordinates missing / outside the share, or the cursor didn't get there.
     OffTarget,
     HostMousePriority,
-    /// Not a pointer move, but arrived on the lossy channel.
     WrongChannel,
     NativeFailure,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum ArmError {
-    /// No fresh local Approve click for this viewer and request.
     NotApproved,
-    /// This grant id was armed before (stale update after a revoke).
     Stale,
     CleanupPending,
     MouseMonitoringUnavailable,
@@ -111,7 +91,6 @@ impl Controller {
         self.grant
     }
 
-    /// The host clicked Approve here, for this request and this monitor.
     pub fn approve(&mut self, controller_id: u64, request_id: u64, target: Rect, now: Instant) {
         self.approval = Some(Approval {
             controller_id,
@@ -121,8 +100,6 @@ impl Controller {
         });
     }
 
-    /// The server confirmed a grant. Arms only once per grant id, and only
-    /// with a fresh local approval of that exact request (which it consumes).
     pub fn arm(
         &mut self,
         grant_id: u64,
@@ -155,7 +132,6 @@ impl Controller {
         Ok(())
     }
 
-    /// End control, forget any pending approval, let go of everything held.
     pub fn revoke(&mut self, os: &mut impl Backend) {
         self.grant = None;
         self.approval = None;
@@ -163,7 +139,6 @@ impl Controller {
         self.release_all(os);
     }
 
-    /// Revoke when the lease ran out. Returns true if it did.
     pub fn tick(&mut self, now: Instant, os: &mut impl Backend) -> bool {
         if self.grant.is_none() {
             self.release_all(os);
@@ -194,10 +169,6 @@ impl Controller {
         self.held_keys.contains(&key)
     }
 
-    /// Policy on canonical keys (after mapping, so no spelling gets around it).
-    /// Delete is blocked outright: we can't verify the host's real modifier
-    /// state, so Ctrl+Alt+Del could otherwise be assembled. On Linux,
-    /// Backspace and F-keys are also refused regardless of remote modifiers.
     fn blocked(&self, key: Key) -> bool {
         match key {
             Key::Named(Named::Delete) => true,
@@ -211,8 +182,6 @@ impl Controller {
         }
     }
 
-    /// Move to the event's point and confirm the cursor is there. If the OS
-    /// can't say where the cursor is, that's a refusal too.
     fn point(&self, target: Rect, x: f64, y: f64, os: &mut impl Backend) -> Result<(), Rejected> {
         let (px, py) = to_pixels(target, x, y).ok_or(Rejected::OffTarget)?;
         os.move_to(px, py);
@@ -222,9 +191,6 @@ impl Controller {
         }
     }
 
-    /// `sender` and `grant_id` come from the SFU tag. Input relayed under
-    /// an older grant is dropped, even from the same viewer. `lossy` = it
-    /// came on the unordered channel, which may only carry moves.
     pub fn apply(
         &mut self,
         from: Tag,
@@ -261,7 +227,6 @@ impl Controller {
                     self.held_buttons.push(b);
                     os.button(b, true);
                 } else if !down && held {
-                    // Always release, even off target: never leave it stuck.
                     let _ = self.point(grant.target, x, y, os);
                     if os.button(b, false) {
                         self.held_buttons.retain(|h| *h != b);
@@ -286,7 +251,7 @@ impl Controller {
                     return Err(Rejected::Blocked);
                 }
                 if down {
-                    os.key(key, true); // repeats too
+                    os.key(key, true);
                     if !held {
                         self.held_keys.push(key);
                     }
@@ -311,7 +276,6 @@ mod tests {
     struct Rec {
         log: Vec<String>,
         cursor: Option<(i32, i32)>,
-        /// Simulate the OS refusing/clamping the move.
         stuck: bool,
         fail_release: bool,
     }
@@ -498,18 +462,15 @@ mod tests {
     fn stale_grant_cannot_rearm_after_revoke() {
         let (mut c, mut os, now) = granted();
         c.revoke(&mut os);
-        // A queued CallUpdated replays the old grant.
         assert_eq!(
             c.arm(GRANT, VIEWER, REQ, now, &mut os),
             Err(ArmError::Stale)
         );
-        // Even with a new approval, the old id stays dead.
         c.approve(VIEWER, REQ, SCREEN, now);
         assert_eq!(
             c.arm(GRANT, VIEWER, REQ, now, &mut os),
             Err(ArmError::Stale)
         );
-        // A new grant id needs that fresh approval, and it's single-use.
         c.arm(GRANT + 1, VIEWER, REQ, now, &mut os).unwrap();
         c.revoke(&mut os);
         assert_eq!(
@@ -747,7 +708,6 @@ mod tests {
         let mut os = Rec::default();
         let now = Instant::now();
         c.approve(VIEWER, REQ, SCREEN, now);
-        // The viewer re-requested; the server grants the new request.
         assert_eq!(
             c.arm(GRANT, VIEWER, REQ + 1, now, &mut os),
             Err(ArmError::NotApproved)
@@ -761,7 +721,6 @@ mod tests {
         c.revoke(&mut os);
         c.approve(VIEWER, REQ, SCREEN, now);
         c.arm(GRANT + 1, VIEWER, REQ, now, &mut os).unwrap();
-        // Queued before the revoke, tagged with the old grant.
         assert_eq!(
             c.apply(FROM, key("KeyW", true), now, &mut os),
             Err(Rejected::NotGranted)

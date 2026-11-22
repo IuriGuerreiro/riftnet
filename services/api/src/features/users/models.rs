@@ -9,7 +9,6 @@ pub struct User {
     pub display_name: Option<String>,
     pub bio: Option<String>,
     pub custom_status: Option<String>,
-    /// BLAKE3 of the 512px avatar, 32 bytes. None = no avatar.
     pub avatar_hash: Option<Vec<u8>>,
     pub banner_hash: Option<Vec<u8>>,
     pub accent_color: Option<i32>,

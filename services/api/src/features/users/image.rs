@@ -1,5 +1,3 @@
-//! Re-encoding from raw pixels drops all metadata (EXIF, GPS, ICC, comments).
-
 use std::io::Cursor;
 
 use bytes::Bytes;
@@ -10,10 +8,8 @@ use crate::common::error::ApiError;
 
 pub const MAX_IMAGE_BYTES: usize = 8 * 1024 * 1024;
 pub const IMAGE_CONTENT_TYPE: &str = "image/webp";
-/// Biggest source image accepted, per side (phone photos are ~4032).
 const MAX_SIDE: u32 = 4096;
-// WARN: decoder memory cap. 4096 x 4096 RGBA (64 MiB) plus slack; the crop
-// copies at most that again, so one image peaks around 150 MiB.
+// WARN: decoder memory cap. 4096 x 4096 RGBA (64 MiB) plus slack; the crop copies at most that again, so one image peaks around 150 MiB.
 const MAX_DECODE_ALLOC: u64 = 80 * 1024 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -53,12 +49,10 @@ impl ProfileImage {
 
 #[derive(Debug)]
 pub struct ProcessedImage {
-    /// BLAKE3 of the largest size.
     pub hash: [u8; 32],
     pub files: Vec<(u32, Bytes)>,
 }
 
-/// CPU heavy: run it in `spawn_blocking`.
 pub fn process(kind: ProfileImage, data: &[u8]) -> Result<ProcessedImage, ApiError> {
     if data.is_empty() {
         return Err(ApiError::bad_request("empty_file", "file is empty"));
@@ -102,7 +96,6 @@ fn decode(kind: ProfileImage, data: &[u8]) -> Result<DynamicImage, ApiError> {
     let mut reader = ImageReader::new(Cursor::new(data))
         .with_guessed_format()
         .map_err(|_| not_an_image(kind))?;
-    // The format comes from the file's magic bytes, never from the client.
     match reader.format() {
         Some(ImageFormat::Png | ImageFormat::Jpeg | ImageFormat::WebP | ImageFormat::Gif) => {}
         _ => return Err(not_an_image(kind)),
@@ -112,7 +105,6 @@ fn decode(kind: ProfileImage, data: &[u8]) -> Result<DynamicImage, ApiError> {
     limits.max_image_height = Some(MAX_SIDE);
     limits.max_alloc = Some(MAX_DECODE_ALLOC);
     reader.limits(limits);
-    // GIF: decode() returns the first frame only.
     reader.decode().map_err(|_| not_an_image(kind))
 }
 
@@ -127,7 +119,6 @@ fn not_an_image(kind: ProfileImage) -> ApiError {
 pub mod tests {
     use super::*;
 
-    /// A `w` x `h` PNG with a text chunk standing in for metadata.
     pub fn png(w: u32, h: u32) -> Vec<u8> {
         let img = image::RgbaImage::from_fn(w, h, |x, y| {
             image::Rgba([(x % 256) as u8, (y % 256) as u8, 90, 255])
@@ -216,10 +207,8 @@ pub mod tests {
 
     #[test]
     fn rejects_huge_dimensions() {
-        // Tiny file, huge declared size: a decompression bomb.
         let src = png(1, 1);
         let mut bomb = src.clone();
-        // IHDR width/height live at bytes 16..24; fix the CRC after.
         bomb[16..20].copy_from_slice(&5_000u32.to_be_bytes());
         bomb[20..24].copy_from_slice(&5_000u32.to_be_bytes());
         let crc = crc32(&bomb[12..29]);

@@ -16,12 +16,8 @@ use crate::common::storage::FileStore;
 use crate::features::conversations::repository::ConversationRepo;
 use crate::features::messages::models::{MAX_ATTACHMENTS, MessageAttachment, is_media_type};
 
-/// What messages need from attachments: tie files to a message at send,
-/// let them go when it's deleted.
 #[async_trait]
 pub trait AttachmentLinker: Send + Sync {
-    /// Ties the uploads to `message_id` and returns their details, in the
-    /// order given. All or none. Calling again for the same message is fine.
     async fn attach(
         &self,
         me: i64,
@@ -29,22 +25,15 @@ pub trait AttachmentLinker: Send + Sync {
         message_id: i64,
         ids: &[i64],
     ) -> Result<Vec<MessageAttachment>, ApiError>;
-    /// The message is being deleted: expire its files so the cleanup removes them.
     async fn release(&self, me: i64, conversation_id: i64, message_id: i64)
     -> Result<(), ApiError>;
-    /// Fills `preview_url` on images and videos. A file that can't be signed
-    /// just gets no preview; the message still goes out.
     async fn sign_previews(&self, _conversation_id: i64, _attachments: &mut [MessageAttachment]) {}
 }
 
-/// How long a download link works once handed out.
 const DOWNLOAD_URL_TTL: Duration = Duration::from_secs(5 * 60);
-/// How long an inline preview link works (never past the file's own expiry).
 const PREVIEW_URL_TTL: Duration = Duration::from_secs(60 * 60);
-/// Uploads not finished after this long are thrown away.
 const STALE_UPLOAD: Duration = Duration::from_secs(24 * 60 * 60);
 const CLEANUP_BATCH: i64 = 100;
-/// Chunk bodies held in memory at once, across all users: 32 x 8 MiB = 256 MiB max.
 const CHUNKS_IN_FLIGHT: usize = 32;
 
 pub struct Limits {
@@ -57,7 +46,6 @@ pub struct NewUpload<'a> {
     pub filename: &'a str,
     pub content_type: &'a str,
     pub size: i64,
-    /// BLAKE3 of the whole file, hex. The downloader checks it.
     pub blake3_hex: &'a str,
 }
 
@@ -124,9 +112,6 @@ impl AttachmentService {
             expires_at: now + self.limits.ttl,
         };
         if let Err(err) = self.repo.insert(&attachment).await {
-            // No row means cleanup would never find it; abort now.
-            // (A crash right here still leaks it: set an abort-incomplete-multipart
-            // lifecycle rule on the bucket in production.)
             let _ = self
                 .store
                 .abort_upload(&attachment.object_key, &upload_id_for_abort)
@@ -136,8 +121,6 @@ impl AttachmentService {
         Ok(attachment)
     }
 
-    /// Checks a chunk request before its body is read: the upload is yours,
-    /// still uploading, and `idx` is in range. Returns the chunk's expected size.
     pub async fn chunk_target(&self, me: i64, id: i64, idx: i32) -> Result<usize, ApiError> {
         let a = self.own_upload(me, id).await?;
         if idx < 0 || idx >= a.chunk_count {
@@ -149,7 +132,6 @@ impl AttachmentService {
         Ok(a.chunk_len(idx) as usize)
     }
 
-    /// Waits for room to hold one more chunk in memory. Keep it until done.
     pub async fn chunk_slot(&self) -> OwnedSemaphorePermit {
         self.chunk_slots
             .clone()
@@ -158,7 +140,6 @@ impl AttachmentService {
             .expect("chunk semaphore is never closed")
     }
 
-    /// Stores chunk `idx` only if its BLAKE3 matches `hash_hex`.
     #[tracing::instrument(name = "attachments.put_chunk", skip_all, fields(user.id = me, attachment.id = id, chunk.idx = idx))]
     pub async fn put_chunk(
         &self,
@@ -183,12 +164,10 @@ impl AttachmentService {
             ));
         }
 
-        // BLAKE3 hashes ~GB/s, but 8 MiB still beats a cooperative yield; keep it off the runtime.
         let data_for_hash = data.clone();
         let actual = tokio::task::spawn_blocking(move || blake3::hash(&data_for_hash))
             .await
             .map_err(anyhow::Error::from)?;
-        // blake3::Hash's == is constant-time.
         if actual != claimed {
             return Err(ApiError::bad_request(
                 "hash_mismatch",
@@ -206,8 +185,6 @@ impl AttachmentService {
         Ok(())
     }
 
-    /// Joins the chunks into the final file. Safe to call twice, and safe to
-    /// retry after a crash or lost reply between S3 and Postgres.
     #[tracing::instrument(name = "attachments.complete", skip_all, fields(user.id = me, attachment.id = id))]
     pub async fn complete(&self, me: i64, id: i64) -> Result<Attachment, ApiError> {
         let mut a = self.own_attachment(me, id).await?;
@@ -217,11 +194,8 @@ impl AttachmentService {
         if !a.is_uploading() {
             return Err(ApiError::NotFound);
         }
-        // Already joined by an earlier try that died before marking it ready?
         let joined = self.store.object_size(&a.object_key).await? == Some(a.size);
         if !joined {
-            // Ask S3 which parts it holds (not our own etag rows): if the same
-            // chunk was sent twice at once, S3 keeps one and we must join that one.
             let parts = self.store.list_parts(&a.object_key, &a.upload_id).await?;
             let complete = parts.len() == a.chunk_count as usize
                 && parts
@@ -235,7 +209,6 @@ impl AttachmentService {
                 ));
             }
             let etags: Vec<String> = parts.into_iter().map(|(_, etag, _)| etag).collect();
-            // A lost reply can hide a join that worked; check before failing.
             if let Err(err) = self
                 .store
                 .finish_upload(&a.object_key, &a.upload_id, &etags)
@@ -250,8 +223,6 @@ impl AttachmentService {
         Ok(a)
     }
 
-    /// Returns the file's details and a short-lived download link.
-    /// Only current members of the conversation get it, and only once it's sent.
     #[tracing::instrument(name = "attachments.download", skip_all, fields(user.id = me, attachment.id = id))]
     pub async fn download(&self, me: i64, id: i64) -> Result<(Attachment, String), ApiError> {
         let a = self
@@ -268,7 +239,6 @@ impl AttachmentService {
         Ok((a, url))
     }
 
-    /// A fresh inline preview link, for when the one on the message ran out.
     #[tracing::instrument(name = "attachments.preview", skip_all, fields(user.id = me, attachment.id = id))]
     pub async fn preview(&self, me: i64, id: i64) -> Result<(Attachment, String), ApiError> {
         let a = self
@@ -290,7 +260,6 @@ impl AttachmentService {
         Ok((a, url))
     }
 
-    /// Deletes expired files and abandoned uploads. Returns how many went.
     #[tracing::instrument(name = "attachments.cleanup", skip_all)]
     pub async fn cleanup(&self, now: DateTime<Utc>) -> Result<usize, ApiError> {
         let stale_before = now - STALE_UPLOAD;
@@ -303,12 +272,9 @@ impl AttachmentService {
             let batch = dead.len();
             let mut batch_removed = 0;
             for a in dead {
-                // Claimed for a message since we looked? Then it's not dead.
                 if !self.repo.mark_deleting(a.id, now, stale_before).await? {
                     continue;
                 }
-                // Do both: we can't be sure how far the upload got.
-                // Deleting a missing object is fine in S3.
                 if !a.is_ready()
                     && let Err(err) = self.store.abort_upload(&a.object_key, &a.upload_id).await
                 {
@@ -323,15 +289,13 @@ impl AttachmentService {
                 batch_removed += 1;
             }
             removed += batch_removed;
-            // Stop on a short batch, or when nothing could be deleted (store down).
             if batch < CLEANUP_BATCH as usize || batch_removed == 0 {
                 return Ok(removed);
             }
         }
     }
 
-    // WARN: missing, not yours and not-a-member all look the same (404),
-    // so nobody can probe which attachments or conversations exist.
+    // WARN: missing, not yours and not-a-member all look the same (404), so nobody can probe which attachments or conversations exist.
     async fn check_member(&self, me: i64, conversation_id: i64) -> Result<(), ApiError> {
         self.conversations
             .get(conversation_id)
@@ -369,7 +333,6 @@ fn object_key(conversation_id: i64, id: i64) -> String {
     format!("attachments/{conversation_id}/{id}")
 }
 
-/// 1h, cut short so the link dies with the file. None once it's expired.
 fn preview_ttl(expires_at_ms: i64, now_ms: i64) -> Option<Duration> {
     let left = u64::try_from(expires_at_ms - now_ms)
         .ok()
@@ -465,7 +428,6 @@ fn parse_hash(hex: &str) -> Result<blake3::Hash, ApiError> {
 }
 
 fn clean_filename(name: &str) -> Result<String, ApiError> {
-    // Keep only the last path part and drop control characters.
     let base = name.rsplit(['/', '\\']).next().unwrap_or_default();
     let cleaned: String = base.chars().filter(|c| !c.is_control()).collect();
     let cleaned = cleaned.trim();
@@ -667,15 +629,12 @@ mod tests {
             || (a.message_id.is_none() && a.created_at <= stale)
     }
 
-    /// Parts per key until joined, then a finished object.
     #[derive(Default)]
     struct FakeStore {
-        /// Every put_part call, in order.
         parts: Mutex<Vec<u32>>,
         pending: Mutex<HashMap<String, std::collections::BTreeMap<u32, i64>>>,
         objects: Mutex<HashMap<String, i64>>,
         deleted: Mutex<Vec<String>>,
-        /// Join works but the reply is "lost" (returns an error).
         lose_finish_reply: std::sync::atomic::AtomicBool,
     }
     #[async_trait]
@@ -803,7 +762,6 @@ mod tests {
 
         let c0 = data.slice(..CHUNK_SIZE as usize);
         let c1 = data.slice(CHUNK_SIZE as usize..);
-        // Finishing early is refused.
         assert!(svc.complete(ALICE, a.id).await.is_err());
         svc.put_chunk(ALICE, a.id, 1, &blake3::hash(&c1).to_hex(), c1)
             .await
@@ -814,8 +772,7 @@ mod tests {
         assert_eq!(*store.parts.lock().unwrap(), vec![1, 0]);
 
         svc.complete(ALICE, a.id).await.unwrap();
-        svc.complete(ALICE, a.id).await.unwrap(); // idempotent
-        // Not downloadable until it's on a message.
+        svc.complete(ALICE, a.id).await.unwrap();
         assert!(matches!(
             svc.download(BOB, a.id).await,
             Err(ApiError::NotFound)
@@ -879,7 +836,6 @@ mod tests {
         ));
 
         let a = svc.start(ALICE, upload(5, &h)).await.unwrap();
-        // Only the uploader can add chunks.
         assert!(matches!(
             svc.put_chunk(BOB, a.id, 0, &h, data.clone()).await,
             Err(ApiError::NotFound)
@@ -918,15 +874,12 @@ mod tests {
         svc.attach(ALICE, DM, 900, &[done.id]).await.unwrap();
         let fresh = svc.start(ALICE, upload(5, &h)).await.unwrap();
 
-        // Nothing is dead yet.
         assert_eq!(svc.cleanup(Utc::now()).await.unwrap(), 0);
 
-        // Two days later the unfinished upload is stale; the ready file is not expired yet.
         let later = Utc::now() + chrono::Duration::days(2);
         assert_eq!(svc.cleanup(later).await.unwrap(), 1);
         assert!(repo.rows.lock().unwrap().get(&fresh.id).is_none());
 
-        // After 8 days the ready file has expired too.
         let much_later = Utc::now() + chrono::Duration::days(8);
         assert_eq!(svc.cleanup(much_later).await.unwrap(), 1);
         assert_eq!(store.deleted.lock().unwrap().len(), 2);
@@ -951,7 +904,6 @@ mod tests {
         let mine = ready_upload(&svc, ALICE).await;
         let bobs = ready_upload(&svc, BOB).await;
 
-        // Someone else's file: refused, and nothing gets claimed.
         let err = svc.attach(ALICE, DM, 1, &[mine, bobs]).await.unwrap_err();
         assert!(matches!(
             err,
@@ -960,15 +912,12 @@ mod tests {
                 ..
             }
         ));
-        // Retry for the same message is fine; another message can't take it.
         svc.attach(ALICE, DM, 1, &[mine]).await.unwrap();
         svc.attach(ALICE, DM, 1, &[mine]).await.unwrap();
         assert!(svc.attach(ALICE, DM, 2, &[mine]).await.is_err());
-        // Unfinished uploads can't be sent.
         let h = blake3::hash(b"x").to_hex();
         let pending = svc.start(ALICE, upload(5, &h)).await.unwrap();
         assert!(svc.attach(ALICE, DM, 3, &[pending.id]).await.is_err());
-        // Cap per message.
         let many: Vec<i64> = (0..=MAX_ATTACHMENTS as i64).collect();
         let err = svc.attach(ALICE, DM, 4, &many).await.unwrap_err();
         assert!(matches!(
@@ -987,7 +936,6 @@ mod tests {
         svc.attach(ALICE, DM, 7, &[id]).await.unwrap();
         svc.download(BOB, id).await.unwrap();
 
-        // Only the uploader, in that conversation, can release.
         svc.release(BOB, DM, 7).await.unwrap();
         svc.download(BOB, id).await.unwrap();
         svc.release(ALICE, DM, 7).await.unwrap();
@@ -1007,11 +955,9 @@ mod tests {
         let a = svc.start(ALICE, upload(5, &h)).await.unwrap();
         svc.put_chunk(ALICE, a.id, 0, &h, data).await.unwrap();
 
-        // S3 joined the file but we never heard back: still "uploading".
         store
             .lose_finish_reply
             .store(true, std::sync::atomic::Ordering::SeqCst);
-        // The join worked, so complete sees the object and succeeds anyway.
         svc.complete(ALICE, a.id).await.unwrap();
         assert!(repo.rows.lock().unwrap()[&a.id].is_ready());
     }
@@ -1023,7 +969,6 @@ mod tests {
         let h = blake3::hash(&data).to_hex();
         let a = svc.start(ALICE, upload(5, &h)).await.unwrap();
         svc.put_chunk(ALICE, a.id, 0, &h, data).await.unwrap();
-        // Simulate: S3 join done, process died before mark_ready.
         store
             .finish_upload(&a.object_key, &a.upload_id, &[])
             .await
@@ -1037,13 +982,11 @@ mod tests {
         let (svc, repo, store) = service(100 << 20);
         let id = ready_upload(&svc, ALICE).await;
         let later = Utc::now() + chrono::Duration::days(2);
-        // Cleanup lists it as unsent and stale...
         let listed = repo
             .find_dead(later, later - STALE_UPLOAD, 10)
             .await
             .unwrap();
         assert_eq!(listed.len(), 1);
-        // ...then a send claims it before cleanup confirms.
         svc.attach(ALICE, DM, 5, &[id]).await.unwrap();
         assert!(
             !repo

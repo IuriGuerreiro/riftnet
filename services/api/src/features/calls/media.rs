@@ -21,7 +21,6 @@ pub trait MediaClient: Send + Sync {
         sdp_offer: String,
     ) -> anyhow::Result<(u64, String)>;
     async fn leave(&self, peer_id: u64) -> anyhow::Result<()>;
-    /// Share Play: set (or clear with None) the one input route of a room.
     async fn route(
         &self,
         room_id: i64,
@@ -30,7 +29,6 @@ pub trait MediaClient: Send + Sync {
     ) -> anyhow::Result<()>;
 }
 
-/// What the SFU tells us about peers it dropped on its own.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MediaNotice {
     PeerGone { peer_id: u64 },
@@ -62,7 +60,6 @@ impl NatsMediaClient {
         })
     }
 
-    /// Feed SFU notices (peer lost, route failed) to `on_notice`.
     pub async fn notices<F, Fut>(&self, on_notice: F) -> anyhow::Result<()>
     where
         F: Fn(MediaNotice) -> Fut + Send + 'static,

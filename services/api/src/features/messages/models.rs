@@ -8,9 +8,7 @@ pub struct Message {
     pub encryption: i8,
     pub edited_at: i64,
     pub attachments: Vec<MessageAttachment>,
-    /// Id of the message this replies to, 0 = not a reply. Kept after the original is deleted.
     pub reply_to: i64,
-    /// Per viewer (`me`), filled by the service. Never stored on the row.
     pub reactions: Vec<ReactionCount>,
 }
 
@@ -21,7 +19,6 @@ pub struct ReactionCount {
     pub me: bool,
 }
 
-/// One stored reaction row.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReactionRow {
     pub message_id: i64,
@@ -29,7 +26,6 @@ pub struct ReactionRow {
     pub user_id: i64,
 }
 
-/// Groups rows of one message into counts, in first-seen order.
 pub fn count_reactions<'a>(
     rows: impl IntoIterator<Item = &'a ReactionRow>,
     me: i64,
@@ -55,8 +51,6 @@ pub const MAX_DISTINCT_REACTIONS: usize = 20;
 pub const MAX_EMOJI_BYTES: usize = 32;
 pub const MAX_REACTORS: usize = 100;
 
-/// A Unicode emoji (or a short sequence of them): no letters, digits,
-/// spaces or control characters, and at least one non-ASCII char.
 pub fn is_valid_emoji(s: &str) -> bool {
     !s.is_empty()
         && s.len() <= MAX_EMOJI_BYTES
@@ -66,8 +60,6 @@ pub fn is_valid_emoji(s: &str) -> bool {
             .any(|c| c.is_alphanumeric() || c.is_whitespace() || c.is_control())
 }
 
-/// A file's details as shown on the message. A copy made at send; the
-/// upload itself lives in the attachments feature (Postgres + file store).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MessageAttachment {
     pub id: i64,
@@ -76,12 +68,10 @@ pub struct MessageAttachment {
     pub size: i64,
     pub blake3: Vec<u8>,
     pub expires_at_ms: i64,
-    /// Inline link for images/videos, signed per response. Never stored.
     pub preview_url: String,
 }
 
 impl MessageAttachment {
-    /// Images and videos get an inline preview link.
     pub fn is_media(&self) -> bool {
         is_media_type(&self.content_type)
     }
@@ -104,7 +94,6 @@ pub struct MessageChange {
 pub enum ChangeKind {
     Edit = 1,
     Delete = 2,
-    /// A reaction was added or removed. Sync treats it like an edit.
     Reaction = 3,
 }
 

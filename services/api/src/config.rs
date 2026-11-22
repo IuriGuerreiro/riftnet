@@ -16,7 +16,6 @@ pub struct Config {
     pub signing_key_file: PathBuf,
     pub machine_id: u16,
     pub cors_origins: Vec<String>,
-    /// S3-compatible file store: MinIO locally, R2 in production.
     pub s3_endpoint: String,
     pub s3_public_endpoint: Option<String>,
     pub s3_region: String,
@@ -25,8 +24,6 @@ pub struct Config {
     pub s3_secret_key: String,
     pub attachment_max_bytes: i64,
     pub attachment_ttl_hours: u64,
-    /// `RATE_LIMITS=off` disables every rate limit and the per-user socket cap.
-    /// For load tests only. Default: on.
     pub rate_limits: bool,
 }
 
@@ -72,8 +69,8 @@ impl Config {
             s3_bucket: env_or("S3_BUCKET", "attachments"),
             s3_access_key: env_or("S3_ACCESS_KEY", "minio"),
             s3_secret_key: env_or("S3_SECRET_KEY", "minio-dev-secret"),
-            attachment_max_bytes: env_or("ATTACHMENT_MAX_BYTES", "104857600").parse()?, // 100 MiB
-            attachment_ttl_hours: env_or("ATTACHMENT_TTL_HOURS", "168").parse()?,     // 7 days
+            attachment_max_bytes: env_or("ATTACHMENT_MAX_BYTES", "104857600").parse()?,
+            attachment_ttl_hours: env_or("ATTACHMENT_TTL_HOURS", "168").parse()?,
             rate_limits: parse_switch("RATE_LIMITS", &env_or("RATE_LIMITS", "on"))?,
             cors_origins: env_or(
                 "CORS_ORIGINS",

@@ -1,6 +1,3 @@
-//! File attachments: chunked upload with BLAKE3 checks, members-only
-//! download links, and a cleanup job for expired files.
-
 mod controller;
 pub mod dto;
 pub mod models;
@@ -25,7 +22,6 @@ pub fn routes() -> Router<AppState> {
         .route("/attachments", post(controller::start))
         .route(
             "/attachments/{id}/chunks/{idx}",
-            // Axum's default 2 MB body limit is below one chunk.
             put(controller::put_chunk).layer(DefaultBodyLimit::max(CHUNK_SIZE as usize)),
         )
         .route("/attachments/{id}/complete", post(controller::complete))
@@ -33,7 +29,6 @@ pub fn routes() -> Router<AppState> {
         .route("/attachments/{id}/preview", get(controller::preview))
 }
 
-/// Runs the cleanup every `every` until the process exits.
 pub fn spawn_cleanup(service: Arc<AttachmentService>, every: Duration) {
     tokio::spawn(async move {
         let mut tick = tokio::time::interval(every);

@@ -1,6 +1,3 @@
-//! Map the viewer's normalized (0–1) pointer position onto the shared monitor.
-
-/// A screen area in desktop pixels (X11 root / Windows virtual desktop).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 pub struct Rect {
     pub x: i32,
@@ -9,8 +6,6 @@ pub struct Rect {
     pub height: u32,
 }
 
-/// 0–1 → pixel inside `rect`. Anything outside 0–1 (or NaN) is refused:
-/// a remote can never point outside the shared area.
 pub fn to_pixels(rect: Rect, nx: f64, ny: f64) -> Option<(i32, i32)> {
     let ok = |v: f64| v.is_finite() && (0.0..=1.0).contains(&v);
     if !ok(nx) || !ok(ny) || rect.width == 0 || rect.height == 0 {
@@ -20,9 +15,6 @@ pub fn to_pixels(rect: Rect, nx: f64, ny: f64) -> Option<(i32, i32)> {
     Some((axis(rect.x, rect.width, nx), axis(rect.y, rect.height, ny)))
 }
 
-/// The capture size alone can't prove which monitor is shared. Suggest one
-/// only when exactly one monitor has that exact size; otherwise the host
-/// must pick it by hand before approving.
 pub fn unique_match(monitors: &[Rect], captured_w: u32, captured_h: u32) -> Option<usize> {
     let mut hits = monitors
         .iter()

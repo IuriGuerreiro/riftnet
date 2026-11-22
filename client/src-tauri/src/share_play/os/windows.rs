@@ -84,7 +84,6 @@ impl Drop for HostMouse {
 
 unsafe extern "system" fn mouse_hook(code: i32, message: WPARAM, data: LPARAM) -> LRESULT {
     if code == HC_ACTION as i32 {
-        // SAFETY: for HC_ACTION the system passes a valid MSLLHOOKSTRUCT.
         let event = unsafe { &*(data.0 as *const MSLLHOOKSTRUCT) };
         if event.flags & LLMHF_INJECTED == 0 || event.dwExtraInfo != SHARE_PLAY_INPUT_MARKER {
             HOST_MOUSE_ACTIVE.with(|active| {
@@ -94,13 +93,10 @@ unsafe extern "system" fn mouse_hook(code: i32, message: WPARAM, data: LPARAM) -
             });
         }
     }
-    // SAFETY: forward the system-provided arguments without changes.
     unsafe { CallNextHookEx(None, code, message, data) }
 }
 
 pub fn move_to(x: i32, y: i32) {
-    // Mark absolute moves as Share Play input across the entire virtual desktop.
-    // SAFETY: metric IDs are valid and SendInput borrows one initialized INPUT.
     unsafe {
         let left = GetSystemMetrics(SM_XVIRTUALSCREEN);
         let top = GetSystemMetrics(SM_YVIRTUALSCREEN);

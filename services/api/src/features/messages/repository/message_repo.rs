@@ -39,7 +39,6 @@ pub trait MessageRepo: Send + Sync {
     async fn delete(&self, conversation_id: i64, id: i64, change_seq: i64)
     -> Result<(), RepoError>;
     async fn was_deleted(&self, conversation_id: i64, id: i64) -> Result<bool, RepoError>;
-    /// Logs a reaction change so sync can report the message.
     async fn log_reaction(
         &self,
         conversation_id: i64,

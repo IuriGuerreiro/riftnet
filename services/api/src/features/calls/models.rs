@@ -22,25 +22,17 @@ pub struct Participant {
     pub connection_id: u64,
     pub peer_id: u64,
     pub sharing_screen: bool,
-    /// The sharer's app can apply remote input (Share Play).
     pub controllable: bool,
-    /// New value every time this participant starts sharing. 0 = not sharing.
     pub share_id: i64,
 }
 
-/// Share Play: who may drive whose screen. One per call.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Control {
     pub host_id: i64,
     pub controller_id: i64,
-    /// false = requested, waiting for the host.
     pub granted: bool,
-    /// Unique per approval; 0 while pending. The host arms each id once.
     pub grant_id: i64,
-    /// Unique per request. Grant/Deny must name it.
     pub request_id: i64,
-    /// Bound at request time: the exact sharing connection, media peer and
-    /// share instance of the host, and the viewer's joined connection/peer.
     pub host_connection_id: u64,
     pub host_peer_id: u64,
     pub host_share_id: i64,
@@ -58,11 +50,8 @@ pub enum ControlAction {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ControlError {
-    /// Host isn't sharing a controllable screen, or a party isn't in the call.
     NotAvailable,
-    /// Someone else already holds or asked for control.
     Busy,
-    /// Caller isn't allowed to do this (wrong side, nothing to answer).
     NotAllowed,
 }
 
@@ -122,23 +111,12 @@ impl Call {
             .find(|p| p.user_id == user_id && p.sharing_screen && p.controllable)
     }
 
-    /// Media route the SFU may relay input on:
-    /// (controller peer, host peer, grant id).
     pub fn control_route(&self) -> Option<(u64, u64, u64)> {
         self.control
             .filter(|c| c.granted)
             .map(|c| (c.controller_peer_id, c.host_peer_id, c.grant_id as u64))
     }
 
-    /// Apply a Share Play action by `me` on socket `connection_id`. Rules:
-    /// - a viewer requests from the connection that joined the call, and only
-    ///   from a controllable sharer; the request binds both connections, both
-    ///   media peers and the host's current share;
-    /// - one control (pending or granted) per call; asking twice is a no-op;
-    /// - only the host's sharing connection grants or denies, only the pending
-    ///   request, named by its `request_id`; each request and each grant
-    ///   gets a fresh id (`new_id`);
-    /// - the host or the controller may revoke from any connection.
     pub fn apply_control(
         &mut self,
         me: i64,
@@ -221,9 +199,6 @@ impl Call {
         }
     }
 
-    /// Drop control once it can't hold any more: the host's bound share ended
-    /// or changed, or either bound connection left the call.
-    /// Returns true if it was dropped.
     pub fn settle_control(&mut self) -> bool {
         let Some(c) = self.control else {
             return false;
@@ -256,7 +231,6 @@ mod tests {
     const HOST: i64 = 1;
     const VIEWER: i64 = 2;
     const OTHER: i64 = 3;
-    // connection id = user id * 10, a second login = user id * 10 + 1
     const HOST_CONN: u64 = 10;
     const VIEWER_CONN: u64 = 20;
     const REQ: i64 = 444;
@@ -312,7 +286,6 @@ mod tests {
         let mut c = call();
         request(&mut c).unwrap();
         assert_eq!(c.control.unwrap().request_id, REQ);
-        // The viewer cancels and asks again: a new request id.
         c.apply_control(VIEWER, VIEWER_CONN, ControlAction::Revoke, 0)
             .unwrap();
         c.apply_control(
@@ -322,7 +295,6 @@ mod tests {
             REQ + 1,
         )
         .unwrap();
-        // The host's approval of the first request can't grant the second.
         assert_eq!(grant(&mut c, HOST_CONN, 555), Err(ControlError::NotAllowed));
         assert!(!c.control.unwrap().granted);
         c.apply_control(

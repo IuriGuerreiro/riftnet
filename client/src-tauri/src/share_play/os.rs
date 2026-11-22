@@ -1,5 +1,3 @@
-//! Real input via enigo (Windows SendInput, X11 XTest).
-
 use enigo::{Axis, Button, Direction, Enigo as Inner, Key, Keyboard, Mouse, Settings};
 
 use super::input::Backend;

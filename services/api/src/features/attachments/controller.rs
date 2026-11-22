@@ -11,12 +11,10 @@ use crate::app::AppState;
 use crate::common::error::ApiError;
 use crate::common::middleware::auth::AuthUser;
 
-/// The client sends each chunk's BLAKE3 (hex) in this header.
 pub const CHUNK_HASH_HEADER: &str = "x-chunk-blake3";
 
 const HOUR: Duration = Duration::from_secs(60 * 60);
 const UPLOADS_PER_HOUR: u32 = 60;
-/// 60 uploads x 13 chunks (100 MiB) plus retries.
 const CHUNKS_PER_HOUR: u32 = 1000;
 
 pub async fn start(
@@ -53,8 +51,6 @@ pub async fn put_chunk(
     headers: HeaderMap,
     body: Body,
 ) -> Result<StatusCode, ApiError> {
-    // Everything cheap first; the body is only read once the request is
-    // known good and there's memory for it.
     state.limiter.check(
         &format!("attachment_chunk:user:{}", auth.user_id),
         CHUNKS_PER_HOUR,

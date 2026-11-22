@@ -7,7 +7,6 @@ use crate::common::error::ApiError;
 #[derive(Default)]
 pub struct RateLimiter {
     windows: Mutex<HashMap<String, (Instant, u32)>>,
-    /// Set by `RATE_LIMITS=off` (load tests). Every call then allows.
     disabled: bool,
 }
 
