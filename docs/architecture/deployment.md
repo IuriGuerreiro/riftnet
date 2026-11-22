@@ -114,16 +114,25 @@ Healthy log: `media UDP listening`, then `media ready`.
 Media `.env`: `MEDIA_IP` = VPS public IP, `MEDIA_PORT` = the UDP port,
 `MAIN_TAILSCALE_IP` = server's Tailscale IP, `NATS_PASSWORD` = same as server.
 
-## 5. Desktop app (Windows)
+## 5. Release the desktop app
 
-Built on the server (cross-compiled, no Windows needed):
-```sh
-cd client
-VITE_API_HTTP=https://api.<domain> VITE_API_WS=wss://api.<domain>/ws \
-  pnpm tauri build --runner cargo-xwin --target x86_64-pc-windows-msvc --no-bundle
-```
-Output is a bare `.exe`. Needs `cargo-xwin` and LLVM (`clang-cl`, `lld-link`)
-on PATH. Revert any change the build makes to `src-tauri/Cargo.toml`.
+The Release app workflow builds a Windows x64 installer and a Linux x64 AppImage. The installed app checks GitHub Releases and asks the user before it installs a new version.
+
+### Set up release signing
+
+1. Create a public distribution repository if anyone with the app may download the builds. Give a fine-grained GitHub token `Contents: Read and write` access to that repository.
+2. Run `pnpm --filter client tauri signer generate --write-keys /secure/path/discord2.key`. Back up the private key and password. Installed apps use the matching public key to verify future updates.
+3. In the source repository, set Actions variables `DESKTOP_RELEASE_REPO` to the distribution repository's `owner/name` and `TAURI_UPDATER_PUBLIC_KEY` to the contents of `discord2.key.pub`. The workflow also uses `PROD_API_HTTP` and `PROD_API_WS`.
+4. Set `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, and `DESKTOP_RELEASE_TOKEN` as secrets in the `desktop-release` Actions environment. Set the environment's deployment branches to the refs authorized to sign builds.
+
+### Build and publish
+
+1. Bump `version` in `client/src-tauri/tauri.conf.json` for each release. Promote the commit to `prod`.
+2. Run **Release app** from `prod` with `create_draft` selected. Enter the release notes to show in the app. Leave `create_draft` clear to generate signed workflow artifacts only.
+3. Verify the draft includes both bundles, their signatures, and `latest.json`. Publish it as the latest stable release when verification passes.
+4. For the first rollout, share the installer or AppImage with existing users for a manual upgrade. Later releases appear in **Check for updates**.
+
+Use a separate release repository and signing key for an end-to-end test. Install the lower version on each platform, then expose the higher version on the test feed. Verify **Later**, the install and restart, settings persistence, and rejection of a mismatched signature. If a published build needs to be reverted, ship the previous working code with a higher version.
 
 ## Update / redeploy
 

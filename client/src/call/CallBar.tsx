@@ -1,60 +1,155 @@
+import {
+  Mic,
+  MicOff,
+  Phone,
+  PhoneOff,
+  ScreenShare,
+  ScreenShareOff,
+  SlidersHorizontal,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import type { WsClient } from "../api/ws";
-import { CallState, peerConnection, useCalls } from "../stores/calls";
-
-const btn = "rounded-md px-2 py-1 text-xs font-semibold disabled:opacity-50";
+import { Button, IconButton, Modal } from "../components/ui";
+import { useNameFor } from "../features/session/useRealtime";
+import { CallState, myId, peerConnection, useCalls } from "../stores/calls";
+import { isParticipantMuted, participantVolume, useAudioSettings } from "./audioPreferences";
+import { VolumeControl } from "./AudioSettings";
+import { ControlButton } from "./SharePlay";
+import { controlView, useControlInput } from "./useControlInput";
 
 export function CallBar({ ws, conversationId }: { ws: WsClient | null; conversationId: bigint }) {
   const { current, joined, muted, sharing, error, call, leave, toggleMute, toggleShare } =
     useCalls();
+  const audioError = useCalls((state) => state.audioError);
+  const [mixer, setMixer] = useState(false);
   const here = current?.conversationId === conversationId;
   const info = useStats(here && joined);
 
   if (!here) {
     return (
       <div className="flex items-center gap-2 text-xs font-normal">
-        {error && <span className="text-red-400">{error}</span>}
-        <button
+        {error && <span className="text-danger">{error}</span>}
+        <IconButton
+          label={current ? "Already in a call" : "Start voice call"}
+          icon={<Phone size={18} />}
           disabled={!ws || current !== null}
-          title={current ? "already in a call" : undefined}
           onClick={() => ws && call(ws, conversationId)}
-          className={`${btn} bg-green-600 text-white`}
-        >
-          📞 Call
-        </button>
+        />
       </div>
     );
   }
 
   const status =
     current.state === CallState.RINGING
-      ? "ringing…"
+      ? "Ringing…"
       : joined
-        ? `🔊 in call (${current.participantIds.length})`
-        : "connecting…";
+        ? `In call (${current.participantIds.length})`
+        : "Connecting…";
   return (
-    <div className="flex items-center gap-2 text-xs font-normal text-zinc-400">
+    <div className="flex items-center gap-2 text-xs font-normal text-fg-muted">
       {info && <span>{info}</span>}
+      {audioError && (
+        <span role="status" className="text-warning">
+          {audioError}
+        </span>
+      )}
       <span>{status}</span>
-      <button onClick={toggleMute} className={`${btn} bg-zinc-700 text-zinc-100`}>
-        {muted ? "Unmute" : "Mute"}
-      </button>
-      <button
-        disabled={!joined}
+      <IconButton
+        label={muted ? "Unmute" : "Mute"}
+        icon={muted ? <MicOff size={18} /> : <Mic size={18} />}
+        active={muted}
+        onClick={toggleMute}
+      />
+      <IconButton
+        label="Mixer"
+        icon={<SlidersHorizontal size={18} />}
+        onClick={() => setMixer(true)}
+      />
+      {mixer && <CallMixer people={current.participantIds} onClose={() => setMixer(false)} />}
+      <IconButton
+        label={sharing ? "Stop sharing" : "Share screen"}
+        icon={sharing ? <ScreenShareOff size={18} /> : <ScreenShare size={18} />}
+        active={sharing}
+        disabled={!joined || (!sharing && current.sharingUserIds.some((id) => id !== myId()))}
         onClick={() => ws && void toggleShare(ws)}
-        className={`${btn} ${sharing ? "bg-blue-600 text-white" : "bg-zinc-700 text-zinc-100"}`}
-      >
-        {sharing ? "Stop sharing" : "🖥 Share screen"}
-      </button>
-      <button
-        disabled={!ws}
-        onClick={() => ws && leave(ws)}
-        className={`${btn} bg-red-600 text-white`}
-      >
+      />
+      <Button variant="danger" size="sm" disabled={!ws} onClick={() => ws && leave(ws)}>
+        <PhoneOff size={16} />
         Hang up
-      </button>
+      </Button>
     </div>
+  );
+}
+
+function CallMixer({ people, onClose }: { people: bigint[]; onClose: () => void }) {
+  const prefs = useAudioSettings();
+  const { deafened, speaking, toggleDeafen } = useCalls();
+  const localUser = myId();
+  const nameFor = useNameFor();
+  return (
+    <Modal open title="Call mixer" onClose={onClose}>
+      <VolumeControl
+        label="Call volume"
+        value={prefs.voiceVolume}
+        onChange={(voiceVolume) => prefs.update({ voiceVolume })}
+      />
+      <Button size="sm" variant="secondary" aria-pressed={deafened} onClick={toggleDeafen}>
+        {deafened ? "Undeafen" : "Deafen"}
+      </Button>
+      <VolumeControl
+        label="Stream volume"
+        value={prefs.streamVolume}
+        onChange={(streamVolume) => prefs.update({ streamVolume })}
+      />
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={prefs.normalizeVoices}
+          onChange={(event) => prefs.update({ normalizeVoices: event.currentTarget.checked })}
+        />
+        Balance voice loudness
+      </label>
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={prefs.duckStreams}
+          onChange={(event) => prefs.update({ duckStreams: event.currentTarget.checked })}
+        />
+        Lower stream audio while someone speaks
+      </label>
+      {people
+        .filter((id) => id !== localUser)
+        .map((id) => {
+          const volume = participantVolume(prefs, id);
+          const muted = isParticipantMuted(prefs, id);
+          return (
+            <section key={id.toString()} className="space-y-2 border-t border-surface-3 pt-3">
+              <VolumeControl
+                label={speaking.includes(id) ? `${nameFor(id)} · Speaking` : nameFor(id)}
+                value={volume}
+                max={200}
+                onChange={(next) => prefs.setPersonVolume(id, next)}
+              />
+              <div className="flex gap-2">
+                <Button size="sm" variant="secondary" onClick={() => prefs.togglePersonMute(id)}>
+                  {muted ? "Unmute locally" : "Mute locally"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    prefs.setPersonVolume(id, 100);
+                    if (muted) prefs.togglePersonMute(id);
+                  }}
+                >
+                  Reset volume
+                </Button>
+              </div>
+            </section>
+          );
+        })}
+    </Modal>
   );
 }
 
@@ -68,34 +163,63 @@ export function IncomingCall({
   const { incoming, accept, decline } = useCalls();
   if (!incoming || !ws) return null;
   return (
-    <div className="fixed left-1/2 top-4 z-50 flex -translate-x-1/2 items-center gap-3 rounded-xl bg-zinc-800 px-4 py-3 shadow-lg ring-2 ring-green-600">
-      <span className="text-sm">📞 @{callerName(incoming.callerId)} is calling…</span>
-      <button onClick={() => accept(ws)} className={`${btn} bg-green-600 text-white`}>
+    <div className="fixed left-1/2 top-4 z-50 flex -translate-x-1/2 items-center gap-3 rounded-panel bg-surface-2 px-4 py-3 shadow-pop ring-2 ring-success">
+      <Phone size={18} className="text-success" />
+      <span className="text-sm">{callerName(incoming.callerId)} is calling…</span>
+      <Button
+        size="sm"
+        className="bg-success text-surface-0 hover:brightness-110"
+        onClick={() => accept(ws)}
+      >
         Accept
-      </button>
-      <button onClick={() => decline(ws)} className={`${btn} bg-red-600 text-white`}>
+      </Button>
+      <Button size="sm" variant="danger" onClick={() => decline(ws)}>
         Decline
-      </button>
+      </Button>
     </div>
   );
 }
 
-export function RemoteScreen() {
+export function RemoteScreen({
+  ws,
+  nameFor,
+}: {
+  ws: WsClient | null;
+  nameFor: (id: bigint) => string;
+}) {
   const stream = useCalls((s) => s.remoteScreen);
+  const current = useCalls((s) => s.current);
   const ref = useRef<HTMLVideoElement>(null);
   useEffect(() => {
     if (ref.current) ref.current.srcObject = stream;
   }, [stream]);
+  const view = controlView(current, myId());
+  const controlling = view.role === "viewer" && view.granted && stream !== null;
+  useControlInput(ref, controlling);
+  const hostId =
+    view.role === "viewer" && view.granted
+      ? view.other
+      : current?.sharingUserIds.find((id) => id !== myId());
   if (!stream) return null;
   return (
-    <video
-      ref={ref}
-      autoPlay
-      playsInline
-      muted
-      onDoubleClick={(e) => void e.currentTarget.requestFullscreen()}
-      className="fixed bottom-4 right-4 z-40 w-[48rem] max-w-[calc(100vw-2rem)] rounded-xl bg-black shadow-lg ring-2 ring-blue-600"
-    />
+    <div className="fixed bottom-4 right-4 z-40 w-[48rem] max-w-[calc(100vw-2rem)]">
+      <video
+        ref={ref}
+        autoPlay
+        playsInline
+        muted
+        tabIndex={controlling ? 0 : -1}
+        onDoubleClick={controlling ? undefined : (e) => void e.currentTarget.requestFullscreen()}
+        className={`w-full rounded-xl bg-black shadow-lg ring-2 outline-none ${
+          controlling ? "cursor-none ring-warning" : "ring-blue-600"
+        }`}
+      />
+      {hostId !== undefined && (
+        <div className="absolute left-2 top-2 rounded-md bg-black/60 p-1">
+          <ControlButton ws={ws} hostId={hostId} nameFor={nameFor} />
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -142,8 +266,8 @@ function useStats(active: boolean) {
         if (r.type === "candidate-pair" && r.nominated)
           rtt = Math.round((r.currentRoundTripTime ?? 0) * 1000);
         if (r.type === "inbound-rtp" && r.kind === "audio") {
-          got = r.packetsReceived ?? 0;
-          lost = r.packetsLost ?? 0;
+          got += r.packetsReceived ?? 0;
+          lost += r.packetsLost ?? 0;
         }
         if (r.type === "inbound-rtp" && r.kind === "video" && r.framesPerSecond) {
           video = `⬇ ${r.frameWidth}x${r.frameHeight}@${r.framesPerSecond} ${mbps(r)} · ${r.packetsLost ?? 0} lost`;

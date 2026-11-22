@@ -1,0 +1,169 @@
+name: Release app
+
+on:
+  workflow_dispatch:
+    inputs:
+      notes:
+        description: Release notes shown in the app
+        type: string
+      create_draft:
+        description: Upload a draft to the distribution repository
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-release
+
+env:
+  DESKTOP_RELEASE_REPO: ${{ vars.DESKTOP_RELEASE_REPO }}
+  RELEASE_NOTES: ${{ inputs.notes }}
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  build:
+    needs: ci
+    environment: desktop-release
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2025
+            bundle: nsis
+            bundle_dir: nsis
+            pattern: "*-setup.exe"
+            asset: discord2-windows-x64-setup.exe
+          - runner: ubuntu-22.04
+            bundle: appimage
+            bundle_dir: appimage
+            pattern: "*.AppImage"
+            asset: discord2-linux-x64.AppImage
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target
+      VITE_API_HTTP: ${{ vars.PROD_API_HTTP }}
+      VITE_API_WS: ${{ vars.PROD_API_WS }}
+      VITE_DESKTOP_UPDATES: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install Linux build dependencies
+        if: matrix.bundle == 'appimage'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xdg-utils
+      - name: Check production API URLs
+        shell: bash
+        run: |
+          node <<'JS'
+          for (const [name, value, protocol] of [
+            ['PROD_API_HTTP', process.env.VITE_API_HTTP, 'https:'],
+            ['PROD_API_WS', process.env.VITE_API_WS, 'wss:'],
+          ]) {
+            if (URL.parse(value)?.protocol !== protocol) {
+              throw new Error(`Set ${name} to the production ${protocol.slice(0, -1).toUpperCase()} URL.`);
+            }
+          }
+          JS
+      - run: pnpm install --frozen-lockfile
+      - name: Configure the release updater
+        env:
+          TAURI_UPDATER_PUBLIC_KEY: ${{ vars.TAURI_UPDATER_PUBLIC_KEY }}
+        run: node tools/release/desktop.mjs config "${{ runner.temp }}/discord2-release.json"
+      - name: Build and sign desktop bundle
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: pnpm --filter client tauri build --config "${{ runner.temp }}/discord2-release.json" --bundles ${{ matrix.bundle }} -- --locked
+      - name: Stage bundle and signature
+        shell: bash
+        env:
+          BUNDLE_DIR: ${{ matrix.bundle_dir }}
+          BUNDLE_PATTERN: ${{ matrix.pattern }}
+          ASSET: ${{ matrix.asset }}
+        run: |
+          shopt -s nullglob
+          bundles=(target/release/bundle/"$BUNDLE_DIR"/$BUNDLE_PATTERN)
+          if (( ${#bundles[@]} != 1 )) || [[ ! -s "${bundles[0]}.sig" ]]; then
+            echo "Expected one bundle and its signature for $ASSET" >&2
+            exit 1
+          fi
+          mkdir release-assets
+          cp "${bundles[0]}" "release-assets/$ASSET"
+          cp "${bundles[0]}.sig" "release-assets/$ASSET.sig"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: release-assets/*
+          if-no-files-found: error
+          overwrite: true
+
+  release:
+    needs: build
+    environment: desktop-release
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: discord2-*
+          path: release-assets
+          merge-multiple: true
+      - name: Generate release manifest
+        working-directory: release-assets
+        run: node ../tools/release/desktop.mjs manifest
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-release-manifest
+          path: release-assets/latest.json
+          if-no-files-found: error
+          overwrite: true
+      - name: Stage a GitHub release
+        if: inputs.create_draft
+        working-directory: release-assets
+        env:
+          GH_TOKEN: ${{ secrets.DESKTOP_RELEASE_TOKEN }}
+          GH_REPO: ${{ vars.DESKTOP_RELEASE_REPO }}
+        run: |
+          if [[ "$GITHUB_REF" != refs/heads/prod ]]; then
+            echo "Dispatch draft releases from the prod branch." >&2
+            exit 1
+          fi
+          if [[ "${GH_REPO,,}" == "${GITHUB_REPOSITORY,,}" ]] ||
+             [[ "$(gh repo view --json visibility --jq .visibility)" != PUBLIC ]]; then
+            echo "DESKTOP_RELEASE_REPO must be a separate public repository." >&2
+            exit 1
+          fi
+
+          tag="v$(jq -r .version latest.json)"
+          marker="<!-- source-commit: $GITHUB_SHA -->"
+          notes_file="$(mktemp)"
+          printf '%s\n\n%s\n' "$RELEASE_NOTES" "$marker" > "$notes_file"
+          assets=(discord2-*.exe discord2-*.AppImage discord2-*.sig latest.json)
+          if release=$(gh release view "$tag" --json body,isDraft); then
+            if ! jq -e --arg marker "$marker" '.isDraft and (.body | contains($marker))' <<< "$release" > /dev/null; then
+              echo "$tag already belongs to a published release or a different commit. Bump the app version." >&2
+              exit 1
+            fi
+            gh release upload "$tag" "${assets[@]}" --clobber
+            gh release edit "$tag" --notes-file "$notes_file"
+          else
+            gh release create "$tag" "${assets[@]}" --draft --title "Discord 2.0 $tag" --notes-file "$notes_file"
+          fi

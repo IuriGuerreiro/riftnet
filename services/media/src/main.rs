@@ -1,11 +1,14 @@
 mod control;
+mod meter;
 mod sfu;
 
 use std::net::{IpAddr, UdpSocket};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let _telemetry = common::telemetry::init("media", env!("CARGO_PKG_VERSION"));
+    let telemetry = common::telemetry::init("media", env!("CARGO_PKG_VERSION"));
+    let (recorder, metrics_handle) = meter::recorder()?;
+    telemetry.install_metrics(recorder)?;
     str0m::crypto::from_feature_flags().install_process_default();
 
     let nats_url = env_or("NATS_URL", "nats://127.0.0.1:4222");
@@ -18,10 +21,18 @@ async fn main() -> anyhow::Result<()> {
     let socket = UdpSocket::bind((ip, port))?;
     tracing::info!(addr = %socket.local_addr()?, "media UDP listening");
 
-    let sfu = sfu::start(socket)?;
+    let metrics_addr: std::net::SocketAddr =
+        env_or("MEDIA_METRICS_ADDR", "127.0.0.1:7111").parse()?;
+    tokio::spawn(async move {
+        if let Err(e) = meter::serve(metrics_addr, metrics_handle).await {
+            tracing::warn!(error = %e, "media metrics endpoint stopped");
+        }
+    });
+
+    let (sfu, notices) = sfu::start(socket)?;
     let nats = common::nats::connect(&nats_url).await?;
     tracing::info!("media ready");
-    control::serve(nats, sfu).await
+    control::serve(nats, sfu, notices).await
 }
 
 fn env_or(key: &str, default: &str) -> String {

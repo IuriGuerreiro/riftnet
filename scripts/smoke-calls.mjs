@@ -90,8 +90,8 @@ try {
   await b(`t.calls.getState().accept(t.ws)`);
   await sleep(6000);
   const st = `(async () => { const { peerConnection } = await import("/src/stores/calls.ts"); const s = t.calls.getState();
-    let o = { joined: s.joined, state: s.current?.state, n: s.current?.participantIds.length, err: s.error };
-    (await peerConnection().getStats()).forEach(r => { if (r.type === "inbound-rtp") { o.recv = r.packetsReceived; o.energy = r.totalAudioEnergy; } if (r.type === "outbound-rtp") o.sent = r.packetsSent; });
+    let o = { joined: s.joined, state: s.current?.state, n: s.current?.participantIds.length, err: s.error, recv: 0, samples: 0, sent: 0 };
+    (await peerConnection().getStats()).forEach(r => { if (r.kind !== "audio") return; if (r.type === "inbound-rtp") { o.recv += r.packetsReceived ?? 0; o.samples += r.jitterBufferEmittedCount ?? 0; } if (r.type === "outbound-rtp") o.sent += r.packetsSent ?? 0; });
     return JSON.stringify(o); })()`;
   const sa = JSON.parse(await a(st)),
     sb = JSON.parse(await b(st));
@@ -101,7 +101,10 @@ try {
     sa.joined && sb.joined && sa.state === 2 && sa.n === 2,
     "both joined, call ACTIVE with 2 people",
   );
-  check(sa.recv > 150 && sb.recv > 150 && sa.energy > 0 && sb.energy > 0, "audio flows both ways");
+  check(
+    sa.recv > 150 && sb.recv > 150 && sa.samples > 0 && sb.samples > 0,
+    "audio flows both ways",
+  );
 
   await a(`t.calls.getState().leave(t.ws)`);
   await sleep(1000);

@@ -1,8 +1,11 @@
+use std::time::Duration;
+
 use protocol::v1::{self, envelope::Payload};
 
 use super::connection::Session;
 use crate::app::AppState;
 use crate::common::error::ApiError;
+use crate::common::user_limits::{GROUP_CHANGE, SEND_MESSAGE};
 use crate::features::conversations::models::Conversation;
 use crate::features::presence::service::update as presence_update;
 
@@ -15,15 +18,74 @@ pub async fn dispatch(
         Payload::Ping(_) => Ok(Payload::Pong(v1::Pong {})),
         Payload::OpenDm(req) => open_dm(state, session, req).await,
         Payload::ListConversations(_) => list_conversations(state, session).await,
-        Payload::SendMessage(req) => send_message(state, session, req).await,
+        Payload::SendMessage(req) => {
+            state.user_limits.hit(SEND_MESSAGE, session.user_id).await?;
+            send_message(state, session, req).await
+        }
         Payload::GetHistory(req) => get_history(state, session, req).await,
+        Payload::SendChannelMessage(req) => {
+            state.limiter.check(
+                &format!("channel_message:user:{}", session.user_id),
+                60,
+                Duration::from_secs(60),
+            )?;
+            Ok(Payload::ChannelMessage(
+                state.channel_messages.send(session.user_id, req).await?,
+            ))
+        }
+        Payload::GetChannelHistory(req) => {
+            state.limiter.check(
+                &format!("channel_history:user:{}", session.user_id),
+                120,
+                Duration::from_secs(60),
+            )?;
+            Ok(Payload::ChannelHistory(
+                state.channel_messages.history(session.user_id, req).await?,
+            ))
+        }
         Payload::Sync(req) => sync(state, session, req).await,
         Payload::EditMessage(req) => edit_message(state, session, req).await,
         Payload::DeleteMessage(req) => delete_message(state, session, req).await,
-        Payload::CreateGroup(req) => create_group(state, session, req).await,
-        Payload::AddMember(req) => add_member(state, session, req).await,
-        Payload::LeaveGroup(req) => leave_group(state, session, req).await,
-        Payload::RenameGroup(req) => rename_group(state, session, req).await,
+        Payload::AddReaction(req) => {
+            react(
+                state,
+                session,
+                req.conversation_id,
+                req.message_id,
+                &req.emoji,
+                true,
+            )
+            .await
+        }
+        Payload::RemoveReaction(req) => {
+            react(
+                state,
+                session,
+                req.conversation_id,
+                req.message_id,
+                &req.emoji,
+                false,
+            )
+            .await
+        }
+        Payload::GetReactors(req) => get_reactors(state, session, req).await,
+        Payload::CreateGroup(req) => {
+            state.user_limits.hit(GROUP_CHANGE, session.user_id).await?;
+            create_group(state, session, req).await
+        }
+        Payload::AddMember(req) => {
+            state.user_limits.hit(GROUP_CHANGE, session.user_id).await?;
+            add_member(state, session, req).await
+        }
+        Payload::LeaveGroup(req) => {
+            state.user_limits.hit(GROUP_CHANGE, session.user_id).await?;
+            leave_group(state, session, req).await
+        }
+        Payload::RenameGroup(req) => {
+            state.user_limits.hit(GROUP_CHANGE, session.user_id).await?;
+            rename_group(state, session, req).await
+        }
+        Payload::MarkRead(req) => mark_read(state, session, req).await,
         Payload::SetIdle(req) => {
             state
                 .presence
@@ -32,6 +94,9 @@ pub async fn dispatch(
             Ok(Payload::Pong(v1::Pong {}))
         }
         Payload::GetPresence(req) => get_presence(state, session, req).await,
+        Payload::SetActivity(req) => super::activity::set(state, session, req).await,
+        Payload::GetActivities(req) => super::activity::get(state, session, req).await,
+        Payload::JoinFriendCall(req) => super::activity::join(state, session, req).await,
         Payload::CallStart(req) => call_start(state, session, req).await,
         Payload::CallAccept(req) => call_result(
             state
@@ -54,9 +119,11 @@ pub async fn dispatch(
                     session.connection_id,
                     req.call_id as i64,
                     req.sharing,
+                    req.controllable,
                 )
                 .await,
         ),
+        Payload::CallControl(req) => call_control(state, session, req).await,
         Payload::CallLeave(req) => call_result(
             state
                 .calls
@@ -125,6 +192,7 @@ async fn send_message(
                 .iter()
                 .map(|id| *id as i64)
                 .collect::<Vec<_>>(),
+            req.reply_to as i64,
             &req.nonce,
         )
         .await?;
@@ -213,6 +281,51 @@ async fn delete_message(
     }))
 }
 
+async fn react(
+    state: &AppState,
+    session: &Session,
+    conversation_id: u64,
+    message_id: u64,
+    emoji: &str,
+    add: bool,
+) -> Result<Payload, ApiError> {
+    let (reactions, seq) = state
+        .messages
+        .react(
+            session.user_id,
+            conversation_id as i64,
+            message_id as i64,
+            emoji,
+            add,
+        )
+        .await?;
+    Ok(Payload::ReactionAck(v1::ReactionAck {
+        conversation_id,
+        message_id,
+        seq: seq as u64,
+        reactions: reactions.iter().map(Into::into).collect(),
+    }))
+}
+
+async fn get_reactors(
+    state: &AppState,
+    session: &Session,
+    req: v1::GetReactors,
+) -> Result<Payload, ApiError> {
+    let ids = state
+        .messages
+        .reactors(
+            session.user_id,
+            req.conversation_id as i64,
+            req.message_id as i64,
+            &req.emoji,
+        )
+        .await?;
+    Ok(Payload::Reactors(v1::Reactors {
+        user_ids: ids.into_iter().map(|id| id as u64).collect(),
+    }))
+}
+
 async fn create_group(
     state: &AppState,
     session: &Session,
@@ -220,7 +333,7 @@ async fn create_group(
 ) -> Result<Payload, ApiError> {
     let group = state
         .conversations
-        .create_group(session.user_id, &req.name, &req.usernames)
+        .create_group(session.user_id, &req.name, &req.usernames, &req.nonce)
         .await?;
     Ok(conversation_result(&group))
 }
@@ -263,6 +376,22 @@ async fn rename_group(
     Ok(conversation_result(&group))
 }
 
+async fn mark_read(
+    state: &AppState,
+    session: &Session,
+    req: v1::MarkRead,
+) -> Result<Payload, ApiError> {
+    let read = state
+        .conversations
+        .mark_read(session.user_id, req.conversation_id as i64, req.seq as i64)
+        .await?;
+    Ok(Payload::ReadStateUpdated(v1::ReadStateUpdated {
+        conversation_id: req.conversation_id,
+        last_read_seq: read.last_read_seq as u64,
+        unread_count: read.unread_count,
+    }))
+}
+
 fn conversation_result(conversation: &Conversation) -> Payload {
     Payload::Conversation(v1::ConversationResult {
         conversation: Some(conversation.into()),
@@ -301,6 +430,45 @@ async fn call_join(
         call: Some((&call).into()),
         sdp_answer,
     }))
+}
+
+async fn call_control(
+    state: &AppState,
+    session: &Session,
+    req: v1::CallControl,
+) -> Result<Payload, ApiError> {
+    use crate::features::calls::models::ControlAction;
+    use v1::CallControlAction as A;
+    let user = req.user_id as i64;
+    let action = match A::try_from(req.action).unwrap_or(A::Unspecified) {
+        A::Request => ControlAction::Request { host_id: user },
+        A::Grant => ControlAction::Grant {
+            viewer_id: user,
+            request_id: req.request_id as i64,
+        },
+        A::Deny => ControlAction::Deny {
+            viewer_id: user,
+            request_id: req.request_id as i64,
+        },
+        A::Revoke => ControlAction::Revoke,
+        A::Unspecified => {
+            return Err(ApiError::bad_request(
+                "bad_request",
+                "unknown control action",
+            ));
+        }
+    };
+    call_result(
+        state
+            .calls
+            .control(
+                session.user_id,
+                session.connection_id,
+                req.call_id as i64,
+                action,
+            )
+            .await,
+    )
 }
 
 fn call_result(

@@ -7,10 +7,14 @@ package app.v1;
 // Subjects:
 //   media.join   request/reply  MediaJoin -> MediaJoinReply
 //   media.leave  publish        MediaLeave
+//   media.route  publish        MediaRoute       (api -> media)
+//   media.event  publish        MediaEvent       (media -> api)
 
 message MediaJoin {
   uint64 room_id = 1;
   string sdp_offer = 2;
+  // Tagged onto forwarded data-channel messages so receivers know the sender.
+  uint64 user_id = 3;
 }
 
 message MediaJoinReply {
@@ -21,4 +25,32 @@ message MediaJoinReply {
 
 message MediaLeave {
   uint64 peer_id = 1;
+}
+
+// Share Play: the only input route the SFU relays in a room.
+// controller_peer_id = 0 clears it. grant_id orders updates: the SFU never
+// re-opens a grant it already closed, so a late update can't undo a failure.
+message MediaRoute {
+  uint64 room_id = 1;
+  uint64 controller_peer_id = 2;
+  uint64 host_peer_id = 3;
+  uint64 grant_id = 4;
+  // Orders both route installation and removal within a call.
+  uint64 revision = 5;
+}
+
+enum MediaEventKind {
+  MEDIA_EVENT_KIND_UNSPECIFIED = 0;
+  // The SFU dropped this peer (ICE lost, error, timeout).
+  MEDIA_EVENT_KIND_PEER_GONE = 1;
+  // An input message on the reliable route couldn't be delivered.
+  MEDIA_EVENT_KIND_ROUTE_FAILED = 2;
+}
+
+message MediaEvent {
+  MediaEventKind kind = 1;
+  uint64 peer_id = 2;
+  uint64 room_id = 3;
+  // ROUTE_FAILED: the grant whose route broke.
+  uint64 grant_id = 4;
 }

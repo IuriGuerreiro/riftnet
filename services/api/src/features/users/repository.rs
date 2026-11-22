@@ -1,11 +1,24 @@
 use async_trait::async_trait;
 use sqlx::PgPool;
 
+use super::image::ProfileImage;
 use super::models::User;
 use crate::common::error::RepoError;
 
+/// Outer None = leave the field alone; Some(None) = clear it.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct ProfileUpdate<'a> {
+    pub display_name: Option<Option<&'a str>>,
+    pub bio: Option<Option<&'a str>>,
+    pub custom_status: Option<Option<&'a str>>,
+    pub pronouns: Option<Option<&'a str>>,
+    pub accent_color: Option<Option<i32>>,
+}
+
 #[async_trait]
 pub trait UserRepo: Send + Sync {
+    async fn find_by_email(&self, email: &str) -> Result<Option<User>, RepoError>;
+    async fn remember_email(&self, id: i64, email: &str) -> Result<(), RepoError>;
     async fn find_by_id(&self, id: i64) -> Result<Option<User>, RepoError>;
     async fn find_by_zitadel_id(&self, zitadel_id: &str) -> Result<Option<User>, RepoError>;
     async fn find_by_ids(&self, ids: &[i64]) -> Result<Vec<User>, RepoError>;
@@ -20,20 +33,16 @@ pub trait UserRepo: Send + Sync {
     ) -> Result<Vec<User>, RepoError>;
     async fn create(&self, id: i64, zitadel_id: &str) -> Result<User, RepoError>;
     async fn set_username(&self, id: i64, username: &str) -> Result<Option<User>, RepoError>;
-    /// Writes both fields as given (None clears). None if the user is gone.
-    /// Outer None = leave the field alone; Some(None) = clear it.
     /// One statement, so two partial updates never undo each other.
     async fn set_profile(
         &self,
         id: i64,
-        display_name: Option<Option<&str>>,
-        bio: Option<Option<&str>>,
+        update: ProfileUpdate<'_>,
     ) -> Result<Option<User>, RepoError>;
-    /// Swaps the avatar hash. Returns the user and the hash it replaced,
-    /// so the caller can delete the old files. None if the user is gone.
-    async fn set_avatar(
+    async fn set_image(
         &self,
         id: i64,
+        kind: ProfileImage,
         hash: Option<&[u8]>,
     ) -> Result<Option<(User, Option<Vec<u8>>)>, RepoError>;
 }
@@ -50,6 +59,22 @@ impl PgUserRepo {
 
 #[async_trait]
 impl UserRepo for PgUserRepo {
+    async fn find_by_email(&self, email: &str) -> Result<Option<User>, RepoError> {
+        Ok(sqlx::query_as("SELECT * FROM users WHERE email = $1")
+            .bind(email)
+            .fetch_optional(&self.pool)
+            .await?)
+    }
+
+    async fn remember_email(&self, id: i64, email: &str) -> Result<(), RepoError> {
+        sqlx::query("UPDATE users SET email = $1 WHERE id = $2")
+            .bind(email)
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
     #[tracing::instrument(name = "db SELECT users", skip_all, err(Display), fields(otel.kind = "client", db.system = "postgresql", db.operation = "SELECT", db.collection.name = "users"))]
     async fn find_by_id(&self, id: i64) -> Result<Option<User>, RepoError> {
         Ok(sqlx::query_as("SELECT * FROM users WHERE id = $1")
@@ -127,49 +152,63 @@ impl UserRepo for PgUserRepo {
     }
 
     #[tracing::instrument(name = "db UPDATE users", skip_all, err(Display), fields(otel.kind = "client", db.system = "postgresql", db.operation = "UPDATE", db.collection.name = "users"))]
-    async fn set_profile(
-        &self,
-        id: i64,
-        display_name: Option<Option<&str>>,
-        bio: Option<Option<&str>>,
-    ) -> Result<Option<User>, RepoError> {
+    async fn set_profile(&self, id: i64, u: ProfileUpdate<'_>) -> Result<Option<User>, RepoError> {
         Ok(sqlx::query_as(
             "UPDATE users SET \
                display_name = CASE WHEN $2 THEN $3 ELSE display_name END, \
-               bio = CASE WHEN $4 THEN $5 ELSE bio END \
+               bio = CASE WHEN $4 THEN $5 ELSE bio END, \
+               custom_status = CASE WHEN $6 THEN $7 ELSE custom_status END, \
+               pronouns = CASE WHEN $8 THEN $9 ELSE pronouns END, \
+               accent_color = CASE WHEN $10 THEN $11 ELSE accent_color END \
              WHERE id = $1 RETURNING *",
         )
         .bind(id)
-        .bind(display_name.is_some())
-        .bind(display_name.flatten())
-        .bind(bio.is_some())
-        .bind(bio.flatten())
+        .bind(u.display_name.is_some())
+        .bind(u.display_name.flatten())
+        .bind(u.bio.is_some())
+        .bind(u.bio.flatten())
+        .bind(u.custom_status.is_some())
+        .bind(u.custom_status.flatten())
+        .bind(u.pronouns.is_some())
+        .bind(u.pronouns.flatten())
+        .bind(u.accent_color.is_some())
+        .bind(u.accent_color.flatten())
         .fetch_optional(&self.pool)
         .await?)
     }
 
     #[tracing::instrument(name = "db UPDATE users", skip_all, err(Display), fields(otel.kind = "client", db.system = "postgresql", db.operation = "UPDATE", db.collection.name = "users"))]
-    async fn set_avatar(
+    async fn set_image(
         &self,
         id: i64,
+        kind: ProfileImage,
         hash: Option<&[u8]>,
     ) -> Result<Option<(User, Option<Vec<u8>>)>, RepoError> {
+        // INVARIANT: fixed strings only; the column name is never user input.
+        let (select, update) = match kind {
+            ProfileImage::Avatar => (
+                "SELECT avatar_hash FROM users WHERE id = $1 FOR UPDATE",
+                "UPDATE users SET avatar_hash = $2 WHERE id = $1 RETURNING *",
+            ),
+            ProfileImage::Banner => (
+                "SELECT banner_hash FROM users WHERE id = $1 FOR UPDATE",
+                "UPDATE users SET banner_hash = $2 WHERE id = $1 RETURNING *",
+            ),
+        };
         let mut tx = self.pool.begin().await?;
         // Row lock: two uploads at once each see the hash they really replaced.
-        let old: Option<(Option<Vec<u8>>,)> =
-            sqlx::query_as("SELECT avatar_hash FROM users WHERE id = $1 FOR UPDATE")
-                .bind(id)
-                .fetch_optional(&mut *tx)
-                .await?;
+        let old: Option<(Option<Vec<u8>>,)> = sqlx::query_as(select)
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await?;
         let Some((old,)) = old else {
             return Ok(None);
         };
-        let user: User =
-            sqlx::query_as("UPDATE users SET avatar_hash = $2 WHERE id = $1 RETURNING *")
-                .bind(id)
-                .bind(hash)
-                .fetch_one(&mut *tx)
-                .await?;
+        let user: User = sqlx::query_as(update)
+            .bind(id)
+            .bind(hash)
+            .fetch_one(&mut *tx)
+            .await?;
         tx.commit().await?;
         Ok(Some((user, old)))
     }

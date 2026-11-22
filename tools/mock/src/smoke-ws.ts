@@ -11,9 +11,11 @@ import {
   PingSchema,
 } from "../../../client/src/gen/v1/envelope_pb.ts";
 import {
+  AddReactionSchema,
   DeleteMessageSchema,
   EditMessageSchema,
   GetHistorySchema,
+  RemoveReactionSchema,
   SendMessageSchema,
   SyncSchema,
 } from "../../../client/src/gen/v1/messages_pb.ts";
@@ -383,6 +385,45 @@ check(
     sc.edited.some((m) => m.id === first.id) &&
     sc.deletedIds.includes(bobs.id) &&
     sc.lastSeq === 16n,
+);
+
+const react = (conversationId: bigint, messageId: bigint, emoji: string, add = true) =>
+  add
+    ? {
+        case: "addReaction" as const,
+        value: create(AddReactionSchema, { conversationId, messageId, emoji }),
+      }
+    : {
+        case: "removeReaction" as const,
+        value: create(RemoveReactionSchema, { conversationId, messageId, emoji }),
+      };
+const bobLive3 = await listen(bob.token);
+r = await talk([auth(alice.token), react(dm, first.id, "👍"), react(dm, first.id, "👍")], 3);
+const ra = r.replies[1]?.payload,
+  rb = r.replies[2]?.payload;
+check(
+  "react → ack with count 1, me, seq 17",
+  ra?.case === "reactionAck" &&
+    ra.value.seq === 17n &&
+    ra.value.reactions.some((x) => x.emoji === "👍" && x.count === 1 && x.me),
+);
+check("react twice → seq 0", rb?.case === "reactionAck" && rb.value.seq === 0n);
+r = await talk([auth(carol.token), react(dm, first.id, "👍")], 2);
+check("non-member can't react", errCode(r.replies[1]) === "conversation_not_found");
+r = await talk([auth(alice.token), react(dm, first.id, "nope")], 2);
+check("bad emoji → bad_emoji", errCode(r.replies[1]) === "bad_emoji");
+await new Promise((ok) => setTimeout(ok, 300));
+check(
+  "bob got reactionUpdated",
+  bobLive3.pushes.some((e) => e.payload.case === "reactionUpdated" && e.payload.value.count === 1),
+);
+bobLive3.stop();
+r = await talk([auth(bob.token), sync(dm, 16n)], 2);
+const sr = synced(r.replies[1]);
+check(
+  "sync after 16 → reacted message in edited, not mine",
+  sr?.edited.some((m) => m.id === first.id && m.reactions.some((x) => x.count === 1 && !x.me)) ===
+    true && sr.lastSeq === 17n,
 );
 
 process.exit(failed ? 1 : 0);

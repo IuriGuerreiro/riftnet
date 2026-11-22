@@ -35,6 +35,16 @@ message Envelope {
     StartTyping start_typing = 21; // fire-and-forget: send with id 0, no reply
     SetIdle set_idle = 24;
     GetPresence get_presence = 25;
+    AddReaction add_reaction = 26;
+    RemoveReaction remove_reaction = 27;
+    GetReactors get_reactors = 28;
+    MarkRead mark_read = 29;
+    SendChannelMessage send_channel_message = 30;
+    GetChannelHistory get_channel_history = 31;
+    SetActivity set_activity = 32;
+    GetActivities get_activities = 33;
+    JoinFriendCall join_friend_call = 34;
+    Activities activities = 76;
 
     Pong pong = 50;
     Error error = 51;
@@ -47,6 +57,8 @@ message Envelope {
     EditMessageAck edit_message_ack = 63;
     DeleteMessageAck delete_message_ack = 64;
     Presences presences = 67;
+    ReactionAck reaction_ack = 69;
+    Reactors reactors = 70;
 
     MessageCreated message_created = 54;
     UserUpdated user_updated = 55;
@@ -56,6 +68,11 @@ message Envelope {
     MessageDeleted message_deleted = 66;
     TypingStarted typing_started = 62;
     PresenceUpdated presence_updated = 68;
+    ReactionUpdated reaction_updated = 71;
+    ReadStateUpdated read_state_updated = 72; // reply to MarkRead, and a push to your own sockets
+    ChannelHistory channel_history = 73;
+    ChannelMessage channel_message = 74;
+    ServerRemoved server_removed = 75;
 
     // calls: field numbers 100-139 are reserved for them
     CallStart call_start = 100;
@@ -64,6 +81,7 @@ message Envelope {
     CallJoin call_join = 103;
     CallScreenShare call_screen_share = 104;
     CallLeave call_leave = 105;
+    CallControl call_control = 106;
     CallResult call_result = 120;
     CallJoined call_joined = 121;
     CallIncoming call_incoming = 130;
@@ -78,6 +96,8 @@ message Pong {}
 message Error {
   string code = 1;
   string message = 2;
+  // Set on "rate_limited": wait this long before retrying.
+  uint64 retry_after_ms = 3;
 }
 
 message Authenticate {
@@ -86,4 +106,8 @@ message Authenticate {
 
 message AuthOk {
   User user = 1;
+}
+
+message ServerRemoved {
+  uint64 server_id = 1;
 }

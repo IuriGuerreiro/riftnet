@@ -20,6 +20,9 @@ pub trait ConversationRepo: Send + Sync {
     async fn list_for_user(&self, user_id: i64) -> Result<Vec<ConversationRecord>, RepoError>;
     async fn get(&self, id: i64) -> Result<Option<ConversationRecord>, RepoError>;
     async fn next_seq(&self, id: i64) -> Result<i64, RepoError>;
+    async fn next_message_seq(&self, id: i64, _at_ms: i64) -> Result<i64, RepoError> {
+        self.next_seq(id).await
+    }
 
     async fn create_group(&self, group: &ConversationRecord) -> Result<(), RepoError>;
     async fn set_members(
@@ -29,6 +32,13 @@ pub trait ConversationRepo: Send + Sync {
         new_members: &[i64],
     ) -> Result<bool, RepoError>;
     async fn rename(&self, id: i64, name: &str) -> Result<(), RepoError>;
+
+    async fn claim_group_nonce(
+        &self,
+        user_id: i64,
+        nonce: &str,
+        new_id: i64,
+    ) -> Result<(i64, bool), RepoError>;
 }
 
 #[async_trait]
@@ -79,6 +89,7 @@ impl ConversationRepo for ScyllaConversationRepo {
             last_seq: 0,
             name: String::new(),
             member_ids: members.to_vec(),
+            last_message_at: chrono::Utc::now().timestamp_millis(),
         })
     }
 
@@ -109,33 +120,43 @@ impl ConversationRepo for ScyllaConversationRepo {
 
     #[tracing::instrument(name = "db UPDATE conversations", skip_all, err(Display), fields(otel.kind = "client", db.system = "scylladb", db.operation = "UPDATE", db.collection.name = "conversations"))]
     async fn next_seq(&self, id: i64) -> Result<i64, RepoError> {
-        // INVARIANT: compare-and-set via LWT, so two senders never get the same seq.
-        let mut current = self.get_by_id(id).await?.map(|c| c.last_seq).unwrap_or(0);
-        for _ in 0..20 {
-            let next = current + 1;
-            let reply = self
-                .session
-                .execute_unpaged(&self.bump_seq, (next, id, current))
-                .await
-                .context("bump seq")?
-                .into_rows_result()
-                .context("bump seq")?;
-            if lwt_applied(&reply).context("bump seq")? {
-                return Ok(next);
-            }
-            current = reply
-                .rows::<scylla::value::Row>()
-                .context("bump seq")?
-                .next()
-                .transpose()
-                .context("bump seq")?
-                .and_then(|row| row.columns.get(1).cloned().flatten())
-                .and_then(|v| v.as_bigint())
-                .unwrap_or(current);
+        self.bump(id, None).await
+    }
+
+    #[tracing::instrument(name = "db UPDATE conversations", skip_all, err(Display), fields(otel.kind = "client", db.system = "scylladb", db.operation = "UPDATE", db.collection.name = "conversations"))]
+    async fn next_message_seq(&self, id: i64, at_ms: i64) -> Result<i64, RepoError> {
+        self.bump(id, Some(at_ms)).await
+    }
+
+    #[tracing::instrument(name = "db INSERT group_nonces", skip_all, err(Display), fields(otel.kind = "client", db.system = "scylladb", db.operation = "INSERT", db.collection.name = "group_nonces"))]
+    async fn claim_group_nonce(
+        &self,
+        user_id: i64,
+        nonce: &str,
+        new_id: i64,
+    ) -> Result<(i64, bool), RepoError> {
+        let reply = self
+            .session
+            .execute_unpaged(&self.claim_group_nonce, (user_id, nonce, new_id))
+            .await
+            .context("claim group nonce")?
+            .into_rows_result()
+            .context("claim group nonce")?;
+        if lwt_applied(&reply).context("claim group nonce")? {
+            return Ok((new_id, true));
         }
-        Err(RepoError::Other(anyhow::anyhow!(
-            "next_seq: too much contention on {id}"
-        )))
+        let mut read = self.get_group_nonce.clone();
+        read.set_consistency(scylla::statement::Consistency::Serial);
+        let (id,) = self
+            .session
+            .execute_unpaged(&read, (user_id, nonce))
+            .await
+            .context("read group nonce")?
+            .into_rows_result()
+            .context("read group nonce")?
+            .first_row::<(i64,)>()
+            .context("read group nonce")?;
+        Ok((id, false))
     }
 
     #[tracing::instrument(name = "db BATCH conversations", skip_all, err(Display), fields(otel.kind = "client", db.system = "scylladb", db.operation = "BATCH", db.collection.name = "conversations"))]
@@ -189,5 +210,45 @@ impl ConversationRepo for ScyllaConversationRepo {
             .await
             .context("rename")?;
         Ok(())
+    }
+}
+
+impl ScyllaConversationRepo {
+    async fn bump(&self, id: i64, at_ms: Option<i64>) -> Result<i64, RepoError> {
+        // INVARIANT: compare-and-set via LWT, so two senders never get the same seq.
+        let mut current = self.get_by_id(id).await?.map(|c| c.last_seq).unwrap_or(0);
+        for _ in 0..20 {
+            let next = current + 1;
+            let reply = match at_ms {
+                None => {
+                    self.session
+                        .execute_unpaged(&self.bump_seq, (next, id, current))
+                        .await
+                }
+                Some(at) => {
+                    self.session
+                        .execute_unpaged(&self.bump_message_seq, (next, at, id, current))
+                        .await
+                }
+            }
+            .context("bump seq")?
+            .into_rows_result()
+            .context("bump seq")?;
+            if lwt_applied(&reply).context("bump seq")? {
+                return Ok(next);
+            }
+            current = reply
+                .rows::<scylla::value::Row>()
+                .context("bump seq")?
+                .next()
+                .transpose()
+                .context("bump seq")?
+                .and_then(|row| row.columns.get(1).cloned().flatten())
+                .and_then(|v| v.as_bigint())
+                .unwrap_or(current);
+        }
+        Err(RepoError::Other(anyhow::anyhow!(
+            "next_seq: too much contention on {id}"
+        )))
     }
 }

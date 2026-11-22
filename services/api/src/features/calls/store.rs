@@ -26,7 +26,14 @@ pub trait CallStore: Send + Sync {
         activate: bool,
     ) -> Result<Call, AddError>;
     async fn remove_if(&self, call_id: i64, condition: Condition) -> Option<Call>;
+    async fn withdraw_member(
+        &self,
+        conversation_id: i64,
+        user_id: i64,
+    ) -> Option<(Call, Option<Participant>)>;
     async fn with_connection(&self, connection_id: u64) -> Vec<Call>;
+    async fn with_user(&self, user_id: i64) -> Vec<Call>;
+    async fn with_peer(&self, peer_id: u64) -> Vec<Call>;
 }
 
 #[derive(Default)]
@@ -56,6 +63,7 @@ impl CallStore for MemoryCallStore {
         let mut calls = self.calls.lock().unwrap();
         let call = calls.get_mut(&call_id)?;
         change(call);
+        call.revision += 1;
         Some(call.clone())
     }
 
@@ -67,10 +75,14 @@ impl CallStore for MemoryCallStore {
     ) -> Result<Call, AddError> {
         let mut calls = self.calls.lock().unwrap();
         let call = calls.get_mut(&call_id).ok_or(AddError::NotFound)?;
+        if !call.member_ids.contains(&p.user_id) {
+            return Err(AddError::NotFound);
+        }
         if call.participants.iter().any(|x| x.user_id == p.user_id) {
             return Err(AddError::AlreadyIn);
         }
         call.participants.push(p);
+        call.revision += 1;
         if activate {
             call.state = CallState::Active;
         }
@@ -85,6 +97,39 @@ impl CallStore for MemoryCallStore {
         calls.remove(&call_id)
     }
 
+    async fn withdraw_member(
+        &self,
+        conversation_id: i64,
+        user_id: i64,
+    ) -> Option<(Call, Option<Participant>)> {
+        let mut calls = self.calls.lock().unwrap();
+        let call = calls.values_mut().find(|call| {
+            call.conversation_id == conversation_id && call.member_ids.contains(&user_id)
+        })?;
+        call.member_ids.retain(|id| *id != user_id);
+        let participant = call
+            .participants
+            .iter()
+            .position(|p| p.user_id == user_id)
+            .map(|index| call.participants.remove(index));
+        call.settle_control();
+        call.revision += 1;
+        Some((call.clone(), participant))
+    }
+
+    async fn with_user(&self, user_id: i64) -> Vec<Call> {
+        let mut calls: Vec<_> = self
+            .calls
+            .lock()
+            .unwrap()
+            .values()
+            .filter(|c| c.participants.iter().any(|p| p.user_id == user_id))
+            .cloned()
+            .collect();
+        calls.sort_by_key(|c| std::cmp::Reverse(c.id));
+        calls
+    }
+
     async fn with_connection(&self, connection_id: u64) -> Vec<Call> {
         let calls = self.calls.lock().unwrap();
         calls
@@ -94,6 +139,15 @@ impl CallStore for MemoryCallStore {
                     .iter()
                     .any(|p| p.connection_id == connection_id)
             })
+            .cloned()
+            .collect()
+    }
+
+    async fn with_peer(&self, peer_id: u64) -> Vec<Call> {
+        let calls = self.calls.lock().unwrap();
+        calls
+            .values()
+            .filter(|c| c.participants.iter().any(|p| p.peer_id == peer_id))
             .cloned()
             .collect()
     }

@@ -12,6 +12,7 @@ pub struct Config {
     pub scylla_replication: u8,
     pub zitadel_url: String,
     pub zitadel_pat: String,
+    pub auth_concurrency: usize,
     pub signing_key_file: PathBuf,
     pub machine_id: u16,
     pub cors_origins: Vec<String>,
@@ -24,6 +25,9 @@ pub struct Config {
     pub s3_secret_key: String,
     pub attachment_max_bytes: i64,
     pub attachment_ttl_hours: u64,
+    /// `RATE_LIMITS=off` disables every rate limit and the per-user socket cap.
+    /// For load tests only. Default: on.
+    pub rate_limits: bool,
 }
 
 impl Config {
@@ -37,6 +41,12 @@ impl Config {
                 crate::common::secrets::read(path.as_ref())?
             }
         };
+
+        let auth_concurrency = env_or("AUTH_CONCURRENCY", "2").parse::<usize>()?;
+        anyhow::ensure!(
+            auth_concurrency > 0 && auth_concurrency <= 1024,
+            "AUTH_CONCURRENCY must be 1..=1024"
+        );
 
         Ok(Self {
             env: env_or("APP_ENV", "development"),
@@ -52,6 +62,7 @@ impl Config {
             scylla_replication: env_or("SCYLLA_REPLICATION", "1").parse()?,
             zitadel_url: env_or("ZITADEL_URL", "http://localhost:7102"),
             zitadel_pat,
+            auth_concurrency,
             signing_key_file: env_or("API_SIGNING_KEY_FILE", "infra/.secrets/api_signing_key")
                 .into(),
             machine_id: env_or("MACHINE_ID", "1").parse()?,
@@ -63,6 +74,7 @@ impl Config {
             s3_secret_key: env_or("S3_SECRET_KEY", "minio-dev-secret"),
             attachment_max_bytes: env_or("ATTACHMENT_MAX_BYTES", "104857600").parse()?, // 100 MiB
             attachment_ttl_hours: env_or("ATTACHMENT_TTL_HOURS", "168").parse()?,     // 7 days
+            rate_limits: parse_switch("RATE_LIMITS", &env_or("RATE_LIMITS", "on"))?,
             cors_origins: env_or(
                 "CORS_ORIGINS",
                 "http://localhost:7104,https://server.tailcbbc1b.ts.net:7103,tauri://localhost,http://tauri.localhost",
@@ -82,4 +94,26 @@ impl Config {
 
 fn env_or(key: &str, default: &str) -> String {
     std::env::var(key).unwrap_or_else(|_| default.to_string())
+}
+
+fn parse_switch(key: &str, value: &str) -> anyhow::Result<bool> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "on" | "true" | "1" | "yes" => Ok(true),
+        "off" | "false" | "0" | "no" => Ok(false),
+        other => anyhow::bail!("{key} must be on or off, got {other:?}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_switch;
+
+    #[test]
+    fn switch_values() {
+        assert!(parse_switch("X", "on").unwrap());
+        assert!(parse_switch("X", "TRUE").unwrap());
+        assert!(!parse_switch("X", "off").unwrap());
+        assert!(!parse_switch("X", " 0 ").unwrap());
+        assert!(parse_switch("X", "maybe").is_err());
+    }
 }

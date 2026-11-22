@@ -6,7 +6,7 @@ import { type Block, type Inline, parseMarkdown } from "../lib/markdown/parse";
 function Spoiler({ children }: { children: ReactNode }) {
   const [revealed, setRevealed] = useState(false);
   return (
-    <span className="rounded bg-zinc-950 px-1 text-white">
+    <span className="rounded bg-surface-0 px-1 text-white">
       <button
         type="button"
         className="cursor-pointer text-xs underline"
@@ -47,8 +47,8 @@ function CodeBlock({ language, text }: { language: string; text: string }) {
   }
 
   return (
-    <div className="my-1 min-w-0 rounded bg-zinc-950 text-zinc-100">
-      <div className="flex items-center justify-between gap-2 border-b border-zinc-700 px-2 py-1 text-xs">
+    <div className="my-1 min-w-0 rounded bg-surface-0 text-fg">
+      <div className="flex items-center justify-between gap-2 border-b border-line-strong px-2 py-1 text-xs">
         <span>{language || "Code"}</span>
         <button type="button" onClick={copy} className="cursor-pointer underline">
           {copyStatus}
@@ -67,7 +67,7 @@ function renderInline(nodes: Inline[]): ReactNode {
     switch (node.kind) {
       case "code":
         return (
-          <code key={index} className="rounded bg-zinc-950 px-1 text-zinc-100">
+          <code key={index} className="rounded bg-surface-0 px-1 text-fg">
             {node.text}
           </code>
         );

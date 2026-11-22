@@ -6,9 +6,9 @@ use protocol::Message as _;
 use protocol::v1::{Envelope, UserUpdated, envelope::Payload};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
-use super::avatar::{self, AVATAR_CONTENT_TYPE, AVATAR_SIZES};
+use super::image::{self, IMAGE_CONTENT_TYPE, ProfileImage};
 use super::models::{User, hex};
-use super::repository::UserRepo;
+use super::repository::{ProfileUpdate, UserRepo};
 use crate::common::error::{ApiError, RepoError};
 use crate::common::events::EventBus;
 use crate::common::storage::FileStore;
@@ -18,17 +18,19 @@ use crate::features::friends::repository::FriendRepo;
 
 pub const MAX_DISPLAY_NAME_CHARS: usize = 32;
 pub const MAX_BIO_CHARS: usize = 190;
-/// How long an avatar link works once handed out.
-const AVATAR_URL_TTL: Duration = Duration::from_secs(5 * 60);
-/// Avatars processed at once, across all users (CPU + ~150 MiB each).
-/// Extra uploads are turned away, not queued, before their body is read.
-const AVATARS_IN_FLIGHT: usize = 2;
+pub const MAX_CUSTOM_STATUS_CHARS: usize = 128;
+pub const MAX_PRONOUNS_CHARS: usize = 40;
+const IMAGE_URL_TTL: Duration = Duration::from_secs(5 * 60);
+const IMAGES_IN_FLIGHT: usize = 2;
 
 /// PATCH /me input. None = leave alone, Some("") = clear.
 #[derive(Debug, Default)]
 pub struct ProfileChanges {
     pub display_name: Option<String>,
     pub bio: Option<String>,
+    pub custom_status: Option<String>,
+    pub pronouns: Option<String>,
+    pub accent_color: Option<String>,
 }
 
 pub struct UserService {
@@ -37,7 +39,7 @@ pub struct UserService {
     friends: Arc<dyn FriendRepo>,
     conversations: Arc<dyn ConversationRepo>,
     events: Arc<dyn EventBus>,
-    avatar_slots: Arc<Semaphore>,
+    image_slots: Arc<Semaphore>,
 }
 
 impl UserService {
@@ -54,7 +56,7 @@ impl UserService {
             friends,
             conversations,
             events,
-            avatar_slots: Arc::new(Semaphore::new(AVATARS_IN_FLIGHT)),
+            image_slots: Arc::new(Semaphore::new(IMAGES_IN_FLIGHT)),
         }
     }
 
@@ -95,23 +97,41 @@ impl UserService {
             .map(|raw| clean_text(raw, MAX_BIO_CHARS, true, "invalid_bio"))
             .transpose()?;
 
+        let custom_status = changes
+            .custom_status
+            .as_deref()
+            .map(|raw| clean_text(raw, MAX_CUSTOM_STATUS_CHARS, false, "invalid_custom_status"))
+            .transpose()?;
+        let pronouns = changes
+            .pronouns
+            .as_deref()
+            .map(|raw| clean_text(raw, MAX_PRONOUNS_CHARS, false, "invalid_pronouns"))
+            .transpose()?;
+        let accent_color = changes
+            .accent_color
+            .as_deref()
+            .map(parse_accent_color)
+            .transpose()?;
+        let update = ProfileUpdate {
+            display_name: display_name.as_ref().map(Option::as_deref),
+            bio: bio.as_ref().map(Option::as_deref),
+            custom_status: custom_status.as_ref().map(Option::as_deref),
+            pronouns: pronouns.as_ref().map(Option::as_deref),
+            accent_color,
+        };
         let user = self
             .repo
-            .set_profile(
-                me,
-                display_name.as_ref().map(Option::as_deref),
-                bio.as_ref().map(Option::as_deref),
-            )
+            .set_profile(me, update)
             .await?
             .ok_or(ApiError::NotFound)?;
         self.announce(&user).await;
         Ok(user)
     }
 
-    /// A free avatar slot, or "busy" right away. Take it before reading the
-    /// upload body so waiting uploads never pile up in memory.
-    pub fn avatar_slot(&self) -> Result<OwnedSemaphorePermit, ApiError> {
-        self.avatar_slots
+    // INVARIANT: take a slot before reading the upload body, so waiting
+    // uploads never pile up in memory.
+    pub fn image_slot(&self) -> Result<OwnedSemaphorePermit, ApiError> {
+        self.image_slots
             .clone()
             .try_acquire_owned()
             .map_err(|_| ApiError::TooManyRequests)
@@ -119,10 +139,11 @@ impl UserService {
 
     /// Checks and re-encodes the image, stores every size, then swaps it in
     /// and deletes the old files.
-    #[tracing::instrument(name = "users.set_avatar", skip_all, fields(user.id = me, bytes = data.len()))]
-    pub async fn set_avatar(
+    #[tracing::instrument(name = "users.set_image", skip_all, fields(user.id = me, kind = kind.name(), bytes = data.len()))]
+    pub async fn set_image(
         &self,
         me: i64,
+        kind: ProfileImage,
         data: Bytes,
         slot: OwnedSemaphorePermit,
     ) -> Result<User, ApiError> {
@@ -130,91 +151,102 @@ impl UserService {
         // while the decode is still running.
         let processed = tokio::task::spawn_blocking(move || {
             let _slot = slot;
-            avatar::process(&data)
+            image::process(kind, &data)
         })
         .await
         .map_err(anyhow::Error::from)??;
 
-        // Every upload gets its own id, so its files are never shared with
-        // another upload. Cleanup of an old avatar can't hit the live one,
-        // even when the same image is uploaded twice at once.
+        // INVARIANT: every upload gets its own id, so cleanup of an old image
+        // can't hit the live one, even when the same image is uploaded twice.
         let hash = upload_id(&processed.hash);
         let hash_hex = hex(&hash);
-        for (size, bytes) in processed.files {
+        for (width, bytes) in processed.files {
             if let Err(err) = self
                 .store
-                .put_object(&avatar_key(me, &hash_hex, size), AVATAR_CONTENT_TYPE, bytes)
+                .put_object(&kind.key(me, &hash_hex, width), IMAGE_CONTENT_TYPE, bytes)
                 .await
             {
-                self.delete_files(me, &hash).await;
+                self.delete_files(me, kind, &hash).await;
                 return Err(err.into());
             }
         }
 
-        let (user, old) = match self.repo.set_avatar(me, Some(&hash)).await {
+        let (user, old) = match self.repo.set_image(me, kind, Some(&hash)).await {
             Ok(Some(swap)) => swap,
             Ok(None) => {
-                self.delete_files(me, &hash).await;
+                self.delete_files(me, kind, &hash).await;
                 return Err(ApiError::NotFound);
             }
             Err(err) => {
-                self.delete_files(me, &hash).await;
+                self.delete_files(me, kind, &hash).await;
                 return Err(err.into());
             }
         };
-        if let Some(old) = old {
-            self.delete_files(me, &old).await;
-        }
+        // WARN: announce before the slow cleanup. A stalled cleanup must not
+        // push a stale snapshot after a later change (no profile version yet).
         self.announce(&user).await;
+        if let Some(old) = old {
+            self.delete_files(me, kind, &old).await;
+        }
         Ok(user)
     }
 
-    #[tracing::instrument(name = "users.remove_avatar", skip_all, fields(user.id = me))]
-    pub async fn remove_avatar(&self, me: i64) -> Result<User, ApiError> {
+    #[tracing::instrument(name = "users.remove_image", skip_all, fields(user.id = me, kind = kind.name()))]
+    pub async fn remove_image(&self, me: i64, kind: ProfileImage) -> Result<User, ApiError> {
         let (user, old) = self
             .repo
-            .set_avatar(me, None)
+            .set_image(me, kind, None)
             .await?
             .ok_or(ApiError::NotFound)?;
         if let Some(old) = old {
-            self.delete_files(me, &old).await;
             self.announce(&user).await;
+            self.delete_files(me, kind, &old).await;
         }
         Ok(user)
     }
 
-    /// A short-lived link to `user_id`'s avatar, only while `hash_hex` is current.
-    #[tracing::instrument(name = "users.avatar_url", skip_all, fields(user.id = user_id))]
-    pub async fn avatar_url(
+    #[tracing::instrument(name = "users.image_url", skip_all, fields(user.id = user_id, kind = kind.name()))]
+    pub async fn image_url(
         &self,
         user_id: i64,
+        kind: ProfileImage,
         hash_hex: &str,
-        size: Option<u32>,
+        width: Option<u32>,
     ) -> Result<String, ApiError> {
-        let size = size.unwrap_or(AVATAR_SIZES[0]);
-        if !AVATAR_SIZES.contains(&size) {
-            return Err(ApiError::bad_request("bad_size", "size must be 128 or 512"));
+        let mut widths = kind.widths();
+        let default = widths.next().expect("at least one size");
+        let width = width.unwrap_or(default);
+        if width != default && !widths.any(|w| w == width) {
+            let allowed: Vec<String> = kind.widths().map(|w| w.to_string()).collect();
+            return Err(ApiError::bad_request(
+                "bad_size",
+                format!("size must be one of {}", allowed.join(", ")),
+            ));
         }
         let user = self.get(user_id).await?;
-        if user.avatar_hex().as_deref() != Some(hash_hex) {
+        let current = match kind {
+            ProfileImage::Avatar => user.avatar_hex(),
+            ProfileImage::Banner => user.banner_hex(),
+        };
+        if current.as_deref() != Some(hash_hex) {
             return Err(ApiError::NotFound);
         }
         Ok(self
             .store
-            .view_url(&avatar_key(user_id, hash_hex, size), AVATAR_URL_TTL)
+            .view_url(&kind.key(user_id, hash_hex, width), IMAGE_URL_TTL)
             .await?)
     }
 
     /// Best effort: a leftover file is only wasted space, never shown.
-    async fn delete_files(&self, user_id: i64, hash: &[u8]) {
+    async fn delete_files(&self, user_id: i64, kind: ProfileImage, hash: &[u8]) {
         let hash_hex = hex(hash);
-        for size in AVATAR_SIZES {
+        for width in kind.widths() {
             if let Err(err) = self
                 .store
-                .delete(&avatar_key(user_id, &hash_hex, size))
+                .delete(&kind.key(user_id, &hash_hex, width))
                 .await
             {
-                tracing::warn!(error = %err, "old avatar delete failed");
+                tracing::warn!(error = %err, kind = kind.name(), "old image delete failed");
             }
         }
     }
@@ -307,8 +339,17 @@ fn upload_id(content_hash: &[u8; 32]) -> [u8; 32] {
     *h.finalize().as_bytes()
 }
 
-pub fn avatar_key(user_id: i64, hash_hex: &str, size: u32) -> String {
-    format!("avatars/{user_id}/{hash_hex}/{size}.webp")
+fn parse_accent_color(raw: &str) -> Result<Option<i32>, ApiError> {
+    let text = raw.trim();
+    if text.is_empty() {
+        return Ok(None);
+    }
+    let bad = || ApiError::bad_request("invalid_accent_color", "use a #rrggbb color");
+    let digits = text.strip_prefix('#').ok_or_else(bad)?;
+    if digits.len() != 6 || !digits.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err(bad());
+    }
+    i32::from_str_radix(digits, 16).map(Some).map_err(|_| bad())
 }
 
 /// Trims, rejects control characters (newlines allowed if `multiline`)
@@ -373,6 +414,12 @@ mod tests {
 
     #[async_trait]
     impl UserRepo for FakeUsers {
+        async fn find_by_email(&self, _: &str) -> Result<Option<User>, RepoError> {
+            unimplemented!()
+        }
+        async fn remember_email(&self, _: i64, _: &str) -> Result<(), RepoError> {
+            unimplemented!()
+        }
         async fn find_by_id(&self, id: i64) -> Result<Option<User>, RepoError> {
             Ok(self.0.lock().unwrap().get(&id).cloned())
         }
@@ -407,28 +454,41 @@ mod tests {
         async fn set_profile(
             &self,
             id: i64,
-            display_name: Option<Option<&str>>,
-            bio: Option<Option<&str>>,
+            up: ProfileUpdate<'_>,
         ) -> Result<Option<User>, RepoError> {
             let mut users = self.0.lock().unwrap();
             Ok(users.get_mut(&id).map(|u| {
-                if let Some(v) = display_name {
+                if let Some(v) = up.display_name {
                     u.display_name = v.map(String::from);
                 }
-                if let Some(v) = bio {
+                if let Some(v) = up.bio {
                     u.bio = v.map(String::from);
+                }
+                if let Some(v) = up.custom_status {
+                    u.custom_status = v.map(String::from);
+                }
+                if let Some(v) = up.pronouns {
+                    u.pronouns = v.map(String::from);
+                }
+                if let Some(v) = up.accent_color {
+                    u.accent_color = v;
                 }
                 u.clone()
             }))
         }
-        async fn set_avatar(
+        async fn set_image(
             &self,
             id: i64,
+            kind: ProfileImage,
             hash: Option<&[u8]>,
         ) -> Result<Option<(User, Option<Vec<u8>>)>, RepoError> {
             let mut users = self.0.lock().unwrap();
             Ok(users.get_mut(&id).map(|u| {
-                let old = std::mem::replace(&mut u.avatar_hash, hash.map(<[u8]>::to_vec));
+                let field = match kind {
+                    ProfileImage::Avatar => &mut u.avatar_hash,
+                    ProfileImage::Banner => &mut u.banner_hash,
+                };
+                let old = std::mem::replace(field, hash.map(<[u8]>::to_vec));
                 (u.clone(), old)
             }))
         }
@@ -517,6 +577,14 @@ mod tests {
 
     #[async_trait]
     impl ConversationRepo for FakeConversations {
+        async fn claim_group_nonce(
+            &self,
+            _: i64,
+            _: &str,
+            _: i64,
+        ) -> Result<(i64, bool), RepoError> {
+            unimplemented!()
+        }
         async fn get_or_create_dm(
             &self,
             _: i64,
@@ -576,7 +644,11 @@ mod tests {
             username: Some(format!("u{id}")),
             display_name: None,
             bio: None,
+            custom_status: None,
             avatar_hash: None,
+            banner_hash: None,
+            accent_color: None,
+            pronouns: None,
             created_at: Utc::now(),
         }
     }
@@ -626,6 +698,7 @@ mod tests {
                 last_seq: 0,
                 name: String::new(),
                 member_ids: vec![ANA, CAT],
+                last_message_at: 0,
             }])),
             events.clone(),
         );
@@ -634,23 +707,28 @@ mod tests {
 
     impl UserService {
         async fn set_avatar_t(&self, me: i64, data: Bytes) -> Result<User, ApiError> {
-            let slot = self.avatar_slot()?;
-            self.set_avatar(me, data, slot).await
+            self.set_image_t(me, ProfileImage::Avatar, data).await
+        }
+        async fn set_image_t(
+            &self,
+            me: i64,
+            kind: ProfileImage,
+            data: Bytes,
+        ) -> Result<User, ApiError> {
+            let slot = self.image_slot()?;
+            self.set_image(me, kind, data, slot).await
         }
     }
 
     #[tokio::test]
-    async fn busy_avatar_slots_turn_uploads_away() {
+    async fn busy_image_slots_turn_uploads_away() {
         let t = setup();
-        let held: Vec<_> = (0..AVATARS_IN_FLIGHT)
-            .map(|_| t.svc.avatar_slot().unwrap())
+        let held: Vec<_> = (0..IMAGES_IN_FLIGHT)
+            .map(|_| t.svc.image_slot().unwrap())
             .collect();
-        assert!(matches!(
-            t.svc.avatar_slot(),
-            Err(ApiError::TooManyRequests)
-        ));
+        assert!(matches!(t.svc.image_slot(), Err(ApiError::TooManyRequests)));
         drop(held);
-        assert!(t.svc.avatar_slot().is_ok());
+        assert!(t.svc.image_slot().is_ok());
     }
 
     #[tokio::test]
@@ -659,6 +737,8 @@ mod tests {
         let changes = |name: Option<&str>, bio: Option<&str>| ProfileChanges {
             display_name: name.map(String::from),
             bio: bio.map(String::from),
+            custom_status: None,
+            ..Default::default()
         };
         t.svc
             .update_profile(ANA, changes(Some("Ana"), None))
@@ -674,7 +754,7 @@ mod tests {
     }
 
     fn png(w: u32, h: u32) -> Bytes {
-        super::avatar::tests::png(w, h).into()
+        super::image::tests::png(w, h).into()
     }
 
     #[tokio::test]
@@ -687,6 +767,8 @@ mod tests {
                 ProfileChanges {
                     display_name: Some("  Ana B  ".into()),
                     bio: Some("hi\nthere".into()),
+                    custom_status: None,
+                    ..Default::default()
                 },
             )
             .await
@@ -711,6 +793,8 @@ mod tests {
                 ProfileChanges {
                     display_name: None,
                     bio: Some("".into()),
+                    custom_status: None,
+                    ..Default::default()
                 },
             )
             .await
@@ -726,18 +810,26 @@ mod tests {
             ProfileChanges {
                 display_name: Some("a".repeat(33)),
                 bio: None,
+                custom_status: None,
+                ..Default::default()
             },
             ProfileChanges {
                 display_name: Some("two\nlines".into()),
                 bio: None,
+                custom_status: None,
+                ..Default::default()
             },
             ProfileChanges {
                 display_name: None,
                 bio: Some("b".repeat(191)),
+                custom_status: None,
+                ..Default::default()
             },
             ProfileChanges {
                 display_name: None,
                 bio: Some("bell\u{7}".into()),
+                custom_status: None,
+                ..Default::default()
             },
         ] {
             assert!(t.svc.update_profile(ANA, changes).await.is_err());
@@ -759,7 +851,10 @@ mod tests {
         let h1 = first.avatar_hex().unwrap();
         assert_eq!(
             t.store.keys(),
-            vec![avatar_key(ANA, &h1, 128), avatar_key(ANA, &h1, 512)]
+            vec![
+                ProfileImage::Avatar.key(ANA, &h1, 128),
+                ProfileImage::Avatar.key(ANA, &h1, 512)
+            ]
         );
         let pushes = t.pushes();
         assert_eq!(pushes[0].0, vec![ANA, BOB, CAT]);
@@ -771,7 +866,10 @@ mod tests {
         assert_ne!(h1, h1b, "every upload gets its own id");
         assert_eq!(
             t.store.keys(),
-            vec![avatar_key(ANA, &h1b, 128), avatar_key(ANA, &h1b, 512)]
+            vec![
+                ProfileImage::Avatar.key(ANA, &h1b, 128),
+                ProfileImage::Avatar.key(ANA, &h1b, 512)
+            ]
         );
 
         // New image: old files gone.
@@ -780,17 +878,20 @@ mod tests {
         assert_ne!(h1, h2);
         assert_eq!(
             t.store.keys(),
-            vec![avatar_key(ANA, &h2, 128), avatar_key(ANA, &h2, 512)]
+            vec![
+                ProfileImage::Avatar.key(ANA, &h2, 128),
+                ProfileImage::Avatar.key(ANA, &h2, 512)
+            ]
         );
 
         t.pushes();
-        let removed = t.svc.remove_avatar(ANA).await.unwrap();
+        let removed = t.svc.remove_image(ANA, ProfileImage::Avatar).await.unwrap();
         assert_eq!(removed.avatar_hash, None);
         assert!(t.store.keys().is_empty());
         assert_eq!(t.pushes()[0].1.avatar_hash, "");
 
         // Removing again is a no-op, no push.
-        t.svc.remove_avatar(ANA).await.unwrap();
+        t.svc.remove_image(ANA, ProfileImage::Avatar).await.unwrap();
         assert!(t.pushes().is_empty());
     }
 
@@ -818,18 +919,170 @@ mod tests {
             .avatar_hex()
             .unwrap();
 
-        let url = t.svc.avatar_url(ANA, &h, None).await.unwrap();
+        let url = t
+            .svc
+            .image_url(ANA, ProfileImage::Avatar, &h, None)
+            .await
+            .unwrap();
         assert!(url.ends_with(&format!("{h}/128.webp")));
-        assert!(t.svc.avatar_url(ANA, &h, Some(512)).await.is_ok());
-        assert!(t.svc.avatar_url(ANA, &h, Some(64)).await.is_err());
+        assert!(
+            t.svc
+                .image_url(ANA, ProfileImage::Avatar, &h, Some(512))
+                .await
+                .is_ok()
+        );
+        assert!(
+            t.svc
+                .image_url(ANA, ProfileImage::Avatar, &h, Some(64))
+                .await
+                .is_err()
+        );
         assert!(matches!(
-            t.svc.avatar_url(ANA, &"0".repeat(64), None).await,
+            t.svc
+                .image_url(ANA, ProfileImage::Avatar, &"0".repeat(64), None)
+                .await,
             Err(ApiError::NotFound)
         ));
         assert!(matches!(
-            t.svc.avatar_url(BOB, &h, None).await,
+            t.svc.image_url(BOB, ProfileImage::Avatar, &h, None).await,
             Err(ApiError::NotFound)
         ));
+    }
+
+    #[tokio::test]
+    async fn pronouns_and_accent_color() {
+        let t = setup();
+        let u = t
+            .svc
+            .update_profile(
+                ANA,
+                ProfileChanges {
+                    pronouns: Some(" she/her ".into()),
+                    accent_color: Some("#1A2b3C".into()),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(u.pronouns.as_deref(), Some("she/her"));
+        assert_eq!(u.accent_color, Some(0x1a2b3c));
+        let pushed = &t.pushes()[0].1;
+        assert_eq!(pushed.pronouns, "she/her");
+        assert_eq!(pushed.accent_color, "#1a2b3c");
+
+        let u = t
+            .svc
+            .update_profile(
+                ANA,
+                ProfileChanges {
+                    accent_color: Some("".into()),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(u.pronouns.as_deref(), Some("she/her"));
+        assert_eq!(u.accent_color, None);
+    }
+
+    #[tokio::test]
+    async fn bad_pronouns_or_color_rejected() {
+        let t = setup();
+        let bad_colors = ["red", "#12345", "#1234567", "123456", "#12345g", "#+12345"];
+        for color in bad_colors {
+            let changes = ProfileChanges {
+                accent_color: Some(color.into()),
+                ..Default::default()
+            };
+            assert!(t.svc.update_profile(ANA, changes).await.is_err(), "{color}");
+        }
+        for pronouns in ["p".repeat(41), "a\nb".into()] {
+            let changes = ProfileChanges {
+                pronouns: Some(pronouns),
+                ..Default::default()
+            };
+            assert!(t.svc.update_profile(ANA, changes).await.is_err());
+        }
+        assert!(t.pushes().is_empty());
+    }
+
+    #[tokio::test]
+    async fn banner_upload_replace_and_remove() {
+        let t = setup();
+        let avatar = t.svc.set_avatar_t(ANA, png(20, 20)).await.unwrap();
+        let a = avatar.avatar_hex().unwrap();
+
+        let first = t
+            .svc
+            .set_image_t(ANA, ProfileImage::Banner, png(100, 40))
+            .await
+            .unwrap();
+        let b1 = first.banner_hex().unwrap();
+        assert_eq!(
+            first.avatar_hex().as_deref(),
+            Some(a.as_str()),
+            "avatar kept"
+        );
+        assert!(
+            t.store
+                .keys()
+                .contains(&ProfileImage::Banner.key(ANA, &b1, 960))
+        );
+        assert_eq!(t.pushes().last().unwrap().1.banner_hash, b1);
+
+        let second = t
+            .svc
+            .set_image_t(ANA, ProfileImage::Banner, png(50, 50))
+            .await
+            .unwrap();
+        let b2 = second.banner_hex().unwrap();
+        assert!(
+            !t.store
+                .keys()
+                .contains(&ProfileImage::Banner.key(ANA, &b1, 960))
+        );
+
+        let url = t
+            .svc
+            .image_url(ANA, ProfileImage::Banner, &b2, None)
+            .await
+            .unwrap();
+        assert!(url.ends_with(&format!("banners/{ANA}/{b2}/960.webp")));
+        assert!(
+            t.svc
+                .image_url(ANA, ProfileImage::Banner, &b2, Some(128))
+                .await
+                .is_err()
+        );
+        assert!(
+            t.svc
+                .image_url(ANA, ProfileImage::Banner, &a, None)
+                .await
+                .is_err()
+        );
+        assert!(
+            t.svc
+                .image_url(ANA, ProfileImage::Avatar, &b2, None)
+                .await
+                .is_err()
+        );
+
+        t.svc.remove_image(ANA, ProfileImage::Banner).await.unwrap();
+        assert_eq!(
+            t.store.keys(),
+            vec![
+                ProfileImage::Avatar.key(ANA, &a, 128),
+                ProfileImage::Avatar.key(ANA, &a, 512)
+            ],
+            "only the avatar is left"
+        );
+    }
+
+    #[test]
+    fn accent_color_parse() {
+        assert_eq!(parse_accent_color("#000000").unwrap(), Some(0));
+        assert_eq!(parse_accent_color("#FFFFFF").unwrap(), Some(0xffffff));
+        assert_eq!(parse_accent_color("  ").unwrap(), None);
     }
 
     #[test]

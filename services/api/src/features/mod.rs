@@ -1,5 +1,6 @@
 pub mod attachments;
 pub mod auth;
+pub mod bots;
 pub mod calls;
 pub mod conversations;
 pub mod friends;
@@ -7,5 +8,7 @@ pub mod gateway;
 pub mod health;
 pub mod messages;
 pub mod presence;
+pub mod servers;
+pub mod settings;
 pub mod typing;
 pub mod users;

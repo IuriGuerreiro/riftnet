@@ -2,7 +2,12 @@ import { create as createProto } from "@bufbuild/protobuf";
 import { create } from "zustand";
 
 import type { WsClient } from "../api/ws";
-import { GetPresenceSchema, PresenceStatus, SetIdleSchema } from "../gen/v1/presence_pb";
+import {
+  GetPresenceSchema,
+  PresenceStatus,
+  type PresenceUpdated,
+  SetIdleSchema,
+} from "../gen/v1/presence_pb";
 
 export { PresenceStatus };
 
@@ -11,6 +16,7 @@ const MAX_IDS = 200;
 
 interface PresenceState {
   statuses: Record<string, PresenceStatus>;
+  revisions: Record<string, bigint>;
   attach: (ws: WsClient) => void;
   load: (ws: WsClient, userIds: string[]) => Promise<void>;
 }
@@ -20,13 +26,13 @@ let stopIdle: (() => void) | undefined;
 
 export const usePresence = create<PresenceState>()((set) => ({
   statuses: {},
+  revisions: {},
 
   attach: (ws) => {
     stopListening?.();
     stopListening = ws.addPushListener((payload) => {
       if (payload.case !== "presenceUpdated") return;
-      const { userId, status } = payload.value;
-      set((s) => ({ statuses: { ...s.statuses, [userId.toString()]: status } }));
+      set((s) => mergePresenceUpdates(s, [payload.value]));
     });
     stopIdle?.();
     stopIdle = watchIdle((idle) => {
@@ -46,10 +52,17 @@ export const usePresence = create<PresenceState>()((set) => ({
             value: createProto(GetPresenceSchema, { userIds: page.map(BigInt) }),
           });
           if (reply.case !== "presences") return;
-          const next: Record<string, PresenceStatus> = {};
-          for (const id of page) next[id] = PresenceStatus.OFFLINE;
-          for (const p of reply.value.presences) next[p.userId.toString()] = p.status;
-          set((s) => ({ statuses: { ...s.statuses, ...next } }));
+          set((s) => {
+            const next = mergePresenceUpdates(s, reply.value.presences);
+            const returned = new Set(reply.value.presences.map((p) => p.userId.toString()));
+            for (const id of page) {
+              if (!returned.has(id)) {
+                next.statuses[id] = PresenceStatus.OFFLINE;
+                next.revisions[id] ??= 0n;
+              }
+            }
+            return next;
+          });
         } catch {
           return;
         }
@@ -57,6 +70,21 @@ export const usePresence = create<PresenceState>()((set) => ({
     );
   },
 }));
+
+export function mergePresenceUpdates(
+  state: Pick<PresenceState, "statuses" | "revisions">,
+  updates: PresenceUpdated[],
+): Pick<PresenceState, "statuses" | "revisions"> {
+  const statuses = { ...state.statuses };
+  const revisions = { ...state.revisions };
+  for (const update of updates) {
+    const id = update.userId.toString();
+    if (update.revision < (revisions[id] ?? 0n)) continue;
+    statuses[id] = update.status;
+    revisions[id] = update.revision;
+  }
+  return { statuses, revisions };
+}
 
 function watchIdle(report: (idle: boolean) => void): () => void {
   let idle = false;

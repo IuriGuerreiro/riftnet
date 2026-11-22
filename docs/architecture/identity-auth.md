@@ -68,6 +68,31 @@ sequenceDiagram
     end
 ```
 
+### Password-check capacity and email lookup
+
+`AUTH_CONCURRENCY` defaults to 2 per API process and accepts 1–1024.
+Login and registration share this limit. Waiting longer than 250 ms returns
+HTTP 429. Each Zitadel HTTP request has a 15-second timeout. The concurrency
+limit remains active when `RATE_LIMITS=off`.
+
+The API stores normalized email privately in Postgres with a unique index.
+Registration populates it. Existing accounts populate it after their first
+successful login through the original login-name flow. Later logins use the
+stored Zitadel user ID and password in the session POST, skipping the session
+GET. Session DELETE remains awaited, so a known account uses two HTTP calls.
+
+Email is an account identifier managed by this API. There is no email-change
+flow yet. Before enabling external Zitadel login-name changes, deletion and
+recreation, or email changes, synchronize or invalidate the local mapping.
+Otherwise an old email can continue to identify its previous account.
+
+For the next stress test, collect `auth_request_duration_seconds`,
+`auth_identity_queue_seconds`, and `auth_identity_overload_total` from
+`/metrics`. Request duration includes rejected requests; compare it alongside
+HTTP status counts and successful throughput. Use the existing Zitadel and
+Scylla tracing spans to separate dependency time from queue time. Capture API
+and Zitadel CPU separately. No throughput improvement is assumed until measured.
+
 ## Pick username (first login)
 
 ```mermaid
