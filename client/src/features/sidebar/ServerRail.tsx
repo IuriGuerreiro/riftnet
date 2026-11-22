@@ -75,7 +75,11 @@ export function ServerRail({ onCreateGroup }: { onCreateGroup: () => void }) {
         active={home}
         alert={unread + pending > 0}
         onClick={() => void navigate({ search: {} })}
-        className={home ? "bg-brand text-on-brand" : "bg-surface-2 text-fg-muted group-hover:bg-brand group-hover:text-on-brand"}
+        className={
+          home
+            ? "bg-brand text-on-brand"
+            : "bg-surface-2 text-fg-muted group-hover:bg-brand group-hover:text-on-brand"
+        }
       >
         <MessageCircle size={26} />
       </RailItem>

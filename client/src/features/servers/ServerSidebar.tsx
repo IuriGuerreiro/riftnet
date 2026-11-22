@@ -7,12 +7,7 @@ import { forgetServer } from "../../api/server-access";
 import { IconButton, Menu, type MenuItem, Skeleton } from "../../components/ui";
 import { cn } from "../../components/ui/cn";
 import { useAuth } from "../../stores/auth";
-import {
-  BansDialog,
-  ChannelDialog,
-  InviteDialog,
-  LeaveServerDialog,
-} from "./ServerDialogs";
+import { BansDialog, ChannelDialog, InviteDialog, LeaveServerDialog } from "./ServerDialogs";
 import { type ServerChannel, useMyServers, useServerChannels } from "./useMyServers";
 
 type Dialog =
@@ -81,10 +76,7 @@ export function ServerSidebar({
             className="flex h-12 w-full shrink-0 items-center gap-2 border-b border-surface-0 px-4 text-left font-semibold text-fg shadow-sm transition-colors hover:bg-surface-3"
           >
             <span className="flex-1 truncate">{server?.name ?? "Server"}</span>
-            <ChevronDown
-              size={18}
-              className={cn("transition-transform", open && "rotate-180")}
-            />
+            <ChevronDown size={18} className={cn("transition-transform", open && "rotate-180")} />
           </button>
         )}
         items={items}
