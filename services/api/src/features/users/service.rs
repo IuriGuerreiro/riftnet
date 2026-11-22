@@ -390,7 +390,10 @@ fn parse_status_emoji(raw: &str) -> Result<Option<String>, ApiError> {
 }
 
 fn is_emoji_char(c: char) -> bool {
-    matches!(c as u32, 0xA9 | 0xAE | 0x203C..=0x3299 | 0x1F000..=0x1FAFF)
+    matches!(
+        c as u32,
+        0xFE0F | 0x20E3 | 0x2300..=0x23FF | 0x2600..=0x27BF | 0x2B00..=0x2BFF | 0x1F000..=0x1FAFF
+    )
 }
 
 fn parse_links(raw: &[String]) -> Result<Vec<String>, ApiError> {
@@ -1175,12 +1178,23 @@ mod tests {
 
     #[test]
     fn status_emoji_rules() {
-        for ok in ["😀", "👍🏽", "👨‍👩‍👧", "🏳️‍🌈", "❤️", "#️⃣"]
-        {
+        for ok in [
+            "😀",
+            "👍🏽",
+            "👨‍👩‍👧",
+            "🏳️‍🌈",
+            "❤️",
+            "#️⃣",
+            "1️⃣",
+            "⭐",
+            "☕",
+            "⌚",
+            "™️",
+        ] {
             assert_eq!(parse_status_emoji(ok).unwrap().as_deref(), Some(ok), "{ok}");
         }
         assert_eq!(parse_status_emoji(" ").unwrap(), None);
-        for bad in ["a", "é", "😀😀", "hi 😀", "1", "\u{7}"] {
+        for bad in ["a", "é", "あ", "™", "😀😀", "hi 😀", "1", "\u{7}"] {
             assert!(parse_status_emoji(bad).is_err(), "{bad}");
         }
     }

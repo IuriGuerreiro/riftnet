@@ -84,3 +84,13 @@ describe("name color, emoji and links", () => {
     expect(linkLabel("https://www.github.com/ana")).toBe("github.com");
   });
 });
+
+describe("link length after normalization", () => {
+  it("rejects links that grow past the limit once encoded", () => {
+    const url = `https://example.com/${"é".repeat(40)}`;
+    expect(url.length).toBeLessThanOrEqual(200);
+    expect(profileSchema.safeParse({ display_name: "", bio: "", links: [{ url }] }).success).toBe(
+      false,
+    );
+  });
+});

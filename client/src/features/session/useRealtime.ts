@@ -14,6 +14,7 @@ import { useConnection } from "../../stores/connection";
 import { useFriends } from "../../stores/friends";
 import { usePresence } from "../../stores/presence";
 import { fromJson, fromProto, nameOf, useProfiles } from "../../stores/profiles";
+import { useServerNames } from "../../stores/serverNames";
 import { useTyping } from "../../stores/typing";
 
 export function useRealtime() {
@@ -25,6 +26,7 @@ export function useRealtime() {
     const stopRemoved = onServerRemoved(ws, (serverId) =>
       forgetServer(queryClient, userId, serverId),
     );
+    useServerNames.getState().reset();
     const stopMembers = onServerMemberUpdated(ws, queryClient, userId);
     void refreshServerAccess(queryClient, userId).catch(() => {});
     return () => {

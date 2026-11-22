@@ -24,7 +24,13 @@ const color = z
 export function isHttpsUrl(text: string): boolean {
   try {
     const url = new URL(text);
-    return url.protocol === "https:" && !!url.hostname && !url.username && !url.password;
+    return (
+      url.protocol === "https:" &&
+      !!url.hostname &&
+      !url.username &&
+      !url.password &&
+      url.href.length <= MAX_LINK
+    );
   } catch {
     return false;
   }

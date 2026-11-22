@@ -14,7 +14,7 @@ import { formatClock, formatDay, formatStamp } from "../../lib/time";
 import { useAuth } from "../../stores/auth";
 import { useConnection } from "../../stores/connection";
 import { useProfile } from "../../stores/profiles";
-import { useServerName } from "../../stores/serverNames";
+import { useAuthorName } from "../../stores/serverNames";
 import { groupMessages } from "../chat/groupMessages";
 import { ProfileTrigger } from "../profile/ProfileTrigger";
 
@@ -169,14 +169,7 @@ export function ChannelChat({
                     <div className="w-10 shrink-0">
                       {header ? (
                         <span className="mt-0.5 block">
-                          <ProfileTrigger
-                            userId={message.authorId}
-                            label={message.authorName}
-                            nickname={message.authorName}
-                            className="rounded-full"
-                          >
-                            <Avatar userId={message.authorId} size="md" />
-                          </ProfileTrigger>
+                          <AuthorAvatar serverId={serverId} message={message} />
                         </span>
                       ) : (
                         <time
@@ -268,6 +261,15 @@ function newNonce() {
   return crypto.getRandomValues(new Uint32Array(4)).join("-");
 }
 
+function AuthorAvatar({ serverId, message }: { serverId: string; message: ChannelMessage }) {
+  const name = useAuthorName(serverId, message);
+  return (
+    <ProfileTrigger userId={message.authorId} label={name} nickname={name} className="rounded-full">
+      <Avatar userId={message.authorId} size="md" />
+    </ProfileTrigger>
+  );
+}
+
 function AuthorName({
   serverId,
   message,
@@ -277,7 +279,7 @@ function AuthorName({
   message: ChannelMessage;
   mine: boolean;
 }) {
-  const name = useServerName(serverId, message.authorId) ?? message.authorName;
+  const name = useAuthorName(serverId, message);
   const profile = useProfile(message.authorId);
   return (
     <ProfileTrigger
