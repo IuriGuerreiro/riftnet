@@ -1,7 +1,7 @@
 # Prod prototype, media server. Host networking: the SFU binds the public IP
 # and advertises it to browsers, so no Docker NAT in the way.
 # Start (from repo root): docker compose -f infra/prod/media/compose.yml --env-file infra/prod/media/.env up -d --build
-name: discord2-media
+name: adept-media
 
 services:
   media:

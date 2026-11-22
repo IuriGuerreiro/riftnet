@@ -79,4 +79,4 @@ AUTH=$(field "['access_token']"); R2=$(field "['refresh_token']")
 unset AUTH
 [ "$(post /auth/refresh "{\"refresh_token\":\"$R2\"}")" = 401 ] && ok "refresh after logout → 401" || fail "logout didn't revoke"
 
-echo "🐒 all auth checks passed"
+echo "✅ all auth checks passed"

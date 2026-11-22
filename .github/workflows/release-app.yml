@@ -20,10 +20,10 @@ jobs:
         include:
           - runner: windows-2025
             platform: windows
-            asset: discord2-windows-x64.exe
+            asset: adept-windows-x64.exe
           - runner: ubuntu-22.04
             platform: linux
-            asset: discord2-linux-x64.AppImage
+            asset: adept-linux-x64.AppImage
     env:
       CARGO_TARGET_DIR: ${{ github.workspace }}/target
       VITE_API_HTTP: ${{ vars.PROD_API_HTTP }}
@@ -70,7 +70,7 @@ jobs:
           cp target/release/bundle/appimage/*.AppImage '${{ matrix.asset }}'
       - uses: actions/upload-artifact@v4
         with:
-          name: discord2-${{ matrix.platform }}-x64
+          name: adept-${{ matrix.platform }}-x64
           path: ${{ matrix.asset }}
           if-no-files-found: error
           overwrite: true
@@ -85,7 +85,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          pattern: discord2-*-x64
+          pattern: adept-*-x64
           merge-multiple: true
       - name: Create or complete draft release
         env:
@@ -93,7 +93,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           tag="app-$GITHUB_SHA"
-          assets=(discord2-windows-x64.exe discord2-linux-x64.AppImage)
+          assets=(adept-windows-x64.exe adept-linux-x64.AppImage)
           for asset in "${assets[@]}"; do
             if [[ ! -s "$asset" ]]; then
               echo "Missing release asset: $asset" >&2
@@ -118,5 +118,5 @@ jobs:
             jq -e --arg ref "refs/tags/$tag" --arg sha "$GITHUB_SHA" \
               'all(.[] | select(.ref == $ref); .object.sha == $sha)' <<< "$refs" >/dev/null
             gh release create "$tag" "${assets[@]}" --target "$GITHUB_SHA" --draft \
-              --title "Discord 2.0 (${GITHUB_SHA:0:12})" --generate-notes
+              --title "Adept (${GITHUB_SHA:0:12})" --generate-notes
           fi

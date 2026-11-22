@@ -1,6 +1,6 @@
-# 🐒 Discord 2.0 — Documentation
+# Adept — Documentation
 
-Open source Discord alternative, written in Rust. Name not decided yet (favourites: Monke, Yap).
+Open source voice, chat, and screen-sharing app for gamers and coaches, written in Rust.
 
 **The hook:** screen share at 60fps in source quality, a light app (<1 GB RAM), no file size limits.
 

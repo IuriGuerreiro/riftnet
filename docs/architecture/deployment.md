@@ -4,8 +4,8 @@ Two machines:
 
 | Machine | Runs | Compose project |
 |---|---|---|
-| **Server** (main box, at home) | web, api, zitadel, postgres, scylla, redis, nats, minio, cloudflared | `discord2-prod` |
-| **VPS** | media (voice/video SFU) | `discord2-media` |
+| **Server** (main box, at home) | web, api, zitadel, postgres, scylla, redis, nats, minio, cloudflared | `adept-prod` |
+| **VPS** | media (voice/video SFU) | `adept-media` |
 
 - The server opens **no public ports**. Cloudflare Tunnel is the only way in.
 - The VPS opens **one public UDP port** for voice/video, because Cloudflare
@@ -96,16 +96,16 @@ Needs Docker + Compose, and the public IP on its own network interface
 **On the server** (building on the VPS is very slow, so build here):
 ```sh
 docker compose -f infra/prod/media/compose.yml --env-file infra/prod/media/.env build
-docker save discord2-media-media:latest | gzip > ~/discord2-media-image.tar.gz
-tar czf ~/discord2-media.tar.gz infra/prod/media     # first time: compose + .env
-scp ~/discord2-media.tar.gz ~/discord2-media-image.tar.gz root@<vps>:/opt/
+docker save adept-media-media:latest | gzip > ~/adept-media-image.tar.gz
+tar czf ~/adept-media.tar.gz infra/prod/media     # first time: compose + .env
+scp ~/adept-media.tar.gz ~/adept-media-image.tar.gz root@<vps>:/opt/
 ```
 
 **On the VPS**:
 ```sh
-mkdir -p /opt/discord2 && cd /opt/discord2
-tar xzf ../discord2-media.tar.gz                     # first time / config change
-gunzip -c ../discord2-media-image.tar.gz | docker load
+mkdir -p /opt/adept && cd /opt/adept
+tar xzf ../adept-media.tar.gz                     # first time / config change
+gunzip -c ../adept-media-image.tar.gz | docker load
 docker compose -f infra/prod/media/compose.yml --env-file infra/prod/media/.env up -d --force-recreate
 docker compose -f infra/prod/media/compose.yml logs --tail 20
 ```
@@ -121,11 +121,11 @@ to the production HTTPS API URL and `PROD_API_WS` to the production WSS URL endi
 in `/ws`. GitHub Actions embeds these URLs in both builds.
 
 Merge `main` into `prod` to start **Release app**. After CI and both builds pass,
-the workflow attaches `discord2-windows-x64.exe` and `discord2-linux-x64.AppImage`
+the workflow attaches `adept-windows-x64.exe` and `adept-linux-x64.AppImage`
 to a draft GitHub Release tagged `app-<commit SHA>`.
 
 Download both files from the draft. On Linux, run
-`chmod +x discord2-linux-x64.AppImage` before launching it. Verify sign-in on
+`chmod +x adept-linux-x64.AppImage` before launching it. Verify sign-in on
 both platforms, then publish the release.
 
 ### Build the Windows executable manually on the server

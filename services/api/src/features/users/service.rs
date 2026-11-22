@@ -1087,7 +1087,7 @@ mod tests {
 
     #[test]
     fn username_rules() {
-        assert_eq!(normalize_username("  Monke_99 ").unwrap(), "monke_99");
+        assert_eq!(normalize_username("  Adept_99 ").unwrap(), "adept_99");
         assert!(normalize_username("ab").is_err());
         assert!(normalize_username("has space").is_err());
         assert!(normalize_username("émoji").is_err());

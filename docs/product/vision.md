@@ -2,7 +2,7 @@
 
 ## What
 
-An open source alternative to Discord, built in Rust.
+Adept is an open source voice, chat, and screen-sharing app for gamers and coaches, built in Rust.
 
 ## Why people switch
 
