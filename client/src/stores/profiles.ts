@@ -17,6 +17,9 @@ export interface Profile {
   bannerHash: string | null;
   accentColor: string | null;
   pronouns: string | null;
+  nameColor: string | null;
+  statusEmoji: string | null;
+  links: string[];
 }
 
 export function fromJson(u: JsonUser): Profile {
@@ -30,6 +33,9 @@ export function fromJson(u: JsonUser): Profile {
     bannerHash: u.banner_hash ?? null,
     accentColor: u.accent_color ?? null,
     pronouns: u.pronouns ?? null,
+    nameColor: u.name_color ?? null,
+    statusEmoji: u.status_emoji ?? null,
+    links: u.links ?? [],
   };
 }
 
@@ -44,6 +50,9 @@ export function fromProto(u: ProtoUser): Profile {
     bannerHash: u.bannerHash || null,
     accentColor: u.accentColor || null,
     pronouns: u.pronouns || null,
+    nameColor: u.nameColor || null,
+    statusEmoji: u.statusEmoji || null,
+    links: [...u.links],
   };
 }
 
@@ -92,6 +101,9 @@ export const useProfiles = create<ProfilesStore>()((set, get) => ({
           banner_hash: p.bannerHash,
           accent_color: p.accentColor,
           pronouns: p.pronouns,
+          name_color: p.nameColor,
+          status_emoji: p.statusEmoji,
+          links: p.links,
         });
       }
     });
@@ -108,7 +120,11 @@ function same(a: Profile | undefined, b: Profile): boolean {
     a.avatarHash === b.avatarHash &&
     a.bannerHash === b.bannerHash &&
     a.accentColor === b.accentColor &&
-    a.pronouns === b.pronouns
+    a.pronouns === b.pronouns &&
+    a.nameColor === b.nameColor &&
+    a.statusEmoji === b.statusEmoji &&
+    a.links.length === b.links.length &&
+    a.links.every((link, i) => link === b.links[i])
   );
 }
 
@@ -139,6 +155,9 @@ function patchSnapshots(u: ProtoUser) {
     banner_hash: u.bannerHash || null,
     accent_color: u.accentColor || null,
     pronouns: u.pronouns || null,
+    name_color: u.nameColor || null,
+    status_emoji: u.statusEmoji || null,
+    links: [...u.links],
   };
   const patch = (rows: typeof list.friends) =>
     rows.map((f) => (f.user.id === id ? { ...f, user: json } : f));

@@ -13,6 +13,9 @@ pub struct ProfileUpdate<'a> {
     pub custom_status: Option<Option<&'a str>>,
     pub pronouns: Option<Option<&'a str>>,
     pub accent_color: Option<Option<i32>>,
+    pub name_color: Option<Option<i32>>,
+    pub status_emoji: Option<Option<&'a str>>,
+    pub links: Option<&'a [String]>,
 }
 
 #[async_trait]
@@ -159,7 +162,10 @@ impl UserRepo for PgUserRepo {
                bio = CASE WHEN $4 THEN $5 ELSE bio END, \
                custom_status = CASE WHEN $6 THEN $7 ELSE custom_status END, \
                pronouns = CASE WHEN $8 THEN $9 ELSE pronouns END, \
-               accent_color = CASE WHEN $10 THEN $11 ELSE accent_color END \
+               accent_color = CASE WHEN $10 THEN $11 ELSE accent_color END, \
+               name_color = CASE WHEN $12 THEN $13 ELSE name_color END, \
+               status_emoji = CASE WHEN $14 THEN $15 ELSE status_emoji END, \
+               links = CASE WHEN $16 THEN $17 ELSE links END \
              WHERE id = $1 RETURNING *",
         )
         .bind(id)
@@ -173,6 +179,12 @@ impl UserRepo for PgUserRepo {
         .bind(u.pronouns.flatten())
         .bind(u.accent_color.is_some())
         .bind(u.accent_color.flatten())
+        .bind(u.name_color.is_some())
+        .bind(u.name_color.flatten())
+        .bind(u.status_emoji.is_some())
+        .bind(u.status_emoji.flatten())
+        .bind(u.links.is_some())
+        .bind(u.links.unwrap_or_default())
         .fetch_optional(&self.pool)
         .await?)
     }

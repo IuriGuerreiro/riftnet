@@ -4,13 +4,15 @@ use rand::{RngCore, rngs::OsRng};
 use std::sync::Arc;
 
 use super::models::{
-    ChannelWrite, CreatedServer, JoinOutcome, LeaveOutcome, Server, ServerMember, ServerMembership,
+    ChannelWrite, CreatedServer, JoinOutcome, LeaveOutcome, NicknameChange, Server, ServerMember,
+    ServerMembership,
 };
 use super::repository::ServerRepo;
 use crate::common::error::{ApiError, RepoError};
 use crate::common::events::EventBus;
+use crate::features::users::service::{MAX_DISPLAY_NAME_CHARS, clean_text};
 use protocol::Message as _;
-use protocol::v1::{Envelope, ServerRemoved, envelope::Payload};
+use protocol::v1::{Envelope, ServerMemberUpdated, ServerRemoved, envelope::Payload};
 
 const DEFAULT_CHANNEL_NAME: &str = "general";
 
@@ -151,6 +153,47 @@ impl ServerService {
             LeaveOutcome::NotFound => return Err(ApiError::NotFound),
         }
         Ok(())
+    }
+    pub async fn set_nickname(
+        &self,
+        user_id: i64,
+        server_id: i64,
+        raw: &str,
+    ) -> Result<NicknameChange, ApiError> {
+        let nickname = clean_text(raw, MAX_DISPLAY_NAME_CHARS, false, "invalid_nickname")?;
+        let change = self
+            .repo
+            .set_nickname(server_id, user_id, nickname.as_deref())
+            .await?
+            .ok_or(ApiError::NotFound)?;
+        self.notify_member_updated(server_id, user_id, &change)
+            .await;
+        Ok(change)
+    }
+    async fn notify_member_updated(&self, server_id: i64, user_id: i64, change: &NicknameChange) {
+        let members = match self.repo.member_ids(server_id).await {
+            Ok(members) => members,
+            Err(error) => {
+                tracing::warn!(%error, server.id = server_id, "nickname push skipped");
+                return;
+            }
+        };
+        let envelope = Envelope {
+            id: 0,
+            payload: Some(Payload::ServerMemberUpdated(ServerMemberUpdated {
+                server_id: server_id as u64,
+                user_id: user_id as u64,
+                nickname: change.nickname.clone().unwrap_or_default(),
+                name: change.name.clone(),
+            })),
+        };
+        if let Err(error) = self
+            .events
+            .publish_to_users(&members, envelope.encode_to_vec().into())
+            .await
+        {
+            tracing::warn!(%error, server.id = server_id, "nickname push failed");
+        }
     }
     async fn notify_removed(&self, user_id: i64, server_id: i64) {
         let envelope = Envelope {

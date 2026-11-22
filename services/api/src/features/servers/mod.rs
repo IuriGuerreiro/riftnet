@@ -8,7 +8,7 @@ pub mod service;
 use crate::app::AppState;
 use axum::{
     Router,
-    routing::{get, patch, post},
+    routing::{get, patch, post, put},
 };
 
 pub fn routes() -> Router<AppState> {
@@ -29,6 +29,10 @@ pub fn routes() -> Router<AppState> {
         .route(
             "/servers/{server_id}/members",
             get(controller::list_members),
+        )
+        .route(
+            "/servers/{server_id}/members/me/nickname",
+            put(controller::set_nickname),
         )
         .route(
             "/servers/{server_id}/bans/{user_id}",

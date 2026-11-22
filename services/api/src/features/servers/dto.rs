@@ -80,7 +80,28 @@ pub struct MembersQuery {
 pub struct MemberDto {
     pub id: String,
     pub name: String,
+    pub nickname: Option<String>,
     pub is_owner: bool,
+}
+
+#[derive(Deserialize)]
+pub struct NicknameBody {
+    pub nickname: String,
+}
+
+#[derive(Serialize)]
+pub struct NicknameDto {
+    pub nickname: Option<String>,
+    pub name: String,
+}
+
+impl From<super::models::NicknameChange> for NicknameDto {
+    fn from(change: super::models::NicknameChange) -> Self {
+        Self {
+            nickname: change.nickname,
+            name: change.name,
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -105,6 +126,7 @@ impl From<Vec<super::models::ServerMember>> for MembersPage {
                 .map(|row| MemberDto {
                     id: row.id.to_string(),
                     name: row.name,
+                    nickname: row.nickname,
                     is_owner: row.is_owner,
                 })
                 .collect(),

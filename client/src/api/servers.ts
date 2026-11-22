@@ -51,8 +51,14 @@ export async function renameChannel(serverId: string, channelId: string, name: s
   );
 }
 
+const serverMember = namedResource.extend({
+  is_owner: z.boolean(),
+  nickname: z.string().nullable().optional(),
+});
+export type ServerMember = z.infer<typeof serverMember>;
+
 const membersPage = z.object({
-  members: z.array(namedResource.extend({ is_owner: z.boolean() })),
+  members: z.array(serverMember),
   next_after_id: z.string().nullable(),
 });
 
@@ -77,5 +83,16 @@ export function unbanServerMember(serverId: string, userId: string) {
 export async function listServerBans(serverId: string, afterId: string) {
   return membersPage.parse(
     await http<unknown>(`/servers/${serverId}/bans?after_id=${encodeURIComponent(afterId)}`),
+  );
+}
+
+const nicknameResult = z.object({ nickname: z.string().nullable(), name: z.string() });
+
+export async function setServerNickname(serverId: string, nickname: string) {
+  return nicknameResult.parse(
+    await http<unknown>(`/servers/${serverId}/members/me/nickname`, {
+      method: "PUT",
+      body: { nickname },
+    }),
   );
 }

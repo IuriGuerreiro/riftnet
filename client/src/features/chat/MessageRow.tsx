@@ -5,6 +5,7 @@ import { Avatar } from "../../components/Avatar";
 import { Markdown } from "../../components/Markdown";
 import { ConfirmDialog } from "../../components/ui";
 import { cn } from "../../components/ui/cn";
+import { readableNameColor } from "../../lib/color";
 import { formatClock, formatStamp } from "../../lib/time";
 import { type ChatMessage, useChat } from "../../stores/chat";
 import { useConnection } from "../../stores/connection";
@@ -34,7 +35,8 @@ export function MessageRow({
   const ws = useConnection((s) => s.ws);
   const { edit, remove, setReplyingTo } = useChat();
   const nameFor = useNameFor();
-  const hasProfile = useProfiles((s) => !!s.byId[m.authorId.toString()]);
+  const author = useProfiles((s) => s.byId[m.authorId.toString()]);
+  const hasProfile = !!author;
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const live = !m.pending && m.id !== 0n && !!ws;
@@ -93,6 +95,7 @@ export function MessageRow({
                 "font-semibold hover:underline",
                 hasProfile ? "text-fg" : "text-fg-muted",
               )}
+              style={{ color: readableNameColor(author?.nameColor) }}
             >
               {nameFor(m.authorId)}
             </ProfileTrigger>

@@ -13,6 +13,8 @@ import {
   listServerBans,
   renameChannel,
   revokeServerInvite,
+  type ServerMember,
+  setServerNickname,
   unbanServerMember,
 } from "../../api/servers";
 import { Avatar } from "../../components/Avatar";
@@ -30,6 +32,10 @@ function NameDialog({
   error,
   onSubmit,
   onClose,
+  allowEmpty = false,
+  placeholder,
+  hint,
+  maxLength,
 }: {
   title: string;
   label: string;
@@ -39,9 +45,14 @@ function NameDialog({
   error: unknown;
   onSubmit: (name: string) => void;
   onClose: () => void;
+  allowEmpty?: boolean;
+  placeholder?: string;
+  hint?: string;
+  maxLength?: number;
 }) {
   const [value, setValue] = useState(initial);
   const formId = useId();
+  const canSubmit = !pending && (allowEmpty || !!value.trim());
   return (
     <Modal
       open
@@ -52,7 +63,7 @@ function NameDialog({
           <Button variant="ghost" onClick={onClose} disabled={pending}>
             Cancel
           </Button>
-          <Button type="submit" form={formId} disabled={pending || !value.trim()}>
+          <Button type="submit" form={formId} disabled={!canSubmit}>
             {pending ? "Saving…" : submitLabel}
           </Button>
         </>
@@ -63,7 +74,7 @@ function NameDialog({
         className="space-y-3"
         onSubmit={(event) => {
           event.preventDefault();
-          if (value.trim() && !pending) onSubmit(value.trim());
+          if (canSubmit) onSubmit(value.trim());
         }}
       >
         <Input
@@ -71,6 +82,9 @@ function NameDialog({
           label={label}
           value={value}
           disabled={pending}
+          placeholder={placeholder}
+          hint={hint}
+          maxLength={maxLength}
           onChange={(event) => setValue(event.target.value)}
         />
         <ErrorText error={error} />
@@ -207,9 +221,7 @@ export function InviteDialog({ serverId, onClose }: { serverId: string; onClose:
         </>
       ) : (
         <>
-          <p className="text-sm text-fg-muted">
-            Make a link that lets friends join this server.
-          </p>
+          <p className="text-sm text-fg-muted">Make a link that lets friends join this server.</p>
           <Button
             disabled={invite.isPending}
             onClick={() => {
@@ -262,6 +274,48 @@ function ActionDialog({
       <p className="text-sm text-fg-muted">{children}</p>
       <ErrorText error={error} />
     </Modal>
+  );
+}
+
+export function NicknameDialog({
+  serverId,
+  onUnavailable,
+  onClose,
+}: {
+  serverId: string;
+  onUnavailable: () => void;
+  onClose: () => void;
+}) {
+  const userId = useAuth((state) => state.user?.id);
+  const queryClient = useQueryClient();
+  const pages = queryClient.getQueryData<{ pages: { members: ServerMember[] }[] }>([
+    "server-members",
+    userId,
+    serverId,
+  ]);
+  const current = pages?.pages.flatMap((p) => p.members).find((m) => m.id === userId)?.nickname;
+  const save = useMutation({
+    mutationFn: (nickname: string) => setServerNickname(serverId, nickname),
+    onSuccess: onClose,
+    onError: (error) => {
+      if (isServerUnavailable(error)) onUnavailable();
+    },
+  });
+  return (
+    <NameDialog
+      title="Change nickname"
+      label="Nickname in this server"
+      initial={current ?? ""}
+      placeholder="Leave empty to use your display name"
+      hint="Only shown in this server"
+      maxLength={32}
+      allowEmpty
+      submitLabel="Save"
+      pending={save.isPending}
+      error={save.error}
+      onSubmit={(nickname) => save.mutate(nickname)}
+      onClose={onClose}
+    />
   );
 }
 

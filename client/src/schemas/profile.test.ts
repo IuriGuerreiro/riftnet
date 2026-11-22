@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { avatarFileProblem, MAX_AVATAR_BYTES, profileSchema } from "./profile";
+import { avatarFileProblem, linkLabel, MAX_AVATAR_BYTES, profileSchema } from "./profile";
 
 describe("profileSchema", () => {
   it("trims and accepts normal text", () => {
@@ -57,5 +57,40 @@ describe("pronouns and accent color", () => {
     for (const pronouns of ["p".repeat(41), "a\nb"]) {
       expect(profileSchema.safeParse({ ...base, pronouns }).success).toBe(false);
     }
+  });
+});
+
+describe("name color, emoji and links", () => {
+  const base = { display_name: "", bio: "" };
+  it("accepts good values", () => {
+    const r = profileSchema.parse({
+      ...base,
+      name_color: "#FF8800",
+      status_emoji: " 🎮 ",
+      links: [{ url: " https://github.com/ana " }],
+    });
+    expect(r.name_color).toBe("#ff8800");
+    expect(r.status_emoji).toBe("🎮");
+    expect(r.links).toEqual([{ url: "https://github.com/ana" }]);
+  });
+  it("rejects bad links and too many", () => {
+    for (const url of ["http://a.com", "javascript:alert(1)", "a.com", "https://u:p@a.com"]) {
+      expect(profileSchema.safeParse({ ...base, links: [{ url }] }).success).toBe(false);
+    }
+    const six = Array.from({ length: 6 }, () => ({ url: "https://a.com" }));
+    expect(profileSchema.safeParse({ ...base, links: six }).success).toBe(false);
+  });
+  it("labels links by domain", () => {
+    expect(linkLabel("https://www.github.com/ana")).toBe("github.com");
+  });
+});
+
+describe("link length after normalization", () => {
+  it("rejects links that grow past the limit once encoded", () => {
+    const url = `https://example.com/${"é".repeat(40)}`;
+    expect(url.length).toBeLessThanOrEqual(200);
+    expect(profileSchema.safeParse({ display_name: "", bio: "", links: [{ url }] }).success).toBe(
+      false,
+    );
   });
 });

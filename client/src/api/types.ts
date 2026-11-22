@@ -9,6 +9,9 @@ export interface User {
   banner_hash?: string | null;
   accent_color?: string | null;
   pronouns?: string | null;
+  name_color?: string | null;
+  status_emoji?: string | null;
+  links?: string[];
 }
 
 export interface Session {

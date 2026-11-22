@@ -4,6 +4,8 @@ import { z } from "zod";
 export const MAX_DISPLAY_NAME = 32;
 export const MAX_BIO = 190;
 export const MAX_PRONOUNS = 40;
+export const MAX_LINKS = 5;
+export const MAX_LINK = 200;
 export const MAX_AVATAR_BYTES = 8 * 1024 * 1024;
 export const AVATAR_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
 
@@ -11,6 +13,36 @@ export const AVATAR_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif
 const controlChars = /[\u0000-\u001f\u007f-\u009f]/;
 // eslint-disable-next-line no-control-regex
 const controlNoNewline = /[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/;
+
+const color = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .regex(/^(#[0-9a-f]{6})?$/, "Use a #rrggbb color")
+  .optional();
+
+export function isHttpsUrl(text: string): boolean {
+  try {
+    const url = new URL(text);
+    return (
+      url.protocol === "https:" &&
+      !!url.hostname &&
+      !url.username &&
+      !url.password &&
+      url.href.length <= MAX_LINK
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function linkLabel(link: string): string {
+  try {
+    return new URL(link).hostname.replace(/^www\./, "");
+  } catch {
+    return link;
+  }
+}
 
 export const profileSchema = z.object({
   display_name: z
@@ -35,11 +67,20 @@ export const profileSchema = z.object({
     .max(MAX_PRONOUNS, `Must be ${MAX_PRONOUNS} characters or fewer`)
     .refine((s) => !controlChars.test(s), "Cannot contain control characters")
     .optional(),
-  accent_color: z
-    .string()
-    .trim()
-    .toLowerCase()
-    .regex(/^(#[0-9a-f]{6})?$/, "Use a #rrggbb color")
+  accent_color: color,
+  name_color: color,
+  status_emoji: z.string().trim().max(16, "Pick a single emoji").optional(),
+  links: z
+    .array(
+      z.object({
+        url: z
+          .string()
+          .trim()
+          .max(MAX_LINK, `Must be ${MAX_LINK} characters or fewer`)
+          .refine(isHttpsUrl, "Use a full https:// link"),
+      }),
+    )
+    .max(MAX_LINKS, `Up to ${MAX_LINKS} links`)
     .optional(),
 });
 export type ProfileForm = z.infer<typeof profileSchema>;

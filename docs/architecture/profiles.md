@@ -13,12 +13,15 @@ Backend: `services/api/src/features/users/`. Contract: `proto/v1/users.proto`.
 | `banner_hash`  | Same as `avatar_hash`, for the profile banner.               |
 | `accent_color` | `"#rrggbb"` (stored as an integer). Tints the card. `""` clears it. |
 | `pronouns`     | Up to 40 chars after trim, no control chars. `""` clears it. |
+| `name_color` | `"#rrggbb"`. Color of your name in chat and on the card. Clients lighten it if it's too dark to read. `""` clears it. |
+| `status_emoji` | One emoji (one grapheme, up to 16 chars) shown before the custom status. `""` clears it. |
+| `links` | Up to 5 `https://` links, 200 chars each. No user:password. Normalized and de-duplicated. `[]` clears them. |
 
 ## Endpoints
 
 | Method + path                              | What                                                 |
 | ------------------------------------------ | ---------------------------------------------------- |
-| `PATCH /me`                                | `{ display_name?, bio?, custom_status?, pronouns?, accent_color? }`. Missing = keep, `""` = clear. One atomic update |
+| `PATCH /me`                                | `{ display_name?, bio?, custom_status?, pronouns?, accent_color?, name_color?, status_emoji?, links? }`. Missing = keep, `""` = clear. One atomic update |
 | `PUT /me/avatar`                           | Raw image body, max 8 MB                             |
 | `DELETE /me/avatar`                        | Remove the avatar                                    |
 | `PUT /me/banner`                           | Raw image body, max 8 MB                             |
@@ -74,3 +77,19 @@ server members) are loaded with `GET /users/{id}`.
 Edit profile shows the same card as a live preview of unsaved changes.
 
 Presence controls and private notification preferences are described in [user settings](user-settings.md).
+
+## Per-server nicknames
+
+`server_members.nickname`: 1–32 chars, same rules as `display_name`. Null = none.
+
+| Method + path                                  | What                                                       |
+| ---------------------------------------------- | ---------------------------------------------------------- |
+| `PUT /servers/{id}/members/me/nickname`        | `{ nickname }`. `""` clears it. Returns `{ nickname, name }`. 20 per minute |
+
+In a server, a member's name is: nickname, else display name, else username.
+The member list and channel message `author_name` use that name.
+`ServerMemberUpdated` (`server_id`, `user_id`, `nickname`, `name`) is pushed to
+every member of the server when a nickname changes. Clients keep the latest
+names per server and use them over the `author_name` stored in older messages.
+The profile card opened from a server shows the server name first and the
+display name under it.

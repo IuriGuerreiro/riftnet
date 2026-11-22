@@ -126,6 +126,8 @@ dependencies = [
  "tokio-tungstenite",
  "tower-http",
  "tracing",
+ "unicode-segmentation",
+ "url",
 ]
 
 [[package]]

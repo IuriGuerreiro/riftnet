@@ -41,7 +41,8 @@ impl ChannelMessageService {
         req: v1::GetChannelHistory,
     ) -> Result<v1::ChannelHistory, ApiError> {
         let channel_id = i64::try_from(req.channel_id).map_err(|_| ApiError::NotFound)?;
-        self.servers
+        let server_id = self
+            .servers
             .member_server(user_id, channel_id)
             .await?
             .ok_or(ApiError::NotFound)?;
@@ -75,7 +76,7 @@ impl ChannelMessageService {
             .iter()
             .map(|message| message.author_id)
             .collect::<Vec<_>>();
-        let names = self.servers.author_names(&authors).await?;
+        let names = self.servers.author_names(server_id, &authors).await?;
         Ok(v1::ChannelHistory {
             next_before_id,
             messages: rows
@@ -110,7 +111,7 @@ impl ChannelMessageService {
             ));
         }
 
-        let names = self.servers.author_names(&[user_id]).await?;
+        let names = self.servers.author_names(server_id, &[user_id]).await?;
         let (id, first) = self
             .repo
             .claim_nonce(channel_id, user_id, &req.nonce, self.ids.next_id() as i64)

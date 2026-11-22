@@ -18,6 +18,9 @@ message User {
   // "#rrggbb", lowercase; empty = not set.
   string accent_color = 8;
   string pronouns = 9; // empty = not set
+  string name_color = 10; // "#rrggbb"; empty = default
+  string status_emoji = 11; // one emoji shown before custom_status; empty = none
+  repeated string links = 12; // up to 5 https:// links
 }
 
 // Pushed to the user, their friends and their DM/group members

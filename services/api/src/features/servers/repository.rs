@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use sqlx::PgPool;
 
 use super::models::{
-    ChannelWrite, JoinOutcome, LeaveOutcome, Server, ServerMember, ServerMembership,
+    ChannelWrite, JoinOutcome, LeaveOutcome, NicknameChange, Server, ServerMember, ServerMembership,
 };
 use crate::common::error::RepoError;
 
@@ -53,7 +53,17 @@ pub trait ServerRepo: Send + Sync {
     ) -> Result<Option<Vec<ServerMember>>, RepoError>;
 
     async fn member_ids(&self, server_id: i64) -> Result<Vec<i64>, RepoError>;
-    async fn author_names(&self, ids: &[i64]) -> Result<HashMap<i64, String>, RepoError>;
+    async fn author_names(
+        &self,
+        server_id: i64,
+        ids: &[i64],
+    ) -> Result<HashMap<i64, String>, RepoError>;
+    async fn set_nickname(
+        &self,
+        server_id: i64,
+        user_id: i64,
+        nickname: Option<&str>,
+    ) -> Result<Option<NicknameChange>, RepoError>;
     async fn member_server(&self, user_id: i64, channel_id: i64) -> Result<Option<i64>, RepoError>;
     async fn create(
         &self,
@@ -162,7 +172,7 @@ impl ServerRepo for PgServerRepo {
         }
         let rows = sqlx::query_as(
             "SELECT u.id, COALESCE(NULLIF(u.display_name, ''), u.username, 'Unknown user') AS name,
-             false AS is_owner FROM server_bans b JOIN users u ON u.id = b.user_id
+             NULL::text AS nickname, false AS is_owner FROM server_bans b JOIN users u ON u.id = b.user_id
              WHERE b.server_id = $1 AND b.user_id > $2 ORDER BY b.user_id LIMIT 101",
         )
         .bind(server_id)
@@ -269,8 +279,9 @@ impl ServerRepo for PgServerRepo {
             return Ok(None);
         }
         let rows = sqlx::query_as(
-            "SELECT u.id, COALESCE(NULLIF(u.display_name, ''), u.username, 'Unknown user') AS name,
-             m.role = 'owner' AS is_owner
+            "SELECT u.id,
+             COALESCE(m.nickname, NULLIF(u.display_name, ''), u.username, 'Unknown user') AS name,
+             m.nickname, m.role = 'owner' AS is_owner
              FROM server_members m JOIN users u ON u.id = m.user_id
              WHERE m.server_id = $1 AND m.user_id > $2 ORDER BY m.user_id LIMIT 101",
         )
@@ -453,17 +464,43 @@ impl ServerRepo for PgServerRepo {
         .fetch_optional(&self.pool)
         .await?)
     }
-    async fn author_names(&self, ids: &[i64]) -> Result<HashMap<i64, String>, RepoError> {
+    async fn author_names(
+        &self,
+        server_id: i64,
+        ids: &[i64],
+    ) -> Result<HashMap<i64, String>, RepoError> {
         if ids.is_empty() {
             return Ok(HashMap::new());
         }
         let names = sqlx::query_as(
-            "SELECT id, COALESCE(display_name, username, 'Unknown user') FROM users WHERE id = ANY($1)",
+            "SELECT u.id, COALESCE(m.nickname, NULLIF(u.display_name, ''), u.username, 'Unknown user')
+             FROM users u LEFT JOIN server_members m ON m.user_id = u.id AND m.server_id = $1
+             WHERE u.id = ANY($2)",
         )
+        .bind(server_id)
         .bind(ids)
         .fetch_all(&self.pool)
         .await?;
         Ok(names.into_iter().collect())
+    }
+    async fn set_nickname(
+        &self,
+        server_id: i64,
+        user_id: i64,
+        nickname: Option<&str>,
+    ) -> Result<Option<NicknameChange>, RepoError> {
+        let row: Option<(Option<String>, String)> = sqlx::query_as(
+            "UPDATE server_members m SET nickname = $3 FROM users u
+             WHERE m.server_id = $1 AND m.user_id = $2 AND u.id = m.user_id
+             RETURNING m.nickname,
+             COALESCE(m.nickname, NULLIF(u.display_name, ''), u.username, 'Unknown user')",
+        )
+        .bind(server_id)
+        .bind(user_id)
+        .bind(nickname)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(|(nickname, name)| NicknameChange { nickname, name }))
     }
     async fn member_ids(&self, server_id: i64) -> Result<Vec<i64>, RepoError> {
         Ok(

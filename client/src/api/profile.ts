@@ -13,6 +13,9 @@ export interface ProfileUpdate {
   custom_status?: string;
   pronouns?: string;
   accent_color?: string;
+  name_color?: string;
+  status_emoji?: string;
+  links?: string[];
 }
 
 function saveMe(me: User) {

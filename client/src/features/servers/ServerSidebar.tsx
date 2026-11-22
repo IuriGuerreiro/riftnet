@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { Ban, ChevronDown, Hash, LogOut, Plus, Settings, UserPlus } from "lucide-react";
+import { Ban, ChevronDown, Hash, LogOut, Plus, Settings, UserPen, UserPlus } from "lucide-react";
 import { useState } from "react";
 
 import { forgetServer } from "../../api/server-access";
@@ -12,6 +12,7 @@ import {
   ChannelDialog,
   InviteDialog,
   LeaveServerDialog,
+  NicknameDialog,
 } from "./ServerDialogs";
 import { type ServerChannel, useMyServers, useServerChannels } from "./useMyServers";
 
@@ -19,6 +20,7 @@ type Dialog =
   | { kind: "invite" }
   | { kind: "bans" }
   | { kind: "leave" }
+  | { kind: "nickname" }
   | { kind: "channel"; channel?: ServerChannel };
 
 export function ServerSidebar({
@@ -40,6 +42,11 @@ export function ServerSidebar({
   const close = () => setDialog(null);
 
   const items: MenuItem[] = [
+    {
+      label: "Change nickname",
+      icon: <UserPen size={16} />,
+      onSelect: () => setDialog({ kind: "nickname" }),
+    },
     ...(owner
       ? [
           {
@@ -81,10 +88,7 @@ export function ServerSidebar({
             className="flex h-12 w-full shrink-0 items-center gap-2 border-b border-surface-0 px-4 text-left font-semibold text-fg shadow-sm transition-colors hover:bg-surface-3"
           >
             <span className="flex-1 truncate">{server?.name ?? "Server"}</span>
-            <ChevronDown
-              size={18}
-              className={cn("transition-transform", open && "rotate-180")}
-            />
+            <ChevronDown size={18} className={cn("transition-transform", open && "rotate-180")} />
           </button>
         )}
         items={items}
@@ -167,6 +171,13 @@ export function ServerSidebar({
       {dialog?.kind === "leave" && server && (
         <LeaveServerDialog
           server={server}
+          onUnavailable={() => forgetServer(queryClient, userId, serverId)}
+          onClose={close}
+        />
+      )}
+      {dialog?.kind === "nickname" && (
+        <NicknameDialog
+          serverId={serverId}
           onUnavailable={() => forgetServer(queryClient, userId, serverId)}
           onClose={close}
         />

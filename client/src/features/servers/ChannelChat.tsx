@@ -9,9 +9,12 @@ import { Markdown } from "../../components/Markdown";
 import { Button, ErrorText, IconButton } from "../../components/ui";
 import { cn } from "../../components/ui/cn";
 import type { ChannelMessage } from "../../gen/v1/messages_pb";
+import { readableNameColor } from "../../lib/color";
 import { formatClock, formatDay, formatStamp } from "../../lib/time";
 import { useAuth } from "../../stores/auth";
 import { useConnection } from "../../stores/connection";
+import { useProfile } from "../../stores/profiles";
+import { useAuthorName } from "../../stores/serverNames";
 import { groupMessages } from "../chat/groupMessages";
 import { ProfileTrigger } from "../profile/ProfileTrigger";
 
@@ -166,13 +169,7 @@ export function ChannelChat({
                     <div className="w-10 shrink-0">
                       {header ? (
                         <span className="mt-0.5 block">
-                          <ProfileTrigger
-                            userId={message.authorId}
-                            label={message.authorName}
-                            className="rounded-full"
-                          >
-                            <Avatar userId={message.authorId} size="md" />
-                          </ProfileTrigger>
+                          <AuthorAvatar serverId={serverId} message={message} />
                         </span>
                       ) : (
                         <time
@@ -187,15 +184,11 @@ export function ChannelChat({
                     <div className="min-w-0 flex-1">
                       {header && (
                         <p className="flex items-baseline gap-2">
-                          <ProfileTrigger
-                            userId={message.authorId}
-                            className={cn(
-                              "font-medium hover:underline",
-                              message.authorId.toString() === userId ? "text-brand" : "text-fg",
-                            )}
-                          >
-                            {message.authorName}
-                          </ProfileTrigger>
+                          <AuthorName
+                            serverId={serverId}
+                            message={message}
+                            mine={message.authorId.toString() === userId}
+                          />
                           <time dateTime={time.toISOString()} className="text-xs text-fg-subtle">
                             {formatStamp(time)}
                           </time>
@@ -266,4 +259,36 @@ export function ChannelChat({
 
 function newNonce() {
   return crypto.getRandomValues(new Uint32Array(4)).join("-");
+}
+
+function AuthorAvatar({ serverId, message }: { serverId: string; message: ChannelMessage }) {
+  const name = useAuthorName(serverId, message);
+  return (
+    <ProfileTrigger userId={message.authorId} label={name} nickname={name} className="rounded-full">
+      <Avatar userId={message.authorId} size="md" />
+    </ProfileTrigger>
+  );
+}
+
+function AuthorName({
+  serverId,
+  message,
+  mine,
+}: {
+  serverId: string;
+  message: ChannelMessage;
+  mine: boolean;
+}) {
+  const name = useAuthorName(serverId, message);
+  const profile = useProfile(message.authorId);
+  return (
+    <ProfileTrigger
+      userId={message.authorId}
+      nickname={name}
+      className={cn("font-medium hover:underline", mine ? "text-brand" : "text-fg")}
+      style={{ color: readableNameColor(profile?.nameColor) }}
+    >
+      {name}
+    </ProfileTrigger>
+  );
 }

@@ -65,6 +65,9 @@ pub async fn update_me(
         custom_status: req.custom_status,
         pronouns: req.pronouns,
         accent_color: req.accent_color,
+        name_color: req.name_color,
+        status_emoji: req.status_emoji,
+        links: req.links,
     };
     Ok(Json(
         state
