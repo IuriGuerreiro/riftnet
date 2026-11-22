@@ -9,7 +9,6 @@ use crate::common::error::RepoError;
 pub trait AttachmentRepo: Send + Sync {
     async fn insert(&self, a: &Attachment) -> Result<(), RepoError>;
     async fn get(&self, id: i64) -> Result<Option<Attachment>, RepoError>;
-    /// Saves a verified chunk. Re-sending the same chunk overwrites it (retries).
     async fn put_chunk(
         &self,
         id: i64,
@@ -17,11 +16,7 @@ pub trait AttachmentRepo: Send + Sync {
         blake3: &[u8],
         etag: &str,
     ) -> Result<(), RepoError>;
-    /// 'uploading' -> 'ready'. False if it wasn't uploading any more.
     async fn mark_ready(&self, id: i64) -> Result<bool, RepoError>;
-    /// Ties the files to `message_id`, all or none. Each must be the uploader's,
-    /// in the conversation, ready, unexpired, and not on another message
-    /// (the same message again is fine: send retries). None if any fails.
     async fn claim(
         &self,
         ids: &[i64],
@@ -29,24 +24,18 @@ pub trait AttachmentRepo: Send + Sync {
         conversation_id: i64,
         message_id: i64,
     ) -> Result<Option<Vec<Attachment>>, RepoError>;
-    /// Marks the message's files expired; the next cleanup deletes them.
     async fn expire_for_message(
         &self,
         message_id: i64,
         uploader_id: i64,
         conversation_id: i64,
     ) -> Result<(), RepoError>;
-    /// Expired files, files created before `stale_before` that were never
-    /// sent, and rows a previous cleanup run didn't finish.
-    /// `mark_deleting` confirms each one before anything is removed.
     async fn find_dead(
         &self,
         now: DateTime<Utc>,
         stale_before: DateTime<Utc>,
         limit: i64,
     ) -> Result<Vec<Attachment>, RepoError>;
-    /// Flips the row to 'deleting' if it's still dead. False if it was
-    /// claimed for a message in the meantime: leave it alone.
     async fn mark_deleting(
         &self,
         id: i64,
@@ -213,8 +202,6 @@ impl AttachmentRepo for PgAttachmentRepo {
         now: DateTime<Utc>,
         stale_before: DateTime<Utc>,
     ) -> Result<bool, RepoError> {
-        // Row lock: a concurrent claim() either lands first (then this matches
-        // nothing) or waits and then fails its status = 'ready' check.
         let done = sqlx::query(
             "UPDATE attachments SET status = 'deleting' WHERE id = $1 AND ( \
                status = 'deleting' OR expires_at <= $2 \

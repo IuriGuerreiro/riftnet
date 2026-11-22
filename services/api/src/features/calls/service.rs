@@ -258,7 +258,6 @@ impl CallService {
         Ok(call)
     }
 
-    /// Share Play: request / grant / deny / revoke control of a sharer's screen.
     #[tracing::instrument(name = "calls.control", skip_all, fields(user.id = me, call.id = call_id, ?action))]
     pub async fn control(
         &self,
@@ -295,7 +294,6 @@ impl CallService {
         }
     }
 
-    /// The SFU dropped a peer or broke an input route on its own.
     pub async fn media_notice(&self, notice: MediaNotice) {
         match notice {
             MediaNotice::PeerGone { peer_id } => {
@@ -307,7 +305,6 @@ impl CallService {
             }
             MediaNotice::RouteFailed { room_id, grant_id } => {
                 tracing::warn!(call.id = room_id, grant_id, "share play input route failed");
-                // Only the grant that failed: a newer grant stays.
                 let clear = move |c: &mut Call| {
                     if c.control
                         .is_some_and(|k| k.granted && k.grant_id == grant_id)
@@ -953,8 +950,6 @@ mod tests {
         assert_eq!(pushes(&events, BOB).last().unwrap(), "ended");
     }
 
-    // Peers are handed out in join order: Alice = 1, Bob = 2, Eve = 3.
-    // Connection ids: Alice 10, Bob 20, Eve 30.
     async fn share_play_call() -> (Arc<CallService>, Arc<FakeMedia>, i64) {
         let (svc, _, media) = setup_with_members(vec![ALICE, BOB, EVE]);
         let call = svc.start(ALICE, DM).await.unwrap();
@@ -978,7 +973,6 @@ mod tests {
             .unwrap()
     }
 
-    /// Grant naming the request currently pending (0 if none).
     async fn grant(svc: &CallService, id: i64) -> ControlAction {
         let request_id = svc
             .store
@@ -1069,13 +1063,11 @@ mod tests {
         assert_eq!(call.control, None);
         assert_eq!(last_route(&media), None, "SFU route cleared");
 
-        // A stale grant from before the disconnect can't come back.
         let err = svc
             .control(ALICE, 10, id, grant(&svc, id).await)
             .await
             .unwrap_err();
         assert_eq!(err.describe().1, "control_not_allowed");
-        // Bob rejoins and asks again: a new grant gets a new id.
         svc.join(BOB, 21, 21, id, "offer".into()).await.unwrap();
         svc.control(BOB, 21, id, ControlAction::Request { host_id: ALICE })
             .await

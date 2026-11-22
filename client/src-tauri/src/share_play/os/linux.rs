@@ -14,7 +14,6 @@ impl HostMouse {
     pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
         let (connection, _) = x11rb::connect(None)?;
         let version = connection.xinput_xi_query_version(2, 1)?.reply()?;
-        // XI 2.1 delivers raw events even while another client has a grab.
         if (version.major_version, version.minor_version) < (2, 1) {
             return Err("Share Play needs XInput 2.1".into());
         }

@@ -5,8 +5,6 @@ use super::repository::FriendRepo;
 use crate::common::error::ApiError;
 use crate::features::conversations::repository::ConversationRepo;
 
-/// Who sees a user's live updates (presence, profile): accepted friends and
-/// everyone they share a conversation with. Never includes the user.
 pub async fn audience(
     friends: &dyn FriendRepo,
     conversations: &dyn ConversationRepo,

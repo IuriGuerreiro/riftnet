@@ -5,7 +5,6 @@ use super::image::ProfileImage;
 use super::models::User;
 use crate::common::error::RepoError;
 
-/// Outer None = leave the field alone; Some(None) = clear it.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ProfileUpdate<'a> {
     pub display_name: Option<Option<&'a str>>,
@@ -33,7 +32,6 @@ pub trait UserRepo: Send + Sync {
     ) -> Result<Vec<User>, RepoError>;
     async fn create(&self, id: i64, zitadel_id: &str) -> Result<User, RepoError>;
     async fn set_username(&self, id: i64, username: &str) -> Result<Option<User>, RepoError>;
-    /// One statement, so two partial updates never undo each other.
     async fn set_profile(
         &self,
         id: i64,
@@ -196,7 +194,6 @@ impl UserRepo for PgUserRepo {
             ),
         };
         let mut tx = self.pool.begin().await?;
-        // Row lock: two uploads at once each see the hash they really replaced.
         let old: Option<(Option<Vec<u8>>,)> = sqlx::query_as(select)
             .bind(id)
             .fetch_optional(&mut *tx)

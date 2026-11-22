@@ -1,9 +1,3 @@
-//! Synthetic call against a running media server: joins N str0m peers to one room
-//! over NATS, sends fake Opus frames every 20 ms, then leaves.
-//!
-//! cargo run -p media --example fake_call -- [peers=2] [seconds=10] [room=random]
-//! Env: NATS_URL (default nats://127.0.0.1:4222).
-
 use std::net::UdpSocket;
 use std::time::{Duration, Instant};
 

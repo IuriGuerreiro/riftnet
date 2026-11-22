@@ -12,7 +12,6 @@ use crate::features::messages::models::ReactionRow;
 
 #[async_trait]
 pub trait ReactionRepo: Send + Sync {
-    /// false = already there.
     async fn add(
         &self,
         conversation_id: i64,
@@ -20,7 +19,6 @@ pub trait ReactionRepo: Send + Sync {
         emoji: &str,
         user_id: i64,
     ) -> Result<bool, RepoError>;
-    /// false = wasn't there.
     async fn remove(
         &self,
         conversation_id: i64,
@@ -110,7 +108,6 @@ impl ReactionRepo for ScyllaReactionRepo {
             return Ok(Vec::new());
         }
         let mut out = Vec::new();
-        // Keep each IN list small: every id is its own partition.
         for chunk in message_ids.chunks(50) {
             let rows = self
                 .session

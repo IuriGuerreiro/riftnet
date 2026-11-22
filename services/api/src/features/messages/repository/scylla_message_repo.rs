@@ -102,8 +102,6 @@ pub(super) fn to_message(
     }
 }
 
-/// Each attachment as an encoded app.v1.Attachment (see 005_message_attachments.cql).
-/// None for no attachments, so Scylla stores nothing.
 pub(super) fn attachment_blobs(m: &Message) -> Option<Vec<Vec<u8>>> {
     (!m.attachments.is_empty()).then(|| {
         m.attachments

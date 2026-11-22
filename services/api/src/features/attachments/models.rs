@@ -1,7 +1,5 @@
 use chrono::{DateTime, Utc};
 
-/// Every chunk except the last is exactly this big. 8 MiB: above S3's 5 MiB
-/// minimum part size, small enough to retry cheaply.
 pub const CHUNK_SIZE: i64 = 8 * 1024 * 1024;
 pub const MAX_FILENAME_CHARS: usize = 255;
 pub const MAX_CONTENT_TYPE_LEN: usize = 127;
@@ -10,7 +8,6 @@ pub const MAX_CONTENT_TYPE_LEN: usize = 127;
 pub enum Status {
     Uploading,
     Ready,
-    /// Picked by cleanup; bytes being removed. Never comes back.
     Deleting,
 }
 
@@ -52,7 +49,6 @@ impl Attachment {
         self.status == Status::Ready.as_str()
     }
 
-    /// Expected byte length of chunk `idx`.
     pub fn chunk_len(&self, idx: i32) -> i64 {
         let start = idx as i64 * self.chunk_size as i64;
         (self.size - start).min(self.chunk_size as i64)

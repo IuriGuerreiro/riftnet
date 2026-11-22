@@ -52,7 +52,6 @@ impl ChannelMessageService {
                     .map_err(|_| ApiError::bad_request("bad_cursor", "Invalid message cursor"))?,
             ),
         };
-        // A future cursor must not turn into a scan through future Scylla buckets.
         if before_id.is_some_and(|id| {
             timestamp_ms(id as u64) > chrono::Utc::now().timestamp_millis() as u64 + 60_000
         }) {
