@@ -12,11 +12,12 @@ import { MessageList } from "./MessageList";
 import { TypingIndicator } from "./TypingIndicator";
 
 export function ChatPane() {
-  const { ws, user: me } = useConnection();
-  const chat = useChat();
+  const ws = useConnection((state) => state.ws);
+  const me = useConnection((state) => state.user);
+  const selected = useChat((state) => state.conversations.find((c) => c.id === state.selected));
+  const error = useChat((state) => state.error);
   const membersOpen = useUi((s) => s.membersOpen);
   const nameFor = useNameFor();
-  const selected = chat.conversations.find((c) => c.id === chat.selected);
 
   if (!selected) {
     return (
@@ -35,12 +36,12 @@ export function ChatPane() {
     <div className="flex min-w-0 flex-1 bg-surface-2">
       <section className="flex min-w-0 flex-1 flex-col">
         <ChatHeader conversation={selected} />
-        {chat.error && (
+        {error && (
           <div
             role="alert"
             className="flex items-center gap-2 bg-danger/15 px-4 py-2 text-sm text-danger"
           >
-            <span className="flex-1">{chat.error}</span>
+            <span className="flex-1">{error}</span>
           </div>
         )}
         <MessageList
@@ -53,7 +54,7 @@ export function ChatPane() {
           placeholder={placeholder}
           disabled={!ws}
           onType={() => ws && useTyping.getState().typed(ws, selected.id)}
-          onSend={(text, ids) => ws && me && chat.send(ws, me.id, text, ids)}
+          onSend={(text, ids) => ws && me && useChat.getState().send(ws, me.id, text, ids)}
         />
         <TypingIndicator conversation={selected} />
       </section>
