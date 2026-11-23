@@ -74,6 +74,7 @@ export function ChatView({
   onToggleMembers,
   lane = "full",
   panelInDm = false,
+  aside,
   headerLeading,
   className,
 }: {
@@ -82,6 +83,7 @@ export function ChatView({
   onToggleMembers?: () => void;
   lane?: "full" | "center" | "left";
   panelInDm?: boolean;
+  aside?: ReactNode;
   headerLeading?: ReactNode;
   className?: string;
 }) {
@@ -177,24 +179,29 @@ export function ChatView({
           </HeaderButton>
         </div>
       </header>
-      <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto">
-        <div className={cn("flex min-h-full flex-col justify-end", laneClass)}>
-          <MessageList messages={messages} unread={c.unread} />
+      <div className="flex min-h-0 flex-1">
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto">
+            <div className={cn("flex min-h-full flex-col justify-end", laneClass)}>
+              <MessageList messages={messages} unread={c.unread} />
+            </div>
+          </div>
+          <div className={laneClass}>
+            <Composer
+              placeholder={placeholder}
+              typing={typing}
+              staged={staged}
+              onAddFiles={addFiles}
+              onRemoveStaged={(id) => setStaged((s) => s.filter((x) => x.id !== id))}
+              onSendGif={(g) => post("", [g])}
+              onSend={(text) => {
+                post(text, staged.length ? staged.map((x) => x.att) : undefined);
+                setStaged([]);
+              }}
+            />
+          </div>
         </div>
-      </div>
-      <div className={laneClass}>
-        <Composer
-          placeholder={placeholder}
-          typing={typing}
-          staged={staged}
-          onAddFiles={addFiles}
-          onRemoveStaged={(id) => setStaged((s) => s.filter((x) => x.id !== id))}
-          onSendGif={(g) => post("", [g])}
-          onSend={(text) => {
-            post(text, staged.length ? staged.map((x) => x.att) : undefined);
-            setStaged([]);
-          }}
-        />
+        {aside}
       </div>
     </section>
   );

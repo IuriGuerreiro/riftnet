@@ -15,7 +15,7 @@ const COMPLETE = /:([a-z0-9_+-]+):$/i;
 
 function TypingLine({ name }: { name?: string }) {
   return (
-    <p className="mt-1.5 h-4 px-1 text-[11px] text-muted-foreground">
+    <p className="flex h-6 items-center px-1 text-xs text-muted-foreground">
       {name && (
         <span className="inline-flex items-center gap-1.5">
           <span className="flex gap-0.5">
@@ -28,7 +28,7 @@ function TypingLine({ name }: { name?: string }) {
             ))}
           </span>
           <span>
-            <b className="font-semibold text-foreground/80">{name}</b> is typing…
+            <b className="font-semibold text-foreground/85">{name}</b> is typing…
           </span>
         </span>
       )}
@@ -150,6 +150,7 @@ export function Composer({
         </div>
       )}
 
+      <TypingLine name={typing} />
       <div className="overflow-hidden rounded-xl border border-border bg-surface-2 transition-colors focus-within:border-brand/50">
         <StagedTray items={staged} onRemove={onRemoveStaged} />
         <div className="flex items-end gap-1 p-1.5">
@@ -273,7 +274,6 @@ export function Composer({
           </button>
         </div>
       </div>
-      <TypingLine name={typing} />
     </div>
   );
 }

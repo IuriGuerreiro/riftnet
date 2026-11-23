@@ -636,24 +636,26 @@ export function AdeptLayout() {
               setPreview(null);
               setPanelOpen((v) => !v);
             }}
+            aside={
+              previewRoom ? (
+                <RoomPreview
+                  room={previewRoom}
+                  joined={joined === previewRoom.channelId}
+                  onJoin={() => join(previewRoom.channelId)}
+                  onClose={() => setPreview(null)}
+                />
+              ) : panelOpen ? (
+                c.kind === "dm" ? (
+                  <ProfilePanel id={c.members[0] ?? ""} />
+                ) : (
+                  <PeoplePanel
+                    ids={c.kind === "group" ? [ME, ...c.members] : c.members}
+                    server={chatServer}
+                  />
+                )
+              ) : null
+            }
           />
-          {previewRoom ? (
-            <RoomPreview
-              room={previewRoom}
-              joined={joined === previewRoom.channelId}
-              onJoin={() => join(previewRoom.channelId)}
-              onClose={() => setPreview(null)}
-            />
-          ) : panelOpen ? (
-            c.kind === "dm" ? (
-              <ProfilePanel id={c.members[0] ?? ""} />
-            ) : (
-              <PeoplePanel
-                ids={c.kind === "group" ? [ME, ...c.members] : c.members}
-                server={chatServer}
-              />
-            )
-          ) : null}
         </main>
       </div>
 
