@@ -1,9 +1,9 @@
-# 🐒 Discord 2.0
+# Adept
 
-Open source Discord alternative. Rust backend, Tauri + React client.
+Open source voice, chat, and screen-sharing app for gamers and coaches. Rust backend, Tauri + React client.
 Screen share at 60fps in source quality, a light app, no file size limits.
 
-> Name not final. See the [project idea](docs/product/README.md), [feature map](docs/features/README.md), and [documentation index](docs/README.md).
+> See the [project idea](docs/product/README.md), [feature map](docs/features/README.md), and [documentation index](docs/README.md).
 
 ## Layout
 
@@ -102,7 +102,7 @@ The UI picks the Tailscale api URL automatically when opened via `*.ts.net`.
 
 ## Verify a feature
 
-Choose a journey from the [feature map](docs/features/README.md). Use the [verification skill](.agents/skills/verify-discord/SKILL.md) for the isolated auth check and evidence instructions.
+Choose a journey from the [feature map](docs/features/README.md). Use the [verification skill](.agents/skills/verify-adept/SKILL.md) for the isolated auth check and evidence instructions.
 
 ## Checks (same as CI)
 

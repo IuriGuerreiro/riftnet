@@ -1,9 +1,9 @@
 ---
-name: verify-discord
-description: Drive Discord2.0 against a local test stack, starting with the auth API smoke. Use the feature map for web journeys and expected results.
+name: verify-adept
+description: Drive Adept against a local test stack, starting with the auth API smoke. Use the feature map for web journeys and expected results.
 ---
 
-# Verify Discord2.0
+# Verify Adept
 
 Use the [feature map](../../../docs/features/README.md) to select the journey that matches the change. Use the [project idea](../../../docs/product/README.md) for goals and planned work.
 
@@ -13,12 +13,12 @@ From the repository root, build the API and run the auth helper:
 
 ```sh
 cargo build --locked -p api
-.agents/skills/verify-discord/auth-smoke.sh
+.agents/skills/verify-adept/auth-smoke.sh
 ```
 
 Optional command arguments run after the auth smoke, from the repository root with
 `API_HTTP` set to the verification API. For example, run
-`VERIFY_RATE_LIMITS=off .agents/skills/verify-discord/auth-smoke.sh pnpm --filter mock smoke:activity`.
+`VERIFY_RATE_LIMITS=off .agents/skills/verify-adept/auth-smoke.sh pnpm --filter mock smoke:activity`.
 Disable rate limits only when provisioning extra fixture accounts would exceed the
 auth smoke's signup quota. The default remains on.
 

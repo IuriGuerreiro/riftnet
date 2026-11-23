@@ -1,7 +1,8 @@
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { MessageCircle, Plus, Users } from "lucide-react";
+import { Plus, Users } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
+import { AdeptMark } from "../../components/AdeptLogo";
 import { Tooltip } from "../../components/ui";
 import { cn } from "../../components/ui/cn";
 import { readWorkspaceSearch } from "../../schemas/workspace";
@@ -81,7 +82,8 @@ export function ServerRail({ onCreateGroup }: { onCreateGroup: () => void }) {
             : "bg-surface-2 text-fg-muted group-hover:bg-brand group-hover:text-on-brand"
         }
       >
-        <MessageCircle size={26} />
+        <AdeptMark tone={home ? "mono" : "brand"} className="size-7 group-hover:hidden" />
+        <AdeptMark tone="mono" className="hidden size-7 group-hover:block" />
       </RailItem>
       <span className="h-0.5 w-8 shrink-0 rounded bg-surface-3" />
 

@@ -1,6 +1,6 @@
 # Local dev dependencies. Start: docker compose -f infra/docker-compose.yml up -d
 # Host ports are moved off the defaults to avoid clashing with other local services.
-name: discord2
+name: adept
 
 services:
   postgres:

@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "discord2",
+  "productName": "Adept",
   "version": "0.1.0",
-  "identifier": "app.discord2.desktop",
+  "identifier": "gg.adept.desktop",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:7104",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Discord 2.0",
+        "title": "Adept",
         "width": 800,
         "height": 600,
         "resizable": true,

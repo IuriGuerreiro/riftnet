@@ -4,8 +4,8 @@ Two machines:
 
 | Machine | Runs | Compose project |
 |---|---|---|
-| **Server** (main box, at home) | web, api, zitadel, postgres, scylla, redis, nats, minio, cloudflared | `discord2-prod` |
-| **VPS** | media (voice/video SFU) | `discord2-media` |
+| **Server** (main box, at home) | web, api, zitadel, postgres, scylla, redis, nats, minio, cloudflared | `adept-prod` |
+| **VPS** | media (voice/video SFU) | `adept-media` |
 
 - The server opens **no public ports**. Cloudflare Tunnel is the only way in.
 - The VPS opens **one public UDP port** for voice/video, because Cloudflare
@@ -96,16 +96,16 @@ Needs Docker + Compose, and the public IP on its own network interface
 **On the server** (building on the VPS is very slow, so build here):
 ```sh
 docker compose -f infra/prod/media/compose.yml --env-file infra/prod/media/.env build
-docker save discord2-media-media:latest | gzip > ~/discord2-media-image.tar.gz
-tar czf ~/discord2-media.tar.gz infra/prod/media     # first time: compose + .env
-scp ~/discord2-media.tar.gz ~/discord2-media-image.tar.gz root@<vps>:/opt/
+docker save adept-media-media:latest | gzip > ~/adept-media-image.tar.gz
+tar czf ~/adept-media.tar.gz infra/prod/media     # first time: compose + .env
+scp ~/adept-media.tar.gz ~/adept-media-image.tar.gz root@<vps>:/opt/
 ```
 
 **On the VPS**:
 ```sh
-mkdir -p /opt/discord2 && cd /opt/discord2
-tar xzf ../discord2-media.tar.gz                     # first time / config change
-gunzip -c ../discord2-media-image.tar.gz | docker load
+mkdir -p /opt/adept && cd /opt/adept
+tar xzf ../adept-media.tar.gz                     # first time / config change
+gunzip -c ../adept-media-image.tar.gz | docker load
 docker compose -f infra/prod/media/compose.yml --env-file infra/prod/media/.env up -d --force-recreate
 docker compose -f infra/prod/media/compose.yml logs --tail 20
 ```
@@ -121,8 +121,8 @@ The Release app workflow builds a Windows x64 installer and a Linux x64 AppImage
 ### Set up release signing
 
 1. Create a public distribution repository if anyone with the app may download the builds. Give a fine-grained GitHub token `Contents: Read and write` access to that repository.
-2. Run `pnpm --filter client tauri signer generate --write-keys /secure/path/discord2.key`. Back up the private key and password. Installed apps use the matching public key to verify future updates.
-3. In the source repository, set Actions variables `DESKTOP_RELEASE_REPO` to the distribution repository's `owner/name` and `TAURI_UPDATER_PUBLIC_KEY` to the contents of `discord2.key.pub`. The workflow also uses `PROD_API_HTTP` and `PROD_API_WS`.
+2. Run `pnpm --filter client tauri signer generate --write-keys /secure/path/adept.key`. Back up the private key and password. Installed apps use the matching public key to verify future updates.
+3. In the source repository, set Actions variables `DESKTOP_RELEASE_REPO` to the distribution repository's `owner/name` and `TAURI_UPDATER_PUBLIC_KEY` to the contents of `adept.key.pub`. The workflow also uses `PROD_API_HTTP` and `PROD_API_WS`.
 4. Set `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, and `DESKTOP_RELEASE_TOKEN` as secrets in the `desktop-release` Actions environment. Set the environment's deployment branches to the refs authorized to sign builds.
 
 ### Build and publish

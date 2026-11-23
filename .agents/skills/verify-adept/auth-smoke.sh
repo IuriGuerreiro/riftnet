@@ -8,15 +8,15 @@ if [[ ! -x "$api_binary" ]]; then
   exit 1
 fi
 
-exec 9>"${XDG_RUNTIME_DIR:-/tmp}/discord-verify-$UID.lock"
+exec 9>"${XDG_RUNTIME_DIR:-/tmp}/adept-verify-$UID.lock"
 if ! flock -n 9 || [[ -n "$(ss -H -ltn 'sport = :17100')" ]]; then
   echo "The verification stack is already running or API port 17100 is in use"
   exit 1
 fi
 
-evidence=$(mktemp -d "${TMPDIR:-/tmp}/discord-verification.XXXXXXXX")
+evidence=$(mktemp -d "${TMPDIR:-/tmp}/adept-verification.XXXXXXXX")
 scratch=$(mktemp -d)
-project="discord-verify-${scratch##*.}"
+project="adept-verify-${scratch##*.}"
 project=${project,,}
 compose=(docker compose -p "$project" -f "$scratch/docker-compose.yml")
 api_pid=
