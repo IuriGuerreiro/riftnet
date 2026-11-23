@@ -13,6 +13,12 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
+            #[cfg(any(windows, target_os = "linux"))]
+            if app.config().plugins.0.contains_key("updater") {
+                app.handle()
+                    .plugin(tauri_plugin_updater::Builder::new().build())?;
+                app.handle().plugin(tauri_plugin_process::init())?;
+            }
             app.manage(voice_shortcut::VoiceShortcut::default());
             app.manage(share_play::SharePlay::start(app.handle().clone()));
             if cfg!(debug_assertions) {

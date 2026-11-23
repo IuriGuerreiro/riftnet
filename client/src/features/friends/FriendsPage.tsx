@@ -134,7 +134,8 @@ export function FriendsPage() {
                 f={f}
                 label={name(f)}
                 sub={
-                  (profiles[f.user.id]?.customStatus ?? f.user.custom_status) ??
+                  profiles[f.user.id]?.customStatus ??
+                  f.user.custom_status ??
                   (isOnline(f) ? "Online" : "Offline")
                 }
                 activity={activityText(activities[f.user.id])}

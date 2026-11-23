@@ -207,9 +207,7 @@ export function InviteDialog({ serverId, onClose }: { serverId: string; onClose:
         </>
       ) : (
         <>
-          <p className="text-sm text-fg-muted">
-            Make a link that lets friends join this server.
-          </p>
+          <p className="text-sm text-fg-muted">Make a link that lets friends join this server.</p>
           <Button
             disabled={invite.isPending}
             onClick={() => {

@@ -25,6 +25,8 @@ tauri-plugin-global-shortcut = "2"
 # Share Play: remote input on the host (Windows + X11 only, see issue #56).
 [target.'cfg(any(windows, target_os = "linux"))'.dependencies]
 enigo = { version = "0.6", default-features = false, features = ["x11rb"] }
+tauri-plugin-process = "2.4.0"
+tauri-plugin-updater = "2.14.1"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 x11rb = { version = "0.13", features = ["xinput"] }
