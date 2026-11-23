@@ -1,11 +1,14 @@
-import { AtSign, Hash, Phone, Search, Users, Video } from "lucide-react";
+import { AtSign, Hash, Phone, Search, Upload, Users, Video } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import { Avatar, AvatarStack } from "@/components/Avatar";
 import { EmojiText } from "@/features/emoji/EmojiText";
+import { type Staged } from "@/features/media/StagedTray";
+import { toAttachment } from "@/features/media/toAttachment";
 import { activityText } from "@/features/shell/activityText";
 import { cn } from "@/lib/utils";
 import {
+  type Attachment,
   type Conversation,
   conversation,
   ME,
@@ -84,6 +87,8 @@ export function ChatView({
 }) {
   const c = conversation(conversationId);
   const [sent, setSent] = useState<Message[]>([]);
+  const [staged, setStaged] = useState<Staged[]>([]);
+  const [dragging, setDragging] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
   const messages = [...messagesFor(c), ...sent];
 
@@ -93,11 +98,48 @@ export function ChatView({
 
   const typing = c.id === "dm-maya" ? "Maya" : c.id === "owls-general" ? "Tom" : undefined;
   const placeholder = c.kind === "channel" ? `Message #${c.title}` : `Message ${c.title}`;
+  const post = (text: string, attachments?: Attachment[]) =>
+    setSent((s) => [...s, { id: `s${s.length}`, author: ME, text, time: "now", attachments }]);
+  const addFiles = (files: File[]) => {
+    void Promise.all(files.map(toAttachment)).then((atts) =>
+      setStaged((s) => [...s, ...atts.map((att, i) => ({ id: `${Date.now()}-${i}`, att }))]),
+    );
+  };
   const laneClass =
     lane === "center" ? "mx-auto w-full max-w-3xl" : lane === "left" ? "w-full max-w-[820px]" : "";
 
   return (
-    <section className={cn("flex min-w-0 flex-1 flex-col bg-background", className)}>
+    <section
+      className={cn("relative flex min-w-0 flex-1 flex-col bg-background", className)}
+      onDragEnter={(e) => {
+        if (e.dataTransfer.types.includes("Files")) setDragging(true);
+      }}
+      onDragOver={(e) => {
+        if (e.dataTransfer.types.includes("Files")) e.preventDefault();
+      }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false);
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragging(false);
+        const files = Array.from(e.dataTransfer.files);
+        if (files.length) addFiles(files);
+      }}
+    >
+      {dragging && (
+        <div className="animate-in fade-in pointer-events-none absolute inset-3 z-30 grid place-items-center rounded-2xl border-2 border-dashed border-brand bg-background/85 backdrop-blur-sm duration-150">
+          <div className="flex flex-col items-center gap-3 text-center">
+            <span className="grid size-14 place-items-center rounded-2xl bg-brand/15 text-brand">
+              <Upload className="size-7" />
+            </span>
+            <p className="text-lg font-semibold">Drop to upload</p>
+            <p className="text-sm text-muted-foreground">
+              Images, videos, GIFs and files go to <EmojiText text={c.title} size={14} />
+            </p>
+          </div>
+        </div>
+      )}
       <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border px-4">
         {headerLeading}
         <ConversationIcon c={c} size={28} />
@@ -144,9 +186,14 @@ export function ChatView({
         <Composer
           placeholder={placeholder}
           typing={typing}
-          onSend={(text) =>
-            setSent((s) => [...s, { id: `s${s.length}`, author: ME, text, time: "now" }])
-          }
+          staged={staged}
+          onAddFiles={addFiles}
+          onRemoveStaged={(id) => setStaged((s) => s.filter((x) => x.id !== id))}
+          onSendGif={(g) => post("", [g])}
+          onSend={(text) => {
+            post(text, staged.length ? staged.map((x) => x.att) : undefined);
+            setStaged([]);
+          }}
         />
       </div>
     </section>

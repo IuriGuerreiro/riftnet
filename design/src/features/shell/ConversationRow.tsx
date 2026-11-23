@@ -19,13 +19,17 @@ export function ConversationAvatar({ c, size = 40 }: { c: Conversation; size?: n
     );
   }
   if (c.kind === "group") {
+    const a = Math.round(size * 0.68);
+    const center = size - a / 2;
+    const cut = a / 2 + 2;
+    const mask = `radial-gradient(circle at ${center}px ${center}px, transparent ${cut}px, #000 ${cut + 0.5}px)`;
     return (
       <span className="relative shrink-0" style={{ width: size, height: size }}>
-        <span className="absolute top-0 left-0">
-          <Avatar id={c.members[0] ?? ""} size={size * 0.68} />
+        <span className="absolute top-0 left-0" style={{ maskImage: mask, WebkitMaskImage: mask }}>
+          <Avatar id={c.members[0] ?? ""} size={a} />
         </span>
-        <span className="absolute right-0 bottom-0 rounded-full ring-2 ring-surface-1">
-          <Avatar id={c.members[1] ?? ""} size={size * 0.68} />
+        <span className="absolute right-0 bottom-0">
+          <Avatar id={c.members[1] ?? ""} size={a} />
         </span>
       </span>
     );

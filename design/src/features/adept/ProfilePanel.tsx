@@ -6,6 +6,8 @@ import { SERVERS, user } from "@/mock/data";
 
 import { ACTIVITY_ICON } from "./ActivityLine";
 
+const SHARED = [1, 2, 3, 4, 5].map((n) => `/media/photo-${n}.jpg`).concat("/media/flower.gif");
+
 const STATUS_LABEL = { online: "Online", idle: "Idle", dnd: "Do not disturb", offline: "Offline" };
 
 export function ProfilePanel({ id }: { id: string }) {
@@ -108,13 +110,13 @@ export function ProfilePanel({ id }: { id: string }) {
           Shared media
         </p>
         <div className="grid grid-cols-3 gap-1.5">
-          {[0, 1, 2, 3, 4, 5].map((i) => (
-            <span
-              key={i}
-              className="aspect-square rounded-md border border-white/5"
-              style={{
-                background: `linear-gradient(${i * 60}deg, hsl(${u.hue + i * 30} 40% 28%), hsl(${u.hue + i * 30 + 60} 35% 16%))`,
-              }}
+          {SHARED.map((src) => (
+            <img
+              key={src}
+              src={src}
+              alt=""
+              loading="lazy"
+              className="aspect-square w-full rounded-md border border-white/5 object-cover transition-opacity hover:opacity-80"
             />
           ))}
         </div>

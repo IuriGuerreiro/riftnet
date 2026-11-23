@@ -1,4 +1,4 @@
-import { CornerUpLeft, Play, SmilePlus } from "lucide-react";
+import { CornerUpLeft, SmilePlus } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
 import { Avatar } from "@/components/Avatar";
@@ -6,6 +6,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Emoji } from "@/features/emoji/Emoji";
 import { EmojiPicker } from "@/features/emoji/EmojiPicker";
 import { EmojiText, isOnlyEmoji } from "@/features/emoji/EmojiText";
+import { Attachments } from "@/features/media/Attachments";
 import { cn } from "@/lib/utils";
 import { ME, type Message, type Reaction, user } from "@/mock/data";
 
@@ -47,7 +48,11 @@ function ReplyQuote({ target }: { target?: Message }) {
       <Avatar id={target.author} size={14} />
       <span className="font-medium text-foreground/80">{user(target.author).name}</span>
       <span className="truncate">
-        <EmojiText text={target.text} size={14} />
+        {target.text ? (
+          <EmojiText text={target.text} size={14} />
+        ) : (
+          <span className="italic">Attachment</span>
+        )}
       </span>
     </div>
   );
@@ -129,28 +134,12 @@ function MessageBody({ m, all }: { m: Message; all: Message[] }) {
       )}
     >
       {m.replyTo && <ReplyQuote target={all.find((x) => x.id === m.replyTo)} />}
-      <p className="text-[15px] leading-relaxed text-foreground/90">
-        <EmojiText text={m.text} size={jumbo ? 44 : 20} renderText={renderMentions} />
-      </p>
-      {m.image && (
-        <div
-          className="relative mt-2 grid max-w-md place-items-center overflow-hidden rounded-xl border border-white/5"
-          style={{
-            aspectRatio: m.image.ratio,
-            background:
-              "radial-gradient(circle at 30% 30%, hsl(262 50% 35%), transparent 60%), radial-gradient(circle at 75% 70%, hsl(200 50% 28%), transparent 55%), var(--surface-2)",
-          }}
-        >
-          {m.image.label.includes(".mp4") ? (
-            <span className="grid size-12 place-items-center rounded-full bg-black/40 backdrop-blur">
-              <Play className="size-5 fill-white text-white" />
-            </span>
-          ) : null}
-          <span className="absolute bottom-2 left-2 rounded-md bg-black/50 px-2 py-0.5 text-[11px] text-white/80 backdrop-blur">
-            {m.image.label}
-          </span>
-        </div>
+      {m.text && (
+        <p className="text-[15px] leading-relaxed text-foreground/90">
+          <EmojiText text={m.text} size={jumbo ? 44 : 20} renderText={renderMentions} />
+        </p>
       )}
+      {m.attachments && <Attachments items={m.attachments} author={m.author} time={m.time} />}
       {reactions.length > 0 && (
         <div className="mt-1.5 flex flex-wrap items-center gap-1">
           {reactions.map((r) => (

@@ -43,6 +43,22 @@ export interface Reaction {
   mine?: boolean;
 }
 
+export type Attachment =
+  | { kind: "image"; url: string; name: string; w: number; h: number; size: number }
+  | { kind: "gif"; url: string; name: string; w: number; h: number }
+  | { kind: "video"; url: string; name: string; w: number; h: number; size: number }
+  | { kind: "file"; url?: string; name: string; size: number };
+
+const media = (f: string) => `/media/${f}`;
+
+export const GIFS: Extract<Attachment, { kind: "gif" }>[] = [
+  { kind: "gif", url: media("adept-loop.gif"), name: "adept", w: 480, h: 480 },
+  { kind: "gif", url: media("flower.gif"), name: "bloom", w: 360, h: 203 },
+  { kind: "gif", url: media("friday.gif"), name: "friday", w: 300, h: 225 },
+  { kind: "gif", url: media("flower-2.gif"), name: "petals", w: 320, h: 180 },
+  { kind: "gif", url: media("friday-2.gif"), name: "weekend", w: 300, h: 225 },
+];
+
 export interface Message {
   id: string;
   author: string;
@@ -50,7 +66,7 @@ export interface Message {
   time: string;
   replyTo?: string;
   reactions?: Reaction[];
-  image?: { label: string; ratio: number };
+  attachments?: Attachment[];
 }
 
 export interface Conversation {
@@ -395,7 +411,16 @@ const SCRIPTS: Record<string, Message[]> = {
       author: "maya",
       text: "look at this though",
       time: "21:05",
-      image: { label: "clip_0412.mp4 · 0:24", ratio: 16 / 9 },
+      attachments: [
+        {
+          kind: "video",
+          url: media("flower.mp4"),
+          name: "clip_0412.mp4",
+          w: 960,
+          h: 540,
+          size: 276_705,
+        },
+      ],
     },
     {
       id: "m6",
@@ -406,6 +431,45 @@ const SCRIPTS: Record<string, Message[]> = {
       reactions: [
         { emoji: "🔥", count: 2, mine: true },
         { emoji: "👀", count: 1 },
+      ],
+    },
+    {
+      id: "m6b",
+      author: "maya",
+      text: "",
+      time: "21:07",
+      attachments: [{ kind: "gif", url: media("friday.gif"), name: "friday", w: 300, h: 225 }],
+    },
+    {
+      id: "m6c",
+      author: ME,
+      text: "screens from last night's run",
+      time: "21:07",
+      attachments: [
+        {
+          kind: "image",
+          url: media("photo-2.jpg"),
+          name: "run_01.jpg",
+          w: 1280,
+          h: 853,
+          size: 151_038,
+        },
+        {
+          kind: "image",
+          url: media("photo-3.jpg"),
+          name: "run_02.jpg",
+          w: 1280,
+          h: 853,
+          size: 278_754,
+        },
+        {
+          kind: "image",
+          url: media("photo-4.jpg"),
+          name: "run_03.jpg",
+          w: 1280,
+          h: 853,
+          size: 65_509,
+        },
       ],
     },
     { id: "m7", author: "maya", text: "ok one more game then I'm out 😅", time: "21:08" },
@@ -431,13 +495,94 @@ const SCRIPTS: Record<string, Message[]> = {
       author: "sam",
       text: "new lighting pass on the forge map, thoughts?",
       time: "21:06",
-      image: { label: "forge_lighting_v3.png", ratio: 16 / 10 },
+      attachments: [
+        {
+          kind: "image",
+          url: media("photo-1.jpg"),
+          name: "forge_lighting_v3.jpg",
+          w: 1280,
+          h: 853,
+          size: 210_296,
+        },
+      ],
       reactions: [
         { emoji: "🔥", count: 6 },
         { emoji: "✨", count: 2, mine: true },
       ],
     },
     { id: "g6", author: "maya", text: "the fog is so good", time: "21:07", replyTo: "g5" },
+    {
+      id: "g6b",
+      author: "kai",
+      text: "patch notes + the trailer cut",
+      time: "21:08",
+      attachments: [
+        { kind: "file", name: "patch-notes-v0.9.pdf", size: 1_482_112 },
+        {
+          kind: "video",
+          url: media("friday.mp4"),
+          name: "trailer_cut.mp4",
+          w: 960,
+          h: 540,
+          size: 647_077,
+        },
+      ],
+    },
+    {
+      id: "g6c",
+      author: "noor",
+      text: "",
+      time: "21:08",
+      attachments: [{ kind: "gif", url: media("adept-loop.gif"), name: "adept", w: 480, h: 480 }],
+    },
+    {
+      id: "g6d",
+      author: "lea",
+      text: "dump from the meetup",
+      time: "21:09",
+      attachments: [
+        {
+          kind: "image",
+          url: media("photo-5.jpg"),
+          name: "meetup_1.jpg",
+          w: 1280,
+          h: 853,
+          size: 156_304,
+        },
+        {
+          kind: "image",
+          url: media("photo-2.jpg"),
+          name: "meetup_2.jpg",
+          w: 1280,
+          h: 853,
+          size: 151_038,
+        },
+        {
+          kind: "image",
+          url: media("photo-3.jpg"),
+          name: "meetup_3.jpg",
+          w: 1280,
+          h: 853,
+          size: 278_754,
+        },
+        {
+          kind: "image",
+          url: media("photo-4.jpg"),
+          name: "meetup_4.jpg",
+          w: 1280,
+          h: 853,
+          size: 65_509,
+        },
+        {
+          kind: "image",
+          url: media("photo-1.jpg"),
+          name: "meetup_5.jpg",
+          w: 1280,
+          h: 853,
+          size: 210_296,
+        },
+      ],
+    },
     { id: "g7", author: "tom", text: "who's hopping on tonight?", time: "21:09" },
     { id: "g8", author: "tom", text: "@iuri you in?", time: "21:09" },
   ],
