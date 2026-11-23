@@ -3,6 +3,7 @@ packages:
   - site
   - tools/mock
   - tools/loadtest
+  - design
 
 allowBuilds:
   esbuild: true
