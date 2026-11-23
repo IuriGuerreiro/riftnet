@@ -8,7 +8,11 @@ import {
 
 import { DevSwitcher } from "@/components/DevSwitcher";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { AppPlaceholder } from "@/screens/AppPlaceholder";
+import { AdeptLayout } from "@/layouts/AdeptLayout";
+import { ClassicLayout } from "@/layouts/ClassicLayout";
+import { FocusLayout } from "@/layouts/FocusLayout";
+import { InboxLayout } from "@/layouts/InboxLayout";
+import { LiveLayout } from "@/layouts/LiveLayout";
 import { LoadingScreen } from "@/screens/LoadingScreen";
 import { readLoadingSearch } from "@/screens/loadingSearch";
 import { LoginScreen } from "@/screens/LoginScreen";
@@ -46,7 +50,16 @@ const routeTree = rootRoute.addChildren([
   createRoute({ getParentRoute: () => rootRoute, path: "/login", component: LoginScreen }),
   createRoute({ getParentRoute: () => rootRoute, path: "/register", component: RegisterScreen }),
   createRoute({ getParentRoute: () => rootRoute, path: "/username", component: UsernameScreen }),
-  createRoute({ getParentRoute: () => rootRoute, path: "/app", component: AppPlaceholder }),
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/app",
+    component: () => <Navigate to="/app/adept" replace />,
+  }),
+  createRoute({ getParentRoute: () => rootRoute, path: "/app/adept", component: AdeptLayout }),
+  createRoute({ getParentRoute: () => rootRoute, path: "/app/classic", component: ClassicLayout }),
+  createRoute({ getParentRoute: () => rootRoute, path: "/app/inbox", component: InboxLayout }),
+  createRoute({ getParentRoute: () => rootRoute, path: "/app/live", component: LiveLayout }),
+  createRoute({ getParentRoute: () => rootRoute, path: "/app/focus", component: FocusLayout }),
 ]);
 
 export const router = createRouter({ routeTree });

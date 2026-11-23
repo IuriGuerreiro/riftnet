@@ -11,14 +11,21 @@ const SCREENS = [
   { label: "Login", to: "/login", search: {} },
   { label: "Register", to: "/register", search: {} },
   { label: "Username", to: "/username", search: {} },
-  { label: "App", to: "/app", search: {} },
+] as const;
+
+const LAYOUTS = [
+  { label: "A · Classic", hint: "Discord-style", to: "/app/classic" },
+  { label: "B · Inbox", hint: "One unified list", to: "/app/inbox" },
+  { label: "C · Live", hint: "Voice & play first", to: "/app/live" },
+  { label: "D · Focus", hint: "Tabs + ⌘K", to: "/app/focus" },
+  { label: "E · Adept", hint: "Classic, evolved", to: "/app/adept" },
 ] as const;
 
 export function DevSwitcher() {
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="fixed right-4 bottom-4 z-50 flex flex-col items-end gap-2">
+    <div className="fixed top-1/2 right-3 z-50 flex -translate-y-1/2 flex-row-reverse items-center gap-2">
       {open && (
         <div className="animate-in fade-in slide-in-from-bottom-2 w-60 rounded-xl border border-border bg-popover p-2 shadow-2xl shadow-black/50 duration-200">
           <p className="px-2 pt-1 pb-2 text-[11px] font-semibold tracking-widest text-muted-foreground uppercase">
@@ -34,6 +41,21 @@ export function DevSwitcher() {
                 className="rounded-md px-2 py-1.5 text-sm text-foreground/80 hover:bg-accent hover:text-foreground data-[status=active]:bg-brand/15 data-[status=active]:text-brand"
               >
                 {s.label}
+              </Link>
+            ))}
+          </nav>
+          <p className="mt-2 border-t border-border px-2 pt-3 pb-2 text-[11px] font-semibold tracking-widest text-muted-foreground uppercase">
+            Main screen layouts
+          </p>
+          <nav className="grid">
+            {LAYOUTS.map((l) => (
+              <Link
+                key={l.to}
+                to={l.to}
+                className="flex items-baseline justify-between gap-2 rounded-md px-2 py-1.5 text-sm text-foreground/80 hover:bg-accent hover:text-foreground data-[status=active]:bg-brand/15 data-[status=active]:text-brand"
+              >
+                {l.label}
+                <span className="text-[11px] text-muted-foreground">{l.hint}</span>
               </Link>
             ))}
           </nav>
