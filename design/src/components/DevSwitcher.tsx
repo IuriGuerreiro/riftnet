@@ -2,6 +2,8 @@ import { Link } from "@tanstack/react-router";
 import { LayoutGrid, X } from "lucide-react";
 import { useState } from "react";
 
+import { EMOJI_SETS, setEmojiSet, useEmojiSet } from "@/features/emoji/sets";
+import { cn } from "@/lib/utils";
 import { MOCK_HINTS } from "@/mock/auth";
 
 const SCREENS = [
@@ -27,7 +29,7 @@ export function DevSwitcher() {
   return (
     <div className="fixed top-1/2 right-3 z-50 flex -translate-y-1/2 flex-row-reverse items-center gap-2">
       {open && (
-        <div className="animate-in fade-in slide-in-from-bottom-2 w-60 rounded-xl border border-border bg-popover p-2 shadow-2xl shadow-black/50 duration-200">
+        <div className="animate-in fade-in slide-in-from-bottom-2 max-h-[85vh] w-60 overflow-y-auto rounded-xl border border-border bg-popover p-2 shadow-2xl shadow-black/50 duration-200">
           <p className="px-2 pt-1 pb-2 text-[11px] font-semibold tracking-widest text-muted-foreground uppercase">
             Screens
           </p>
@@ -59,6 +61,7 @@ export function DevSwitcher() {
               </Link>
             ))}
           </nav>
+          <EmojiStylePicker />
           <div className="mt-2 border-t border-border px-2 pt-2 pb-1">
             <p className="pb-1 text-[11px] font-semibold tracking-widest text-muted-foreground uppercase">
               Mock triggers
@@ -80,6 +83,34 @@ export function DevSwitcher() {
       >
         {open ? <X className="size-4" /> : <LayoutGrid className="size-4" />}
       </button>
+    </div>
+  );
+}
+
+function EmojiStylePicker() {
+  const current = useEmojiSet();
+  return (
+    <div className="mt-2 border-t border-border px-2 pt-3 pb-1">
+      <p className="pb-2 text-[11px] font-semibold tracking-widest text-muted-foreground uppercase">
+        Emoji style
+      </p>
+      <div className="flex flex-wrap gap-1">
+        {EMOJI_SETS.map((s) => (
+          <button
+            key={s.id}
+            type="button"
+            onClick={() => setEmojiSet(s.id)}
+            className={cn(
+              "h-6 rounded-md px-2 text-[11px] font-medium transition-colors",
+              current === s.id
+                ? "bg-brand/20 text-brand"
+                : "bg-surface-3 text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

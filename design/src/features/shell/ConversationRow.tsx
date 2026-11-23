@@ -2,6 +2,7 @@ import { Hash } from "lucide-react";
 
 import { Avatar } from "@/components/Avatar";
 import { ServerIcon } from "@/components/ServerIcon";
+import { EmojiText } from "@/features/emoji/EmojiText";
 import { cn } from "@/lib/utils";
 import { type Conversation, server, user } from "@/mock/data";
 
@@ -67,7 +68,7 @@ export function ConversationRow({
             )}
           >
             {c.kind === "channel" && <span className="text-muted-foreground">#</span>}
-            {c.title}
+            <EmojiText text={c.title} size={15} />
             {srv && <span className="font-normal text-muted-foreground"> · {srv.name}</span>}
           </span>
           <span

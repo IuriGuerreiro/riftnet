@@ -2,6 +2,7 @@ import { AtSign, Hash, Phone, Search, Users, Video } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import { Avatar, AvatarStack } from "@/components/Avatar";
+import { EmojiText } from "@/features/emoji/EmojiText";
 import { activityText } from "@/features/shell/activityText";
 import { cn } from "@/lib/utils";
 import {
@@ -101,7 +102,9 @@ export function ChatView({
         {headerLeading}
         <ConversationIcon c={c} size={28} />
         <div className="min-w-0 flex-1">
-          <h2 className="truncate text-[15px] leading-tight font-semibold">{c.title}</h2>
+          <h2 className="truncate text-[15px] leading-tight font-semibold">
+            <EmojiText text={c.title} size={16} />
+          </h2>
           <p className="truncate text-xs text-muted-foreground">{chatSubtitle(c)}</p>
         </div>
         <div className="flex items-center gap-0.5">

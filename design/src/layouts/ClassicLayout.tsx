@@ -5,6 +5,7 @@ import { Avatar } from "@/components/Avatar";
 import { AdeptMark } from "@/components/brand/AdeptMark";
 import { ServerIcon } from "@/components/ServerIcon";
 import { ChatView } from "@/features/chat/ChatView";
+import { EmojiText } from "@/features/emoji/EmojiText";
 import { activityText } from "@/features/shell/activityText";
 import { MemberList } from "@/features/shell/MemberList";
 import { UserBar } from "@/features/shell/UserBar";
@@ -112,7 +113,7 @@ function HomeSidebar({ active, onOpen }: { active: string; onOpen: (id: string) 
                     c.unread > 0 ? "font-semibold text-foreground" : "font-medium",
                   )}
                 >
-                  {c.title}
+                  <EmojiText text={c.title} size={16} />
                 </span>
                 <span className="block truncate text-xs text-muted-foreground">
                   {c.kind === "group"

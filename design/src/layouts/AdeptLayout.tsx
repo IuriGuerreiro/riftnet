@@ -1,15 +1,4 @@
-import {
-  AtSign,
-  ChevronDown,
-  Compass,
-  Hash,
-  Inbox,
-  Pin,
-  Plus,
-  Radio,
-  Search,
-  Volume2,
-} from "lucide-react";
+import { ChevronDown, Compass, Hash, Inbox, Pin, Plus, Radio, Search, Volume2 } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 
 import { Avatar, AvatarStack } from "@/components/Avatar";
@@ -20,7 +9,9 @@ import { CallCard } from "@/features/adept/CallCard";
 import { PeoplePanel } from "@/features/adept/PeoplePanel";
 import { ProfilePanel } from "@/features/adept/ProfilePanel";
 import { RoomPreview } from "@/features/adept/RoomPreview";
+import { TopBarStatus } from "@/features/adept/TopBarStatus";
 import { ChatView } from "@/features/chat/ChatView";
+import { EmojiText } from "@/features/emoji/EmojiText";
 import { ConversationAvatar } from "@/features/shell/ConversationRow";
 import { JumpPalette } from "@/features/shell/JumpPalette";
 import { UserBar } from "@/features/shell/UserBar";
@@ -40,7 +31,6 @@ import {
 } from "@/mock/data";
 
 const DMS = CONVERSATIONS.filter((c) => c.kind !== "channel");
-const IN_VOICE = new Set(LIVE_ROOMS.flatMap((r) => r.people)).size;
 
 function mentionsIn(s: Server) {
   return s.channels.reduce((n, c) => n + (c.mentions ?? 0), 0);
@@ -196,7 +186,7 @@ function DmRow({ c, active, onClick }: { c: Conversation; active: boolean; onCli
             unread || active ? "font-semibold text-foreground" : "font-medium text-foreground/75",
           )}
         >
-          {c.title}
+          <EmojiText text={c.title} size={16} />
         </span>
         {c.kind === "group" ? (
           <span className="block truncate text-xs text-muted-foreground">
@@ -503,7 +493,6 @@ export function AdeptLayout() {
   const joinedRoom = LIVE_ROOMS.find((r) => r.channelId === joined);
   const previewRoom = LIVE_ROOMS.find((r) => r.channelId === preview);
   const dmMentions = DMS.reduce((n, x) => n + x.mentions, 0);
-  const totalMentions = dmMentions + SERVERS.reduce((n, x) => n + mentionsIn(x), 0);
 
   const openConversation = (id: string) => {
     const conv = conversation(id);
@@ -527,7 +516,7 @@ export function AdeptLayout() {
             {chatServer ? chatServer.name : "Home"}
             <span className="px-1.5 text-surface-4">/</span>
             <span className="font-medium text-foreground">
-              {c.kind === "channel" ? `# ${c.title}` : c.title}
+              <EmojiText text={c.kind === "channel" ? `# ${c.title}` : c.title} size={15} />
             </span>
           </span>
         </div>
@@ -540,32 +529,17 @@ export function AdeptLayout() {
           <span className="flex-1 text-left">Jump to a chat, channel or person</span>
           <kbd className="rounded bg-surface-3 px-1.5 text-[10px]">Ctrl K</kbd>
         </button>
-        <div className="flex items-center justify-end gap-1.5">
-          <button
-            type="button"
-            onClick={() => {
-              setPlace("home");
-              setTab("chats");
-            }}
-            className="flex h-7 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-success hover:bg-success/10"
-          >
-            <span className="size-1.5 rounded-full bg-success" />
-            {IN_VOICE} in voice
-          </button>
-          <button
-            type="button"
-            aria-label="Mentions"
-            title="Mentions"
-            className="relative grid size-7 place-items-center rounded-lg text-muted-foreground hover:bg-surface-2 hover:text-foreground"
-          >
-            <AtSign className="size-4" />
-            {totalMentions > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 grid h-3.5 min-w-3.5 place-items-center rounded-full bg-destructive px-0.5 text-[9px] font-bold text-white">
-                {totalMentions}
-              </span>
-            )}
-          </button>
-        </div>
+        <TopBarStatus
+          onOpen={openConversation}
+          onFriends={() => {
+            setPlace("home");
+            setTab("friends");
+          }}
+          onLive={() => {
+            setPlace("home");
+            setTab("chats");
+          }}
+        />
       </header>
 
       <div className="flex min-h-0 flex-1">

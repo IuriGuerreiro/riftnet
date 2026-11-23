@@ -1,8 +1,13 @@
 import { CornerUpLeft, Play, SmilePlus } from "lucide-react";
+import { type ReactNode, useState } from "react";
 
 import { Avatar } from "@/components/Avatar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Emoji } from "@/features/emoji/Emoji";
+import { EmojiPicker } from "@/features/emoji/EmojiPicker";
+import { EmojiText, isOnlyEmoji } from "@/features/emoji/EmojiText";
 import { cn } from "@/lib/utils";
-import { ME, type Message, user } from "@/mock/data";
+import { ME, type Message, type Reaction, user } from "@/mock/data";
 
 interface Group {
   author: string;
@@ -20,10 +25,10 @@ function group(messages: Message[]): Group[] {
   return out;
 }
 
-function renderText(text: string) {
-  return text.split(/(@\w+)/g).map((part, i) =>
+function renderMentions(chunk: string, key: string) {
+  return chunk.split(/(@\w+)/g).map((part, i) =>
     part.startsWith("@") ? (
-      <span key={i} className="rounded bg-brand/20 px-0.5 font-medium text-brand">
+      <span key={`${key}-${i}`} className="rounded bg-brand/20 px-0.5 font-medium text-brand">
         {part}
       </span>
     ) : (
@@ -32,6 +37,8 @@ function renderText(text: string) {
   );
 }
 
+const QUICK = ["👍", "😂", "🔥"];
+
 function ReplyQuote({ target }: { target?: Message }) {
   if (!target) return null;
   return (
@@ -39,22 +46,92 @@ function ReplyQuote({ target }: { target?: Message }) {
       <CornerUpLeft className="size-3 -scale-x-100" />
       <Avatar id={target.author} size={14} />
       <span className="font-medium text-foreground/80">{user(target.author).name}</span>
-      <span className="truncate">{target.text}</span>
+      <span className="truncate">
+        <EmojiText text={target.text} size={14} />
+      </span>
     </div>
+  );
+}
+
+function ReactionChip({ r, onToggle }: { r: Reaction; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-pressed={r.mine}
+      className={cn(
+        "group/chip flex h-7 items-center gap-1.5 rounded-lg border px-2 transition-all duration-150 active:scale-90",
+        r.mine
+          ? "border-brand/45 bg-brand/15 text-foreground"
+          : "border-transparent bg-surface-2 text-muted-foreground hover:border-surface-4 hover:text-foreground",
+      )}
+    >
+      <Emoji
+        emoji={r.emoji}
+        size={18}
+        className="transition-transform group-hover/chip:scale-110"
+      />
+      <span className="text-[13px] font-semibold tabular-nums">{r.count}</span>
+    </button>
+  );
+}
+
+function PickerButton({
+  open,
+  onOpenChange,
+  onPick,
+  children,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  onPick: (e: string) => void;
+  children: ReactNode;
+}) {
+  return (
+    <Popover open={open} onOpenChange={onOpenChange}>
+      <PopoverTrigger asChild>{children}</PopoverTrigger>
+      <PopoverContent side="top" align="start" sideOffset={8} className="w-auto p-0">
+        <EmojiPicker
+          onPick={(e) => {
+            onPick(e);
+            onOpenChange(false);
+          }}
+        />
+      </PopoverContent>
+    </Popover>
   );
 }
 
 function MessageBody({ m, all }: { m: Message; all: Message[] }) {
   const mentioned = m.text.includes(`@${user(ME).handle}`);
+  const [reactions, setReactions] = useState<Reaction[]>(m.reactions ?? []);
+  const [picker, setPicker] = useState<"toolbar" | "row" | null>(null);
+  const jumbo = isOnlyEmoji(m.text);
+
+  const toggle = (emoji: string) =>
+    setReactions((rs) => {
+      const hit = rs.find((r) => r.emoji === emoji);
+      if (!hit) return [...rs, { emoji, count: 1, mine: true }];
+      const count = hit.count + (hit.mine ? -1 : 1);
+      if (count <= 0) return rs.filter((r) => r !== hit);
+      return rs.map((r) => (r === hit ? { ...r, count, mine: !r.mine } : r));
+    });
+  const add = (emoji: string) => {
+    if (!reactions.some((r) => r.emoji === emoji && r.mine)) toggle(emoji);
+  };
+
   return (
     <div
       className={cn(
         "group/msg relative -mx-4 px-4 py-0.5 hover:bg-white/[0.025]",
         mentioned && "border-l-2 border-brand bg-brand/[0.07] hover:bg-brand/10",
+        picker && "bg-white/[0.025]",
       )}
     >
       {m.replyTo && <ReplyQuote target={all.find((x) => x.id === m.replyTo)} />}
-      <p className="text-[15px] leading-relaxed text-foreground/90">{renderText(m.text)}</p>
+      <p className="text-[15px] leading-relaxed text-foreground/90">
+        <EmojiText text={m.text} size={jumbo ? 44 : 20} renderText={renderMentions} />
+      </p>
       {m.image && (
         <div
           className="relative mt-2 grid max-w-md place-items-center overflow-hidden rounded-xl border border-white/5"
@@ -64,7 +141,7 @@ function MessageBody({ m, all }: { m: Message; all: Message[] }) {
               "radial-gradient(circle at 30% 30%, hsl(262 50% 35%), transparent 60%), radial-gradient(circle at 75% 70%, hsl(200 50% 28%), transparent 55%), var(--surface-2)",
           }}
         >
-          {m.image.label.endsWith(".mp4") || m.image.label.includes(".mp4") ? (
+          {m.image.label.includes(".mp4") ? (
             <span className="grid size-12 place-items-center rounded-full bg-black/40 backdrop-blur">
               <Play className="size-5 fill-white text-white" />
             </span>
@@ -74,39 +151,66 @@ function MessageBody({ m, all }: { m: Message; all: Message[] }) {
           </span>
         </div>
       )}
-      {m.reactions && (
-        <div className="mt-1.5 flex flex-wrap gap-1">
-          {m.reactions.map((r) => (
+      {reactions.length > 0 && (
+        <div className="mt-1.5 flex flex-wrap items-center gap-1">
+          {reactions.map((r) => (
+            <ReactionChip key={r.emoji} r={r} onToggle={() => toggle(r.emoji)} />
+          ))}
+          <PickerButton
+            open={picker === "row"}
+            onOpenChange={(v) => setPicker(v ? "row" : null)}
+            onPick={add}
+          >
             <button
-              key={r.emoji}
               type="button"
+              aria-label="Add reaction"
               className={cn(
-                "flex h-6 items-center gap-1 rounded-full border px-2 text-xs transition-colors",
-                r.mine
-                  ? "border-brand/50 bg-brand/15 text-foreground"
-                  : "border-border bg-surface-2 text-muted-foreground hover:border-surface-4",
+                "grid h-7 w-8 place-items-center rounded-lg bg-surface-2 text-muted-foreground transition-opacity hover:text-foreground",
+                picker === "row" ? "opacity-100" : "opacity-0 group-hover/msg:opacity-100",
               )}
             >
-              <span>{r.emoji}</span>
-              <span className="font-medium">{r.count}</span>
+              <SmilePlus className="size-4" />
             </button>
-          ))}
+          </PickerButton>
         </div>
       )}
-      <div className="absolute -top-3 right-4 hidden items-center rounded-lg border border-border bg-popover p-0.5 shadow-lg group-hover/msg:flex">
-        <button
-          type="button"
-          aria-label="React"
-          className="grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+      <div
+        className={cn(
+          "absolute -top-4 right-4 items-center gap-0.5 rounded-xl border border-border bg-popover p-1 shadow-lg shadow-black/30",
+          picker === "toolbar" ? "flex" : "hidden group-hover/msg:flex",
+        )}
+      >
+        {QUICK.map((e) => (
+          <button
+            key={e}
+            type="button"
+            aria-label={`React ${e}`}
+            onClick={() => add(e)}
+            className="grid size-8 place-items-center rounded-lg transition-transform hover:scale-110 hover:bg-accent"
+          >
+            <Emoji emoji={e} size={20} />
+          </button>
+        ))}
+        <span className="mx-0.5 h-5 w-px bg-border" />
+        <PickerButton
+          open={picker === "toolbar"}
+          onOpenChange={(v) => setPicker(v ? "toolbar" : null)}
+          onPick={add}
         >
-          <SmilePlus className="size-4" />
-        </button>
+          <button
+            type="button"
+            aria-label="Add reaction"
+            className="grid size-8 place-items-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <SmilePlus className="size-[18px]" />
+          </button>
+        </PickerButton>
         <button
           type="button"
           aria-label="Reply"
-          className="grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+          className="grid size-8 place-items-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground"
         >
-          <CornerUpLeft className="size-4" />
+          <CornerUpLeft className="size-[18px]" />
         </button>
       </div>
     </div>

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Avatar } from "@/components/Avatar";
 import { AdeptMark } from "@/components/brand/AdeptMark";
 import { ChatView } from "@/features/chat/ChatView";
+import { EmojiText } from "@/features/emoji/EmojiText";
 import { JumpPalette } from "@/features/shell/JumpPalette";
 import { MemberList } from "@/features/shell/MemberList";
 import { cn } from "@/lib/utils";
@@ -40,7 +41,9 @@ function Tab({
         ) : (
           <Avatar id={c.members[0] ?? ""} size={18} />
         )}
-        <span className="truncate">{c.title}</span>
+        <span className="truncate">
+          <EmojiText text={c.title} size={15} />
+        </span>
         {!active && c.unread > 0 && <span className="size-1.5 shrink-0 rounded-full bg-brand" />}
       </button>
       <button
