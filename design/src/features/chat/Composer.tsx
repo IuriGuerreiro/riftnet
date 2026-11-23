@@ -1,14 +1,15 @@
-import { ArrowUp, Plus, Smile } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { ArrowUp, CornerUpLeft, Plus, Smile, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { searchEmoji, useEmojiIndex } from "@/features/emoji/data";
 import { Emoji } from "@/features/emoji/Emoji";
 import { EmojiPicker } from "@/features/emoji/EmojiPicker";
+import { EmojiText } from "@/features/emoji/EmojiText";
 import { GifPicker } from "@/features/media/GifPicker";
 import { type Staged, StagedTray } from "@/features/media/StagedTray";
 import { cn } from "@/lib/utils";
-import type { Attachment } from "@/mock/data";
+import { type Attachment, type Message, user } from "@/mock/data";
 
 const PARTIAL = /(^|\s):([a-z0-9_+-]{2,})$/i;
 const COMPLETE = /:([a-z0-9_+-]+):$/i;
@@ -44,6 +45,9 @@ export function Composer({
   onAddFiles,
   onRemoveStaged,
   onSendGif,
+  replyTo,
+  onCancelReply,
+  onEditLast,
 }: {
   placeholder: string;
   typing?: string;
@@ -52,6 +56,9 @@ export function Composer({
   onAddFiles: (files: File[]) => void;
   onRemoveStaged: (id: string) => void;
   onSendGif: (gif: Extract<Attachment, { kind: "gif" }>) => void;
+  replyTo?: Message;
+  onCancelReply: () => void;
+  onEditLast: () => void;
 }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [gifOpen, setGifOpen] = useState(false);
@@ -62,6 +69,10 @@ export function Composer({
   const [highlight, setHighlight] = useState(0);
   const [dismissed, setDismissed] = useState<string | null>(null);
   const area = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (replyTo) area.current?.focus();
+  }, [replyTo]);
 
   const before = text.slice(0, caret);
   const partial = PARTIAL.exec(before)?.[2] ?? null;
@@ -152,6 +163,26 @@ export function Composer({
 
       <TypingLine name={typing} />
       <div className="overflow-hidden rounded-xl border border-border bg-surface-2 transition-colors focus-within:border-brand/50">
+        {replyTo && (
+          <div className="animate-in fade-in slide-in-from-bottom-1 flex items-center gap-2 border-b border-border bg-surface-1 px-3 py-2 text-xs duration-150">
+            <CornerUpLeft className="size-3.5 shrink-0 -scale-x-100 text-brand" />
+            <span className="shrink-0 text-muted-foreground">
+              Replying to{" "}
+              <b className="font-semibold text-foreground">{user(replyTo.author).name}</b>
+            </span>
+            <span className="min-w-0 truncate text-muted-foreground/80">
+              {replyTo.text ? <EmojiText text={replyTo.text} size={14} /> : <i>Attachment</i>}
+            </span>
+            <button
+              type="button"
+              aria-label="Cancel reply"
+              onClick={onCancelReply}
+              className="ml-auto grid size-5 shrink-0 place-items-center rounded-full bg-surface-3 text-muted-foreground hover:bg-surface-4 hover:text-foreground"
+            >
+              <X className="size-3" />
+            </button>
+          </div>
+        )}
         <StagedTray items={staged} onRemove={onRemoveStaged} />
         <div className="flex items-end gap-1 p-1.5">
           <input
@@ -206,6 +237,15 @@ export function Composer({
                   setDismissed(partial);
                   return;
                 }
+              }
+              if (e.key === "Escape" && replyTo) {
+                onCancelReply();
+                return;
+              }
+              if (e.key === "ArrowUp" && text === "") {
+                e.preventDefault();
+                onEditLast();
+                return;
               }
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();

@@ -162,6 +162,12 @@ importers:
       emojibase-data:
         specifier: 18.0.0
         version: 18.0.0(emojibase@18.0.0)
+      highlight.js:
+        specifier: 11.11.2
+        version: 11.11.2
+      lowlight:
+        specifier: 3.3.0
+        version: 3.3.0
       lucide-react:
         specifier: ^1.75.0
         version: 1.75.0(@types/react@19.3.0)(react@19.3.1)

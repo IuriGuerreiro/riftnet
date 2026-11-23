@@ -65,6 +65,7 @@ export interface Message {
   text: string;
   time: string;
   replyTo?: string;
+  edited?: boolean;
   reactions?: Reaction[];
   attachments?: Attachment[];
 }
@@ -582,6 +583,25 @@ const SCRIPTS: Record<string, Message[]> = {
           size: 210_296,
         },
       ],
+    },
+    {
+      id: "g6e",
+      author: "sam",
+      text: "found the bug with the dash cooldown btw:\n```ts\nfunction canDash(p: Player, now: number) {\n  // cooldown was compared in seconds, not ms\n  return now - p.lastDash > DASH_COOLDOWN_MS;\n}\n```\nfix ships **tonight** ~~maybe~~ 🤞",
+      time: "21:09",
+      reactions: [{ emoji: "🙏", count: 3 }],
+    },
+    {
+      id: "g6f",
+      author: "maya",
+      text: "> fix ships tonight\nsam you said that last week 😭\nalso the final boss is ||literally the tutorial guy||",
+      time: "21:09",
+    },
+    {
+      id: "g6g",
+      author: "noor",
+      text: "plan for tonight:\n- warmup in *Hollow Drift*\n- 2 ranked games\n- then Starline on stream\nrules here https://adept.example/night-owls",
+      time: "21:09",
     },
     { id: "g7", author: "tom", text: "who's hopping on tonight?", time: "21:09" },
     { id: "g8", author: "tom", text: "@iuri you in?", time: "21:09" },

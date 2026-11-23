@@ -1,5 +1,5 @@
 import { AtSign, Hash, Phone, Search, Upload, Users, Video } from "lucide-react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useReducer, useRef, useState } from "react";
 
 import { Avatar, AvatarStack } from "@/components/Avatar";
 import { EmojiText } from "@/features/emoji/EmojiText";
@@ -11,15 +11,16 @@ import {
   type Attachment,
   type Conversation,
   conversation,
-  ME,
   type Message,
   messagesFor,
   server,
   user,
 } from "@/mock/data";
 
+import { chatReducer, initChat, lastOwnMessage } from "./chatState";
 import { Composer } from "./Composer";
-import { MessageList } from "./MessageList";
+import { DeleteDialog } from "./DeleteDialog";
+import { type MessageActions, MessageList } from "./MessageList";
 
 export function ConversationIcon({ c, size = 24 }: { c: Conversation; size?: number }) {
   if (c.kind === "channel")
@@ -88,20 +89,39 @@ export function ChatView({
   className?: string;
 }) {
   const c = conversation(conversationId);
-  const [sent, setSent] = useState<Message[]>([]);
+  const [state, dispatch] = useReducer(chatReducer, messagesFor(c), initChat);
   const [staged, setStaged] = useState<Staged[]>([]);
   const [dragging, setDragging] = useState(false);
+  const [deleting, setDeleting] = useState<Message | null>(null);
+  const [flashId, setFlashId] = useState<string | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
-  const messages = [...messagesFor(c), ...sent];
+  const { messages } = state;
 
   useEffect(() => {
     scroller.current?.scrollTo({ top: scroller.current.scrollHeight });
-  }, [messages.length]);
+  }, [state.sent]);
+
+  const actions: MessageActions = {
+    reply: (id) => dispatch({ type: "reply", id }),
+    startEdit: (id) => dispatch({ type: "startEdit", id }),
+    saveEdit: (id, text) => dispatch({ type: "edit", id, text }),
+    cancelEdit: () => dispatch({ type: "startEdit", id: null }),
+    remove: (id, skip) => {
+      if (skip) dispatch({ type: "delete", id });
+      else setDeleting(messages.find((m) => m.id === id) ?? null);
+    },
+    jumpTo: (id) => {
+      document.getElementById(`msg-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      setFlashId(id);
+      setTimeout(() => setFlashId((f) => (f === id ? null : f)), 1400);
+    },
+  };
+  const replyTarget = state.replyTo ? messages.find((m) => m.id === state.replyTo) : undefined;
 
   const typing = c.id === "dm-maya" ? "Maya" : c.id === "owls-general" ? "Tom" : undefined;
   const placeholder = c.kind === "channel" ? `Message #${c.title}` : `Message ${c.title}`;
   const post = (text: string, attachments?: Attachment[]) =>
-    setSent((s) => [...s, { id: `s${s.length}`, author: ME, text, time: "now", attachments }]);
+    dispatch({ type: "send", text, attachments });
   const addFiles = (files: File[]) => {
     void Promise.all(files.map(toAttachment)).then((atts) =>
       setStaged((s) => [...s, ...atts.map((att, i) => ({ id: `${Date.now()}-${i}`, att }))]),
@@ -183,7 +203,13 @@ export function ChatView({
         <div className="flex min-w-0 flex-1 flex-col">
           <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto">
             <div className={cn("flex min-h-full flex-col justify-end", laneClass)}>
-              <MessageList messages={messages} unread={c.unread} />
+              <MessageList
+                messages={messages}
+                unread={c.unread}
+                editingId={state.editing}
+                flashId={flashId}
+                actions={actions}
+              />
             </div>
           </div>
           <div className={laneClass}>
@@ -194,6 +220,12 @@ export function ChatView({
               onAddFiles={addFiles}
               onRemoveStaged={(id) => setStaged((s) => s.filter((x) => x.id !== id))}
               onSendGif={(g) => post("", [g])}
+              replyTo={replyTarget}
+              onCancelReply={() => dispatch({ type: "reply", id: null })}
+              onEditLast={() => {
+                const last = lastOwnMessage(state);
+                if (last) dispatch({ type: "startEdit", id: last.id });
+              }}
               onSend={(text) => {
                 post(text, staged.length ? staged.map((x) => x.att) : undefined);
                 setStaged([]);
@@ -203,6 +235,11 @@ export function ChatView({
         </div>
         {aside}
       </div>
+      <DeleteDialog
+        message={deleting}
+        onClose={() => setDeleting(null)}
+        onConfirm={() => deleting && dispatch({ type: "delete", id: deleting.id })}
+      />
     </section>
   );
 }

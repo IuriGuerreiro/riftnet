@@ -1,4 +1,4 @@
-import { CornerUpLeft, SmilePlus } from "lucide-react";
+import { CornerUpLeft, Pencil, SmilePlus, Trash2 } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
 import { Avatar } from "@/components/Avatar";
@@ -9,6 +9,9 @@ import { EmojiText, isOnlyEmoji } from "@/features/emoji/EmojiText";
 import { Attachments } from "@/features/media/Attachments";
 import { cn } from "@/lib/utils";
 import { ME, type Message, type Reaction, user } from "@/mock/data";
+
+import { Markdown } from "./Markdown";
+import { MessageEditor } from "./MessageEditor";
 
 interface Group {
   author: string;
@@ -26,24 +29,59 @@ function group(messages: Message[]): Group[] {
   return out;
 }
 
-function renderMentions(chunk: string, key: string) {
-  return chunk.split(/(@\w+)/g).map((part, i) =>
-    part.startsWith("@") ? (
-      <span key={`${key}-${i}`} className="rounded bg-brand/20 px-0.5 font-medium text-brand">
-        {part}
-      </span>
-    ) : (
-      part
-    ),
+const QUICK = ["👍", "😂", "🔥"];
+
+export interface MessageActions {
+  reply: (id: string) => void;
+  startEdit: (id: string) => void;
+  saveEdit: (id: string, text: string) => void;
+  cancelEdit: () => void;
+  remove: (id: string, skipConfirm: boolean) => void;
+  jumpTo: (id: string) => void;
+}
+
+function ToolButton({
+  label,
+  onClick,
+  danger,
+  children,
+}: {
+  label: string;
+  onClick: (e: React.MouseEvent) => void;
+  danger?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      className={cn(
+        "grid size-8 place-items-center rounded-lg text-muted-foreground hover:bg-accent",
+        danger ? "hover:text-destructive" : "hover:text-foreground",
+      )}
+    >
+      {children}
+    </button>
   );
 }
 
-const QUICK = ["👍", "😂", "🔥"];
-
-function ReplyQuote({ target }: { target?: Message }) {
-  if (!target) return null;
+function ReplyQuote({ target, onJump }: { target?: Message; onJump: (id: string) => void }) {
+  if (!target) {
+    return (
+      <div className="mb-1 flex items-center gap-1.5 text-xs text-muted-foreground italic">
+        <CornerUpLeft className="size-3 -scale-x-100" />
+        Original message was deleted
+      </div>
+    );
+  }
   return (
-    <div className="mb-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+    <button
+      type="button"
+      onClick={() => onJump(target.id)}
+      className="mb-1 flex max-w-full items-center gap-1.5 text-left text-xs text-muted-foreground hover:text-foreground"
+    >
       <CornerUpLeft className="size-3 -scale-x-100" />
       <Avatar id={target.author} size={14} />
       <span className="font-medium text-foreground/80">{user(target.author).name}</span>
@@ -54,7 +92,7 @@ function ReplyQuote({ target }: { target?: Message }) {
           <span className="italic">Attachment</span>
         )}
       </span>
-    </div>
+    </button>
   );
 }
 
@@ -107,7 +145,22 @@ function PickerButton({
   );
 }
 
-function MessageBody({ m, all }: { m: Message; all: Message[] }) {
+function MessageBody({
+  m,
+  all,
+  editing,
+  flash,
+  actions,
+  showTime,
+}: {
+  m: Message;
+  all: Message[];
+  editing: boolean;
+  flash: boolean;
+  actions: MessageActions;
+  showTime: boolean;
+}) {
+  const mine = m.author === ME;
   const mentioned = m.text.includes(`@${user(ME).handle}`);
   const [reactions, setReactions] = useState<Reaction[]>(m.reactions ?? []);
   const [picker, setPicker] = useState<"toolbar" | "row" | null>(null);
@@ -127,17 +180,47 @@ function MessageBody({ m, all }: { m: Message; all: Message[] }) {
 
   return (
     <div
+      id={`msg-${m.id}`}
       className={cn(
-        "group/msg relative -mx-4 px-4 py-0.5 hover:bg-white/[0.025]",
+        "group/msg relative -mx-4 px-4 py-0.5 transition-colors duration-700 hover:bg-white/[0.025]",
         mentioned && "border-l-2 border-brand bg-brand/[0.07] hover:bg-brand/10",
-        picker && "bg-white/[0.025]",
+        (picker !== null || editing) && "bg-white/[0.025]",
+        flash && "bg-brand/15 duration-150",
       )}
     >
-      {m.replyTo && <ReplyQuote target={all.find((x) => x.id === m.replyTo)} />}
-      {m.text && (
-        <p className="text-[15px] leading-relaxed text-foreground/90">
-          <EmojiText text={m.text} size={jumbo ? 44 : 20} renderText={renderMentions} />
-        </p>
+      {showTime && (
+        <span className="absolute top-1.5 -left-[38px] hidden w-[44px] text-center text-[10px] text-muted-foreground/70 tabular-nums group-hover/msg:block">
+          {m.time}
+        </span>
+      )}
+      {m.replyTo && (
+        <ReplyQuote target={all.find((x) => x.id === m.replyTo)} onJump={actions.jumpTo} />
+      )}
+      {editing ? (
+        <MessageEditor
+          initial={m.text}
+          onCancel={actions.cancelEdit}
+          onSave={(t) => (t ? actions.saveEdit(m.id, t) : actions.remove(m.id, false))}
+        />
+      ) : (
+        m.text && (
+          <div className="text-[15px] leading-relaxed text-foreground/90">
+            {jumbo ? (
+              <EmojiText text={m.text} size={44} />
+            ) : (
+              <Markdown
+                text={m.text}
+                suffix={
+                  m.edited ? (
+                    <span className="ml-1 text-[11px] text-muted-foreground" title="Edited">
+                      (edited)
+                    </span>
+                  ) : undefined
+                }
+              />
+            )}
+          </div>
+        )
       )}
       {m.attachments && <Attachments items={m.attachments} author={m.author} time={m.time} />}
       {reactions.length > 0 && (
@@ -166,7 +249,7 @@ function MessageBody({ m, all }: { m: Message; all: Message[] }) {
       <div
         className={cn(
           "absolute -top-4 right-4 items-center gap-0.5 rounded-xl border border-border bg-popover p-1 shadow-lg shadow-black/30",
-          picker === "toolbar" ? "flex" : "hidden group-hover/msg:flex",
+          picker === "toolbar" ? "flex" : editing ? "hidden" : "hidden group-hover/msg:flex",
         )}
       >
         {QUICK.map((e) => (
@@ -194,13 +277,23 @@ function MessageBody({ m, all }: { m: Message; all: Message[] }) {
             <SmilePlus className="size-[18px]" />
           </button>
         </PickerButton>
-        <button
-          type="button"
-          aria-label="Reply"
-          className="grid size-8 place-items-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground"
-        >
+        <ToolButton label="Reply" onClick={() => actions.reply(m.id)}>
           <CornerUpLeft className="size-[18px]" />
-        </button>
+        </ToolButton>
+        {mine && m.text && (
+          <ToolButton label="Edit" onClick={() => actions.startEdit(m.id)}>
+            <Pencil className="size-[17px]" />
+          </ToolButton>
+        )}
+        {mine && (
+          <ToolButton
+            label="Delete (Shift to skip confirm)"
+            danger
+            onClick={(e) => actions.remove(m.id, e.shiftKey)}
+          >
+            <Trash2 className="size-[17px]" />
+          </ToolButton>
+        )}
       </div>
     </div>
   );
@@ -219,10 +312,16 @@ export function MessageList({
   messages,
   compact = false,
   unread = 0,
+  editingId,
+  flashId,
+  actions,
 }: {
   messages: Message[];
   compact?: boolean;
   unread?: number;
+  editingId: string | null;
+  flashId: string | null;
+  actions: MessageActions;
 }) {
   const firstUnread = unread > 0 ? messages.at(-Math.min(unread, messages.length))?.id : undefined;
   return (
@@ -242,14 +341,21 @@ export function MessageList({
                 <span className="text-[15px] font-semibold">{user(g.author).name}</span>
                 <span className="text-[11px] text-muted-foreground">{g.time}</span>
               </div>
-              {g.items.map((m) => (
+              {g.items.map((m, i) => (
                 <div key={m.id}>
                   {m.id === firstUnread && m.id !== g.items[0]?.id && (
                     <div className="py-2">
                       <NewDivider />
                     </div>
                   )}
-                  <MessageBody m={m} all={messages} />
+                  <MessageBody
+                    m={m}
+                    all={messages}
+                    editing={editingId === m.id}
+                    flash={flashId === m.id}
+                    actions={actions}
+                    showTime={i > 0}
+                  />
                 </div>
               ))}
             </div>

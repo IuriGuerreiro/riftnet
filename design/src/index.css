@@ -139,3 +139,26 @@
     background: color-mix(in srgb, var(--adept-violet) 40%, transparent);
   }
 }
+
+.message-code .hljs-keyword,
+.message-code .hljs-selector-tag,
+.message-code .hljs-literal {
+  color: #c4b5fd;
+}
+
+.message-code .hljs-string,
+.message-code .hljs-regexp,
+.message-code .hljs-attribute {
+  color: #86efac;
+}
+
+.message-code .hljs-number,
+.message-code .hljs-title,
+.message-code .hljs-built_in {
+  color: #93c5fd;
+}
+
+.message-code .hljs-comment {
+  color: #8a8ea0;
+  font-style: italic;
+}
