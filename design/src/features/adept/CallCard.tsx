@@ -1,9 +1,9 @@
-import { Headphones, Mic, MicOff, MonitorUp, PhoneOff } from "lucide-react";
-import { useState } from "react";
+import { HeadphoneOff, Headphones, Mic, MicOff, MonitorUp, PhoneOff } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { type LiveRoom, server } from "@/mock/data";
+import { type LiveRoom, ME, server } from "@/mock/data";
 
+import { ScreenSharePreview } from "./ScreenSharePreview";
 import { SpeakingAvatar } from "./SpeakingAvatar";
 import { useSpeaker } from "./useSpeaker";
 
@@ -45,13 +45,23 @@ export function CallCard({
   room,
   onLeave,
   onOpen,
+  muted,
+  deafened,
+  sharing,
+  onMute,
+  onDeafen,
+  onShare,
 }: {
+  muted: boolean;
+  deafened: boolean;
+  sharing: boolean;
+  onMute: () => void;
+  onDeafen: () => void;
+  onShare: () => void;
   room: LiveRoom;
   onLeave: () => void;
   onOpen: () => void;
 }) {
-  const [muted, setMuted] = useState(false);
-  const [sharing, setSharing] = useState(false);
   const speaker = useSpeaker(room.people);
 
   return (
@@ -62,9 +72,11 @@ export function CallCard({
           <span className="relative inline-flex size-2 rounded-full bg-success" />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13px] font-semibold text-success">{room.name}</span>
+          <span className="block truncate text-[13px] font-semibold text-success">
+            Voice connected
+          </span>
           <span className="block truncate text-[11px] text-muted-foreground">
-            {server(room.serverId)?.name}
+            {room.name} · {server(room.serverId)?.name}
           </span>
         </span>
         <span className="flex -space-x-1.5">
@@ -73,27 +85,35 @@ export function CallCard({
               key={id}
               id={id}
               size={20}
-              speaking={speaker === id}
+              speaking={speaker === id && !(id === ME && (muted || deafened))}
               ringBg="var(--surface-1)"
             />
           ))}
         </span>
       </button>
+      <button
+        type="button"
+        onClick={onOpen}
+        className="mt-2 block w-full rounded-md px-1 py-1 text-left text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
+      >
+        {room.people.length} in call · View participants
+      </button>
+      {sharing && (
+        <div className="mt-2">
+          <ScreenSharePreview onStop={onShare} />
+        </div>
+      )}
       <div className="mt-2.5 flex gap-1.5">
-        <CallButton
-          label={muted ? "Unmute" : "Mute"}
-          on={muted}
-          onClick={() => setMuted((m) => !m)}
-        >
+        <CallButton label={muted ? "Unmute" : "Mute"} on={muted} onClick={onMute}>
           {muted ? <MicOff className="size-4" /> : <Mic className="size-4" />}
         </CallButton>
-        <CallButton label="Deafen">
-          <Headphones className="size-4" />
+        <CallButton label={deafened ? "Undeafen" : "Deafen"} on={deafened} onClick={onDeafen}>
+          {deafened ? <HeadphoneOff className="size-4" /> : <Headphones className="size-4" />}
         </CallButton>
         <CallButton
           label={sharing ? "Stop sharing" : "Share screen"}
           on={sharing}
-          onClick={() => setSharing((s) => !s)}
+          onClick={onShare}
         >
           <MonitorUp className="size-4" />
         </CallButton>

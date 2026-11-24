@@ -13,14 +13,7 @@ const SCREENS = [
   { label: "Login", to: "/login", search: {} },
   { label: "Register", to: "/register", search: {} },
   { label: "Username", to: "/username", search: {} },
-] as const;
-
-const LAYOUTS = [
-  { label: "A · Classic", hint: "Discord-style", to: "/app/classic" },
-  { label: "B · Inbox", hint: "One unified list", to: "/app/inbox" },
-  { label: "C · Live", hint: "Voice & play first", to: "/app/live" },
-  { label: "D · Focus", hint: "Tabs + ⌘K", to: "/app/focus" },
-  { label: "E · Adept", hint: "Classic, evolved", to: "/app/adept" },
+  { label: "Adept app", to: "/app", search: {} },
 ] as const;
 
 export function DevSwitcher() {
@@ -43,21 +36,6 @@ export function DevSwitcher() {
                 className="rounded-md px-2 py-1.5 text-sm text-foreground/80 hover:bg-accent hover:text-foreground data-[status=active]:bg-brand/15 data-[status=active]:text-brand"
               >
                 {s.label}
-              </Link>
-            ))}
-          </nav>
-          <p className="mt-2 border-t border-border px-2 pt-3 pb-2 text-[11px] font-semibold tracking-widest text-muted-foreground uppercase">
-            Main screen layouts
-          </p>
-          <nav className="grid">
-            {LAYOUTS.map((l) => (
-              <Link
-                key={l.to}
-                to={l.to}
-                className="flex items-baseline justify-between gap-2 rounded-md px-2 py-1.5 text-sm text-foreground/80 hover:bg-accent hover:text-foreground data-[status=active]:bg-brand/15 data-[status=active]:text-brand"
-              >
-                {l.label}
-                <span className="text-[11px] text-muted-foreground">{l.hint}</span>
               </Link>
             ))}
           </nav>

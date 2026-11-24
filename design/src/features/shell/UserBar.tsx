@@ -37,9 +37,16 @@ export function IconToggle({
   );
 }
 
-export function UserBar({ ringBg = "var(--surface-1)" }: { ringBg?: string }) {
+export function UserBar({
+  ringBg = "var(--surface-1)",
+  audio,
+}: {
+  ringBg?: string;
+  audio?: { muted: boolean; deafened: boolean; onMute: () => void; onDeafen: () => void };
+}) {
   const me = user(ME);
-  const [muted, setMuted] = useState(false);
+  const [localMuted, setLocalMuted] = useState(false);
+  const muted = audio?.muted ?? localMuted;
   return (
     <div className="flex items-center gap-2 border-t border-border p-2">
       <button
@@ -56,11 +63,16 @@ export function UserBar({ ringBg = "var(--surface-1)" }: { ringBg?: string }) {
         label={muted ? "Unmute" : "Mute"}
         on={muted}
         danger
-        onClick={() => setMuted((m) => !m)}
+        onClick={audio?.onMute ?? (() => setLocalMuted((m) => !m))}
       >
         {muted ? <MicOff className="size-[18px]" /> : <Mic className="size-[18px]" />}
       </IconToggle>
-      <IconToggle label="Deafen">
+      <IconToggle
+        label={audio?.deafened ? "Undeafen" : "Deafen"}
+        on={audio?.deafened}
+        danger
+        onClick={audio?.onDeafen}
+      >
         <Headphones className="size-[18px]" />
       </IconToggle>
       <IconToggle label="Settings">

@@ -472,6 +472,9 @@ export function AdeptLayout() {
   const [tab, setTab] = useState<HomeTab>("chats");
   const [joined, setJoined] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  const [muted, setMuted] = useState(false);
+  const [deafened, setDeafened] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const [panelOpen, setPanelOpen] = useState(true);
   const [palette, setPalette] = useState(false);
 
@@ -490,8 +493,19 @@ export function AdeptLayout() {
   const activeId = openIn[place] ?? "dm-maya";
   const c = conversation(activeId);
   const chatServer = c.serverId ? findServer(c.serverId) : undefined;
-  const joinedRoom = LIVE_ROOMS.find((r) => r.channelId === joined);
-  const previewRoom = LIVE_ROOMS.find((r) => r.channelId === preview);
+  const rooms = SERVERS.flatMap((srv) =>
+    srv.channels
+      .filter((channel) => channel.kind === "voice")
+      .map((channel) => ({
+        channelId: channel.id,
+        serverId: srv.id,
+        name: channel.name,
+        people: channel.voice ?? [],
+        live: channel.live,
+      })),
+  );
+  const joinedRoom = rooms.find((r) => r.channelId === joined);
+  const previewRoom = rooms.find((r) => r.channelId === preview);
   const dmMentions = DMS.reduce((n, x) => n + x.mentions, 0);
 
   const openConversation = (id: string) => {
@@ -504,8 +518,21 @@ export function AdeptLayout() {
   };
   const join = (id: string) => {
     setJoined(id);
-    setPreview(null);
+    setSharing(false);
+    setPreview(id);
   };
+  const leave = () => {
+    setJoined(null);
+    setSharing(false);
+  };
+  const toggleMute = () => {
+    if (deafened) {
+      setDeafened(false);
+      setMuted(false);
+    } else setMuted((value) => !value);
+  };
+  const toggleDeafen = () => setDeafened((value) => !value);
+  const toggleShare = () => setSharing((value) => !value);
 
   return (
     <div className="flex h-full flex-col bg-ink">
@@ -617,12 +644,26 @@ export function AdeptLayout() {
           )}
           {joinedRoom && (
             <CallCard
-              room={{ ...joinedRoom, people: [...joinedRoom.people, ME] }}
-              onLeave={() => setJoined(null)}
+              room={{ ...joinedRoom, people: [...new Set([...joinedRoom.people, ME])] }}
+              onLeave={leave}
+              muted={muted || deafened}
+              deafened={deafened}
+              sharing={sharing}
+              onMute={toggleMute}
+              onDeafen={toggleDeafen}
+              onShare={toggleShare}
               onOpen={() => setPreview(joinedRoom.channelId)}
             />
           )}
-          <UserBar ringBg="var(--adept-ink)" />
+          <UserBar
+            ringBg="var(--adept-ink)"
+            audio={{
+              muted: muted || deafened,
+              deafened,
+              onMute: toggleMute,
+              onDeafen: toggleDeafen,
+            }}
+          />
         </aside>
 
         <main className="mr-2 mb-2 flex min-w-0 flex-1 overflow-hidden rounded-xl border border-white/[0.06] bg-background shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
@@ -639,7 +680,16 @@ export function AdeptLayout() {
             aside={
               previewRoom ? (
                 <RoomPreview
-                  room={previewRoom}
+                  room={
+                    joined === previewRoom.channelId
+                      ? { ...previewRoom, people: [...new Set([...previewRoom.people, ME])] }
+                      : previewRoom
+                  }
+                  muted={muted || deafened}
+                  deafened={deafened}
+                  sharing={sharing}
+                  onShare={toggleShare}
+                  onLeave={leave}
                   joined={joined === previewRoom.channelId}
                   onJoin={() => join(previewRoom.channelId)}
                   onClose={() => setPreview(null)}
