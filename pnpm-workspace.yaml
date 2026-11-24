@@ -1,6 +1,7 @@
 packages:
   - client
   - tools/mock
+  - tools/loadtest
 
 allowBuilds:
   esbuild: true
