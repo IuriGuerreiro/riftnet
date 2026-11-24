@@ -34,6 +34,7 @@ export function MessageEditor({
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
+          if (e.nativeEvent.isComposing) return;
           if (e.key === "Escape") {
             e.preventDefault();
             onCancel();
@@ -42,7 +43,7 @@ export function MessageEditor({
             onSave(text.trim());
           }
         }}
-        className="w-full resize-none rounded-lg border border-brand/50 bg-surface-2 px-3 py-2 text-[15px] leading-relaxed outline-none focus:ring-2 focus:ring-brand/30"
+        className="max-h-64 w-full resize-none rounded-lg border border-brand/50 bg-surface-2 px-3 py-2 text-[15px] leading-relaxed outline-none focus:ring-2 focus:ring-brand/30"
       />
       <p className="mt-1 text-xs text-muted-foreground">
         escape to{" "}

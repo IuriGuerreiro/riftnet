@@ -114,16 +114,18 @@ export function VideoPlayer({
   size,
   w,
   h,
+  autoPlay = false,
 }: {
   url: string;
   name: string;
   size: number;
   w: number;
   h: number;
+  autoPlay?: boolean;
 }) {
   const box = useRef<HTMLDivElement>(null);
   const video = useRef<HTMLVideoElement>(null);
-  const [started, setStarted] = useState(false);
+  const [started, setStarted] = useState(autoPlay);
   const [playing, setPlaying] = useState(false);
   const [ended, setEnded] = useState(false);
   const [time, setTime] = useState(0);
@@ -205,6 +207,7 @@ export function VideoPlayer({
         src={url}
         preload="metadata"
         playsInline
+        autoPlay={autoPlay}
         onClick={toggle}
         onDoubleClick={toggleFullscreen}
         onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
@@ -311,7 +314,7 @@ export function VideoPlayer({
               const v = video.current;
               if (!v) return;
               if (document.pictureInPictureElement) void document.exitPictureInPicture();
-              else void v.requestPictureInPicture();
+              else if (document.pictureInPictureEnabled) void v.requestPictureInPicture();
             }}
           >
             <PictureInPicture2 className="size-[18px]" />

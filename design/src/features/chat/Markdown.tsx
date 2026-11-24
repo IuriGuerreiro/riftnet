@@ -11,7 +11,7 @@ function Mentions({ text }: { text: string }) {
     <EmojiText
       text={text}
       renderText={(chunk, key) =>
-        chunk.split(/(@\w+)/g).map((part, i) =>
+        chunk.split(/((?<![\w@.])@[\w]+(?:\.[\w]+)*)/g).map((part, i) =>
           part.startsWith("@") ? (
             <span
               key={`${key}-${i}`}
@@ -37,7 +37,10 @@ function Spoiler({ children }: { children: ReactNode }) {
       aria-label={shown ? undefined : "Spoiler, click to reveal"}
       onClick={() => setShown(true)}
       onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") setShown(true);
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          setShown(true);
+        }
       }}
       className={cn(
         "rounded px-0.5 transition-colors duration-200",
@@ -46,7 +49,9 @@ function Spoiler({ children }: { children: ReactNode }) {
           : "cursor-pointer bg-surface-4 text-transparent select-none hover:bg-surface-4/80 [&_img]:opacity-0",
       )}
     >
-      {children}
+      <span inert={!shown} className={shown ? undefined : "pointer-events-none opacity-0"}>
+        {children}
+      </span>
     </span>
   );
 }

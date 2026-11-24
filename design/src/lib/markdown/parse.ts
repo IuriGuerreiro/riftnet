@@ -3,7 +3,7 @@ type Format = "strong" | "em" | "del" | "spoiler";
 export type Inline =
   | string
   | { kind: "code"; text: string }
-  | { kind: "link"; href: string; text: string }
+  | { kind: "link"; href: string; text: string; suppressEmbed?: boolean }
   | { kind: Format; children: Inline[] };
 
 export type Block =
@@ -73,10 +73,18 @@ function parseInline(text: string): Inline[] {
     } else if (/^<?https?:\/\//i.test(token)) {
       const label = token.startsWith("<") ? token.slice(1, -1) : bareUrlText(token);
       const href = safeHref(label);
-      current().push(href ? { kind: "link", href, text: label } : token);
+      current().push(
+        href ? { kind: "link", href, text: label, suppressEmbed: token.startsWith("<") } : token,
+      );
       if (!token.startsWith("<") && href && label.length < token.length) {
         current().push(token.slice(label.length));
       }
+    } else if (
+      token.startsWith("_") &&
+      /\w/.test(text.charAt(index - 1)) &&
+      /\w/.test(text.charAt(end))
+    ) {
+      current().push(token);
     } else {
       let delimiter = token;
       let offset = index;

@@ -1,6 +1,7 @@
 import { ArrowUp, CornerUpLeft, Plus, Smile, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
+import { Avatar } from "@/components/Avatar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { searchEmoji, useEmojiIndex } from "@/features/emoji/data";
 import { Emoji } from "@/features/emoji/Emoji";
@@ -9,10 +10,13 @@ import { EmojiText } from "@/features/emoji/EmojiText";
 import { GifPicker } from "@/features/media/GifPicker";
 import { type Staged, StagedTray } from "@/features/media/StagedTray";
 import { cn } from "@/lib/utils";
-import { type Attachment, type Message, user } from "@/mock/data";
+import { type Attachment, ME, type Message, user } from "@/mock/data";
+
+import { getDraft, saveDraft } from "./drafts";
 
 const PARTIAL = /(^|\s):([a-z0-9_+-]{2,})$/i;
-const COMPLETE = /:([a-z0-9_+-]+):$/i;
+const COMPLETE = /(?<!\S):([a-z0-9_+-]+):$/i;
+const MENTION = /(^|\s)@([\w.]*)$/;
 
 function TypingLine({ name }: { name?: string }) {
   return (
@@ -37,7 +41,47 @@ function TypingLine({ name }: { name?: string }) {
   );
 }
 
+interface Suggestion {
+  key: string;
+  insert: string;
+  label: ReactNode;
+  hint?: ReactNode;
+}
+
+function mentionSuggestions(query: string, members: string[], isChannel: boolean): Suggestion[] {
+  const q = query.toLowerCase();
+  const people: Suggestion[] = members
+    .filter((id) => id !== ME)
+    .map(user)
+    .filter((u) => !q || u.name.toLowerCase().startsWith(q) || u.handle.startsWith(q))
+    .slice(0, 8)
+    .map((u) => ({
+      key: u.id,
+      insert: `@${u.handle}`,
+      label: (
+        <span className="flex items-center gap-2.5">
+          <Avatar id={u.id} size={22} status ringBg="var(--popover)" />
+          <span className="font-medium">{u.name}</span>
+        </span>
+      ),
+      hint: `@${u.handle}`,
+    }));
+  const groups: Suggestion[] = isChannel
+    ? [
+        {
+          key: "everyone",
+          insert: "@everyone",
+          label: <b>@everyone</b>,
+          hint: "Notify everyone in this channel",
+        },
+        { key: "here", insert: "@here", label: <b>@here</b>, hint: "Notify everyone online" },
+      ].filter((g) => g.key.startsWith(q))
+    : [];
+  return [...people, ...groups];
+}
+
 export function Composer({
+  draftKey,
   placeholder,
   typing,
   onSend,
@@ -48,7 +92,10 @@ export function Composer({
   replyTo,
   onCancelReply,
   onEditLast,
+  members,
+  isChannel,
 }: {
+  draftKey: string;
   placeholder: string;
   typing?: string;
   onSend: (text: string) => void;
@@ -59,27 +106,57 @@ export function Composer({
   replyTo?: Message;
   onCancelReply: () => void;
   onEditLast: () => void;
+  members: string[];
+  isChannel: boolean;
 }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [gifOpen, setGifOpen] = useState(false);
   const index = useEmojiIndex();
-  const [text, setText] = useState("");
-  const [caret, setCaret] = useState(0);
+  const [storedText, setStoredText] = useState(() => getDraft(draftKey).text);
+  const [caret, setCaret] = useState(() => getDraft(draftKey).text.length);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [highlight, setHighlight] = useState(0);
   const [dismissed, setDismissed] = useState<string | null>(null);
   const area = useRef<HTMLTextAreaElement>(null);
 
+  const text = storedText;
+  const setText = (value: string) => {
+    setStoredText(value);
+    saveDraft(draftKey, { text: value });
+  };
+
   useEffect(() => {
     if (replyTo) area.current?.focus();
   }, [replyTo]);
 
+  useEffect(() => {
+    const el = area.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, window.innerHeight * 0.4)}px`;
+  }, [text]);
+
   const before = text.slice(0, caret);
-  const partial = PARTIAL.exec(before)?.[2] ?? null;
-  const suggestions = useMemo(
-    () => (index && partial && partial !== dismissed ? searchEmoji(index, partial, 8) : []),
-    [index, partial, dismissed],
-  );
+  const emojiQuery = PARTIAL.exec(before)?.[2] ?? null;
+  const mentionQuery = MENTION.exec(before)?.[2] ?? null;
+  const query = emojiQuery ?? mentionQuery;
+  const trigger = emojiQuery !== null ? ":" : "@";
+  const suggestions = useMemo<Suggestion[]>(() => {
+    if (query === null || `${trigger}${query}` === dismissed) return [];
+    if (trigger === "@") return mentionSuggestions(query, members, isChannel);
+    if (!index) return [];
+    return searchEmoji(index, query, 8).map((e) => ({
+      key: e.hexcode,
+      insert: e.unicode,
+      label: (
+        <span className="flex items-center gap-3">
+          <Emoji emoji={e.unicode} size={22} />
+          <span className="font-mono text-[13px]">:{e.shortcodes[0] ?? e.label}:</span>
+        </span>
+      ),
+      hint: <span className="capitalize">{e.label}</span>,
+    }));
+  }, [index, query, trigger, dismissed, members, isChannel]);
   const selected = Math.min(highlight, Math.max(suggestions.length - 1, 0));
 
   const replaceBeforeCaret = (from: number, insert: string) => {
@@ -93,9 +170,9 @@ export function Composer({
     });
   };
 
-  const accept = (unicode: string) => {
-    if (partial === null) return;
-    replaceBeforeCaret(caret - partial.length - 1, `${unicode} `);
+  const accept = (sug: Suggestion) => {
+    if (query === null) return;
+    replaceBeforeCaret(caret - query.length - 1, `${sug.insert} `);
   };
 
   const insertAtCaret = (unicode: string) => {
@@ -118,6 +195,7 @@ export function Composer({
     }
     setText(value);
     setCaret(pos);
+    setDismissed(null);
     setHighlight(0);
   };
 
@@ -127,35 +205,37 @@ export function Composer({
     if (!canSend) return;
     onSend(t);
     setText("");
+    setDismissed(null);
     setCaret(0);
   };
 
   return (
     <div className="relative px-4 pb-4">
       {suggestions.length > 0 && (
-        <div className="animate-in fade-in slide-in-from-bottom-1 absolute right-4 bottom-full left-4 mb-2 overflow-hidden rounded-xl border border-border bg-popover p-1.5 shadow-2xl shadow-black/40 duration-150">
+        <div className="animate-in fade-in slide-in-from-bottom-1 absolute right-4 bottom-full left-4 z-30 mb-2 overflow-hidden rounded-xl border border-border bg-popover p-1.5 shadow-2xl shadow-black/40 duration-150">
           <p className="px-2 pt-1 pb-1.5 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
-            Emoji matching <span className="text-foreground normal-case">:{partial}</span>
+            {trigger === ":" ? "Emoji matching" : "Members matching"}{" "}
+            <span className="text-foreground normal-case">
+              {trigger}
+              {query}
+            </span>
           </p>
-          {suggestions.map((e, i) => (
+          {suggestions.map((sug, i) => (
             <button
-              key={e.hexcode}
+              key={sug.key}
               type="button"
               onMouseEnter={() => setHighlight(i)}
               onMouseDown={(ev) => {
                 ev.preventDefault();
-                accept(e.unicode);
+                accept(sug);
               }}
               className={cn(
                 "flex h-9 w-full items-center gap-3 rounded-lg px-2 text-left text-sm",
                 i === selected ? "bg-accent text-foreground" : "text-foreground/80",
               )}
             >
-              <Emoji emoji={e.unicode} size={22} />
-              <span className="font-mono text-[13px]">:{e.shortcodes[0] ?? e.label}:</span>
-              <span className="ml-auto truncate text-xs text-muted-foreground capitalize">
-                {e.label}
-              </span>
+              {sug.label}
+              <span className="ml-auto truncate text-xs text-muted-foreground">{sug.hint}</span>
             </button>
           ))}
         </div>
@@ -220,6 +300,7 @@ export function Composer({
               }
             }}
             onKeyDown={(e) => {
+              if (e.nativeEvent.isComposing) return;
               if (suggestions.length > 0) {
                 if (e.key === "ArrowDown" || e.key === "ArrowUp") {
                   e.preventDefault();
@@ -230,11 +311,11 @@ export function Composer({
                 if (e.key === "Enter" || e.key === "Tab") {
                   e.preventDefault();
                   const pick = suggestions[selected];
-                  if (pick) accept(pick.unicode);
+                  if (pick) accept(pick);
                   return;
                 }
                 if (e.key === "Escape") {
-                  setDismissed(partial);
+                  setDismissed(`${trigger}${query ?? ""}`);
                   return;
                 }
               }
@@ -252,7 +333,7 @@ export function Composer({
                 send();
               }
             }}
-            className="max-h-40 min-h-9 flex-1 resize-none bg-transparent py-2 text-[15px] outline-none placeholder:text-muted-foreground/70"
+            className="min-h-9 flex-1 resize-none bg-transparent py-2 text-[15px] outline-none placeholder:text-muted-foreground/70"
           />
           <Popover open={gifOpen} onOpenChange={setGifOpen}>
             <PopoverTrigger asChild>

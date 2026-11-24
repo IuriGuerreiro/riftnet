@@ -41,10 +41,6 @@ export function DeleteDialog({
             </div>
           </div>
         )}
-        <p className="text-xs text-muted-foreground">
-          Tip: hold <kbd className="rounded bg-surface-3 px-1">Shift</kbd> when clicking delete to
-          skip this.
-        </p>
         <DialogFooter>
           <Button variant="ghost" onClick={onClose}>
             Cancel

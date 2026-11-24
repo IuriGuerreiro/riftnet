@@ -66,6 +66,9 @@ export interface Message {
   time: string;
   replyTo?: string;
   edited?: boolean;
+  day?: string;
+  status?: "sending" | "failed";
+  pinned?: boolean;
   reactions?: Reaction[];
   attachments?: Attachment[];
 }
@@ -473,9 +476,16 @@ const SCRIPTS: Record<string, Message[]> = {
         },
       ],
     },
+    {
+      id: "m6d",
+      author: "maya",
+      text: "this guide explains the new dash tech https://www.youtube.com/watch?v=adept-dash",
+      time: "21:08",
+    },
     { id: "m7", author: "maya", text: "ok one more game then I'm out 😅", time: "21:08" },
   ],
   "owls-general": [
+    { id: "g0", author: "ivy", text: "night all 🌙", time: "23:48", day: "Yesterday" },
     { id: "g1", author: "kai", text: "morning owls 🦉", time: "09:14" },
     {
       id: "g2",
@@ -493,6 +503,7 @@ const SCRIPTS: Record<string, Message[]> = {
     },
     {
       id: "g5",
+      pinned: true,
       author: "sam",
       text: "new lighting pass on the forge map, thoughts?",
       time: "21:06",
@@ -599,8 +610,15 @@ const SCRIPTS: Record<string, Message[]> = {
     },
     {
       id: "g6g",
+      pinned: true,
       author: "noor",
       text: "plan for tonight:\n- warmup in *Hollow Drift*\n- 2 ranked games\n- then Starline on stream\nrules here https://adept.example/night-owls",
+      time: "21:09",
+    },
+    {
+      id: "g6h",
+      author: "kai",
+      text: "also it's on sale rn https://store.steampowered.com/app/4242/Hollow_Drift/",
       time: "21:09",
     },
     { id: "g7", author: "tom", text: "who's hopping on tonight?", time: "21:09" },
