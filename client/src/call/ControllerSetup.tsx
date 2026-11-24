@@ -10,7 +10,6 @@ import { padState } from "./padState";
 const statusSchema = z.object({
   supported: z.boolean(),
   driver: z.boolean(),
-  helper: z.boolean(),
 });
 const installSchema = z.enum(["ready", "declined", "restart_needed"]);
 const reportSchema = z.object({
@@ -111,16 +110,12 @@ export function ControllerSetup() {
         ) : (
           <div className="space-y-3 text-sm">
             <p>
-              To give friends virtual controllers, Adept needs <b>usbip-win2</b> (a driver) and{" "}
-              <b>VIIPER</b> (which creates the controllers). Both are free and open source.
+              To give friends virtual controllers, Adept needs <b>ViGEmBus</b>, a free, open source
+              driver. It’s retired, so it won’t get updates.
             </p>
-            <p>
-              Windows will ask for permission if the driver isn’t installed. USB devices may
-              disconnect for a moment.
-            </p>
+            <p>Windows will ask for permission. Only the driver is installed, nothing else.</p>
             <p className="flex gap-3">
-              <GitHubLink repo="vadimgrn/usbip-win2" />
-              <GitHubLink repo="Alia5/VIIPER" />
+              <GitHubLink repo="nefarius/ViGEmBus" />
             </p>
             {inCall && <p className="text-warning">Leave your call before installing.</p>}
             <ErrorText error={install.error} />

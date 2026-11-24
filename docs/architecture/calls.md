@@ -200,13 +200,16 @@ A viewer drives the sharer's keyboard and mouse. Windows and X11 hosts only (Way
 
 ### Virtual controllers (setup and self-test only)
 
-Not connected to calls yet: friends cannot drive a pad. `share_play/pad.rs` runs VIIPER and creates Xbox 360 pads; `pad_setup.rs` installs it.
+Not connected to calls yet: friends cannot drive a pad. `share_play/pad.rs` creates Xbox 360 pads through the ViGEmBus driver; `pad_setup.rs` installs it.
 
-- The host starts setup from the profile panel (Windows only). Adept downloads pinned releases of VIIPER and usbip-win2 and checks their SHA-256 before running them. A lock stops the file changing after the check.
-- The driver installer runs silently behind one admin prompt. Adept never restarts Windows.
-- VIIPER runs unelevated, on random loopback ports, in a job object that ends it if Adept dies. Other local programs can still reach its API without a password.
+- The host starts setup from the profile panel (Windows x64 desktop only). Only the driver is installed: no installer, updater, service app or download.
+- Adept embeds the Microsoft-signed `.sys`, `.inf` and `.cat`, unmodified, from the official ViGEmBus 1.22.0 release (`drivers/vigembus`; the driver itself is 1.21.442). One admin prompt relaunches Adept as a short-lived helper, which adds the device through Windows' own driver API.
+- To remove it: Device Manager → System devices → Nefarius Virtual Gamepad Emulation Bus → Uninstall device, and tick the box to remove the driver.
+- An existing ViGEmBus install is used as is, including its updater.
+- ViGEmBus is retired and gets no more fixes. `PadState` hides the driver, so it can be replaced.
+- The driver removes a pad when the process that owns it ends.
 - The Guide button is always stripped.
-- **Test controllers** creates two pads, checks XInput isolation and delay, then checks that unplugging and stopping VIIPER remove them.
+- **Test controllers** creates two pads, checks XInput isolation and delay, then checks that unplugging removes them.
 
 ## 9. Risks / open questions
 

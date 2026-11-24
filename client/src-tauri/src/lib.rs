@@ -10,6 +10,7 @@ fn core_ping() -> Vec<u8> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    share_play::pad_setup::run_install_helper();
     tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
