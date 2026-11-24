@@ -6,9 +6,11 @@ import { AdeptMark } from "@/components/brand/AdeptMark";
 import { ServerIcon } from "@/components/ServerIcon";
 import { ActivityLine } from "@/features/adept/ActivityLine";
 import { CallCard } from "@/features/adept/CallCard";
+import { CallStage } from "@/features/adept/CallStage";
 import { PeoplePanel } from "@/features/adept/PeoplePanel";
 import { ProfilePanel } from "@/features/adept/ProfilePanel";
 import { RoomPreview } from "@/features/adept/RoomPreview";
+import { StreamPip } from "@/features/adept/StreamPip";
 import { TopBarStatus } from "@/features/adept/TopBarStatus";
 import { ChatView } from "@/features/chat/ChatView";
 import { EmojiText } from "@/features/emoji/EmojiText";
@@ -666,46 +668,68 @@ export function AdeptLayout() {
           />
         </aside>
 
-        <main className="mr-2 mb-2 flex min-w-0 flex-1 overflow-hidden rounded-xl border border-white/[0.06] bg-background shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-          <ChatView
-            key={activeId}
-            conversationId={activeId}
-            lane="left"
-            panelInDm
-            membersOpen={panelOpen && !previewRoom}
-            onToggleMembers={() => {
-              setPreview(null);
-              setPanelOpen((v) => !v);
-            }}
-            aside={
-              previewRoom ? (
-                <RoomPreview
-                  room={
-                    joined === previewRoom.channelId
-                      ? { ...previewRoom, people: [...new Set([...previewRoom.people, ME])] }
-                      : previewRoom
-                  }
-                  muted={muted || deafened}
-                  deafened={deafened}
-                  sharing={sharing}
-                  onShare={toggleShare}
-                  onLeave={leave}
-                  joined={joined === previewRoom.channelId}
-                  onJoin={() => join(previewRoom.channelId)}
-                  onClose={() => setPreview(null)}
-                />
-              ) : panelOpen ? (
-                c.kind === "dm" ? (
-                  <ProfilePanel id={c.members[0] ?? ""} />
-                ) : (
-                  <PeoplePanel
-                    ids={c.kind === "group" ? [ME, ...c.members] : c.members}
-                    server={chatServer}
+        <main className="relative mr-2 mb-2 flex min-w-0 flex-1 overflow-hidden rounded-xl border border-white/[0.06] bg-background shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+          {joinedRoom && preview === joined ? (
+            <CallStage
+              room={{ ...joinedRoom, people: [...new Set([...joinedRoom.people, ME])] }}
+              muted={muted || deafened}
+              deafened={deafened}
+              sharing={sharing}
+              onMute={toggleMute}
+              onDeafen={toggleDeafen}
+              onShare={toggleShare}
+              onLeave={leave}
+              onOpenChat={() => setPreview(null)}
+            />
+          ) : (
+            <ChatView
+              key={activeId}
+              conversationId={activeId}
+              lane="left"
+              panelInDm
+              membersOpen={panelOpen && !previewRoom}
+              onToggleMembers={() => {
+                setPreview(null);
+                setPanelOpen((v) => !v);
+              }}
+              aside={
+                previewRoom ? (
+                  <RoomPreview
+                    room={
+                      joined === previewRoom.channelId
+                        ? { ...previewRoom, people: [...new Set([...previewRoom.people, ME])] }
+                        : previewRoom
+                    }
+                    muted={muted || deafened}
+                    deafened={deafened}
+                    sharing={sharing}
+                    onShare={toggleShare}
+                    onLeave={leave}
+                    joined={joined === previewRoom.channelId}
+                    onJoin={() => join(previewRoom.channelId)}
+                    onClose={() => setPreview(null)}
                   />
-                )
-              ) : null
-            }
-          />
+                ) : panelOpen ? (
+                  c.kind === "dm" ? (
+                    <ProfilePanel id={c.members[0] ?? ""} />
+                  ) : (
+                    <PeoplePanel
+                      ids={c.kind === "group" ? [ME, ...c.members] : c.members}
+                      server={chatServer}
+                    />
+                  )
+                ) : null
+              }
+            />
+          )}
+          {joinedRoom && preview !== joined && (
+            <StreamPip
+              room={joinedRoom}
+              sharing={sharing}
+              onOpen={() => setPreview(joinedRoom.channelId)}
+              onStopShare={toggleShare}
+            />
+          )}
         </main>
       </div>
 

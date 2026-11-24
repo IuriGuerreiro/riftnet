@@ -3,7 +3,6 @@ import { HeadphoneOff, Headphones, Mic, MicOff, MonitorUp, PhoneOff } from "luci
 import { cn } from "@/lib/utils";
 import { type LiveRoom, ME, server } from "@/mock/data";
 
-import { ScreenSharePreview } from "./ScreenSharePreview";
 import { SpeakingAvatar } from "./SpeakingAvatar";
 import { useSpeaker } from "./useSpeaker";
 
@@ -96,11 +95,22 @@ export function CallCard({
         onClick={onOpen}
         className="mt-2 block w-full rounded-md px-1 py-1 text-left text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
       >
-        {room.people.length} in call · View participants
+        {room.people.length} in call · Open call
       </button>
       {sharing && (
-        <div className="mt-2">
-          <ScreenSharePreview onStop={onShare} />
+        <div className="mt-2 flex items-center gap-2 rounded-lg bg-brand/10 px-2 py-1.5 text-[11px]">
+          <span className="relative flex size-1.5">
+            <span className="absolute inline-flex size-full animate-ping rounded-full bg-brand opacity-70 motion-reduce:animate-none" />
+            <span className="relative inline-flex size-1.5 rounded-full bg-brand" />
+          </span>
+          <span className="flex-1 font-medium text-brand">You're sharing your screen</span>
+          <button
+            type="button"
+            onClick={onShare}
+            className="font-semibold text-destructive hover:underline"
+          >
+            Stop
+          </button>
         </div>
       )}
       <div className="mt-2.5 flex gap-1.5">
