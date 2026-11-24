@@ -21,6 +21,7 @@ pub fn run() {
             }
             app.manage(voice_shortcut::VoiceShortcut::default());
             app.manage(share_play::SharePlay::start(app.handle().clone()));
+            app.manage(share_play::pad_setup::PadSetup::default());
             if cfg!(debug_assertions) {
                 app.handle().plugin(
                     tauri_plugin_log::Builder::default()
@@ -39,6 +40,9 @@ pub fn run() {
             share_play::share_play_arm,
             share_play::share_play_revoke,
             share_play::share_play_input,
+            share_play::pad_setup::pad_status,
+            share_play::pad_setup::pad_install,
+            share_play::pad_setup::pad_test,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

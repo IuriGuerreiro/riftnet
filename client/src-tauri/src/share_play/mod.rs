@@ -3,6 +3,9 @@ mod keymap;
 mod mapping;
 #[cfg(any(windows, target_os = "linux"))]
 mod os;
+#[cfg(any(windows, test))]
+mod pad;
+pub mod pad_setup;
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};

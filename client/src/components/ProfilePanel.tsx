@@ -10,6 +10,7 @@ import {
   useUploadAvatar,
   useUploadBanner,
 } from "../api/profile";
+import { ControllerSetup } from "../call/ControllerSetup";
 import { ProfileCardBody } from "../features/profile/ProfileCard";
 import { DesktopUpdateSettings } from "../features/updates/DesktopUpdates";
 import {
@@ -126,6 +127,7 @@ export function ProfilePanel({
         Voice &amp; Audio
       </Button>
       <DesktopUpdateSettings />
+      <ControllerSetup />
 
       {previewProfile && (
         <section aria-label="Profile preview">

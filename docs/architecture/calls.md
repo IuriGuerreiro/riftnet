@@ -198,6 +198,16 @@ A viewer drives the sharer's keyboard and mouse. Windows and X11 hosts only (Way
   - A 2 s lease is renewed by viewer pings every 500 ms. It also ends on transport loss.
   - Strict key allowlist. Delete is always blocked. Linux also blocks Backspace and F-keys regardless of modifiers held locally. Other platforms block those keys while remote Ctrl+Alt are held. Failed native releases revoke control, remain tracked for retry, and prevent rearming until cleanup succeeds. Clicks and wheel only land after the OS confirms the cursor is at their position; if it can't say, they are refused.
 
+### Virtual controllers (setup and self-test only)
+
+Not connected to calls yet: friends cannot drive a pad. `share_play/pad.rs` runs VIIPER and creates Xbox 360 pads; `pad_setup.rs` installs it.
+
+- The host starts setup from the profile panel (Windows only). Adept downloads pinned releases of VIIPER and usbip-win2 and checks their SHA-256 before running them. A lock stops the file changing after the check.
+- The driver installer runs silently behind one admin prompt. Adept never restarts Windows.
+- VIIPER runs unelevated, on random loopback ports, in a job object that ends it if Adept dies. Other local programs can still reach its API without a password.
+- The Guide button is always stripped.
+- **Test controllers** creates two pads, checks XInput isolation and delay, then checks that unplugging and stopping VIIPER remove them.
+
 ## 9. Risks / open questions
 
 1. **libwebrtc in Tauri** is heavy (prebuilt C++ binaries, big app). Must work on Windows, macOS, Linux.
