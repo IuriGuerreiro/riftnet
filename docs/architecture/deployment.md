@@ -119,7 +119,7 @@ Media `.env`: `MEDIA_IP` = VPS public IP, `MEDIA_PORT` = the UDP port,
 
 ## 5. Release the desktop app
 
-The Release app workflow builds a Windows x64 installer and a Linux x64 AppImage. The installed app checks GitHub Releases and asks the user before it installs a new version.
+The Release app workflow builds a Windows x64 installer. Linux builds are paused. The installed app checks GitHub Releases and asks the user before it installs a new version.
 
 ### Set up release signing
 
@@ -132,10 +132,10 @@ The Release app workflow builds a Windows x64 installer and a Linux x64 AppImage
 
 1. Bump `version` in `client/src-tauri/tauri.conf.json` for each release. Promote the commit to `prod`.
 2. Run **Release app** from `prod` with `create_draft` selected. Enter the release notes to show in the app. Leave `create_draft` clear to generate signed workflow artifacts only.
-3. Verify the draft includes both bundles, their signatures, and `latest.json`. Publish it as the latest stable release when verification passes.
-4. For the first rollout, share the installer or AppImage with existing users for a manual upgrade. Later releases appear in **Check for updates**.
+3. Verify the draft includes the installer, its signature, and `latest.json`. Publish it as the latest stable release when verification passes.
+4. For the first rollout, share the installer with existing users for a manual upgrade. Later releases appear in **Check for updates**.
 
-Use a separate release repository and signing key for an end-to-end test. Install the lower version on each platform, then expose the higher version on the test feed. Verify **Later**, the install and restart, settings persistence, and rejection of a mismatched signature. If a published build needs to be reverted, ship the previous working code with a higher version.
+Use a separate release repository and signing key for an end-to-end test. Install the lower version, then expose the higher version on the test feed. Verify **Later**, the install and restart, settings persistence, and rejection of a mismatched signature. If a published build needs to be reverted, ship the previous working code with a higher version.
 
 ## Update / redeploy
 
