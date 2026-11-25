@@ -1,8 +1,10 @@
 mod control;
 mod meter;
+mod ready;
 mod sfu;
 
 use std::net::{IpAddr, UdpSocket};
+use std::sync::{Arc, OnceLock};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -23,16 +25,17 @@ async fn main() -> anyhow::Result<()> {
 
     let metrics_addr: std::net::SocketAddr =
         env_or("MEDIA_METRICS_ADDR", "127.0.0.1:7111").parse()?;
+    let nats_ready = Arc::new(OnceLock::new());
+    let probe = nats_ready.clone();
     tokio::spawn(async move {
-        if let Err(e) = meter::serve(metrics_addr, metrics_handle).await {
+        if let Err(e) = meter::serve(metrics_addr, metrics_handle, probe).await {
             tracing::warn!(error = %e, "media metrics endpoint stopped");
         }
     });
 
     let (sfu, notices) = sfu::start(socket)?;
     let nats = common::nats::connect(&nats_url).await?;
-    tracing::info!("media ready");
-    control::serve(nats, sfu, notices).await
+    control::serve(nats, sfu, notices, nats_ready).await
 }
 
 fn env_or(key: &str, default: &str) -> String {
