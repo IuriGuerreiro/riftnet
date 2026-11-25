@@ -40,7 +40,7 @@ const history = [
     conversationId: 1n,
     authorId: 2n,
     seq: 1n,
-    content: text.encode("yo 🐒"),
+    content: text.encode("yo, ready to queue?"),
   }),
   create(MessageSchema, {
     id: 2n,

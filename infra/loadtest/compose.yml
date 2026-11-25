@@ -1,0 +1,69 @@
+# Load-test stack: the prod layout squeezed onto the cheapest VPS shape,
+# 2 vCPU / 4 GB, including media. Every service shares cores 2,3 (like a VPS
+# shares its 2 vCPUs) and the memory caps add up to ~3.7 GB.
+# Separate project and volumes, so it never touches discord2-prod.
+# Start (repo root):
+#   docker compose -p discord2-loadtest -f infra/prod/compose.yml -f infra/loadtest/compose.yml \
+#     --env-file infra/loadtest/.env up -d --build
+name: discord2-loadtest
+
+x-vps: &vps
+  cpuset: "2,3"
+
+services:
+  cloudflared:
+    profiles: [disabled]
+
+  web:
+    profiles: [disabled]
+
+  api:
+    <<: *vps
+    mem_limit: 512m
+    ports: ["0.0.0.0:7200:7100"]
+    environment:
+      RATE_LIMITS: "off"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://host.docker.internal:4317
+    extra_hosts: ["host.docker.internal:host-gateway"]
+
+  zitadel:
+    <<: *vps
+    mem_limit: 512m
+
+  postgres:
+    <<: *vps
+    mem_limit: 640m
+
+  scylla:
+    <<: *vps
+    mem_limit: 1280m
+    command: --smp 1 --memory 896M --reserve-memory 256M --overprovisioned 1 --developer-mode 1
+
+  redis:
+    <<: *vps
+    mem_limit: 192m
+
+  nats:
+    <<: *vps
+    mem_limit: 128m
+    ports: !override ["127.0.0.1:14222:4222"]
+
+  minio:
+    <<: *vps
+    mem_limit: 256m
+
+  media:
+    <<: *vps
+    mem_limit: 256m
+    restart: unless-stopped
+    build:
+      context: ../..
+      dockerfile: infra/prod/rust.Dockerfile
+      args: { BIN: media }
+    network_mode: host
+    environment:
+      MEDIA_IP: ${MEDIA_IP}
+      MEDIA_PORT: "7210"
+      NATS_URL: nats://app:${NATS_PASSWORD}@127.0.0.1:14222
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://127.0.0.1:4317
+    depends_on: [nats]

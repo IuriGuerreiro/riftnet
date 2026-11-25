@@ -101,3 +101,22 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm audit --prod
+
+  images:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build the API and media images (not published)
+        run: |
+          for bin in api media; do
+            docker buildx build --platform linux/amd64 --build-arg "BIN=$bin" -f infra/prod/rust.Dockerfile .
+          done
+      - name: Check deploy scripts and Compose files
+        run: |
+          shellcheck infra/prod/*.sh scripts/media-fingerprint.sh
+          export DEPLOY_IMAGE=test DEPLOY_PROJECT=test
+          docker compose --env-file infra/prod/.env.example -f infra/prod/compose.yml -f infra/prod/compose.api-deploy.yml config --quiet
+          docker compose --env-file infra/prod/media/.env.example -f infra/prod/media/compose.yml -f infra/prod/media/compose.deploy.yml config --quiet

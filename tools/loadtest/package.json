@@ -1,0 +1,16 @@
+{
+  "name": "loadtest",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "description": "k6 load tests. Scripts are TypeScript, bundled with esbuild into dist/ for k6.",
+  "scripts": {
+    "build": "pnpm --filter client gen && node build.mjs"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "^2.17.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.12"
+  }
+}

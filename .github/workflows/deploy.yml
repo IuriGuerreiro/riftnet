@@ -1,0 +1,146 @@
+name: Deploy
+
+on:
+  push:
+    branches: [prod]
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  images:
+    needs: ci
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      api: ${{ steps.api.outputs.digest }}
+      media: ${{ steps.media.outputs.digest }}
+      fingerprint: ${{ steps.media-inputs.outputs.fingerprint }}
+      config-api: ${{ steps.config.outputs.api }}
+      config-media: ${{ steps.config.outputs.media }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - id: media-inputs
+        run: |
+          fingerprint=$(scripts/media-fingerprint.sh)
+          echo "fingerprint=$fingerprint" >> "$GITHUB_OUTPUT"
+      - id: config
+        working-directory: infra/prod
+        run: |
+          echo "api=$(cat compose.yml compose.api-deploy.yml deploy.sh | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "media=$(cat media/compose.yml media/compose.deploy.yml deploy.sh | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - id: api
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: infra/prod/rust.Dockerfile
+          build-args: BIN=api
+          platforms: linux/amd64
+          provenance: false
+          tags: ghcr.io/iuriguerreiro/adept-api:${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          push: true
+      - id: media
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: infra/prod/rust.Dockerfile
+          build-args: BIN=media
+          platforms: linux/amd64
+          provenance: false
+          tags: ghcr.io/iuriguerreiro/adept-media:${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            adept.fingerprint=${{ steps.media-inputs.outputs.fingerprint }}
+          push: true
+
+  # One service at a time. Media waits for a good API deploy.
+  deploy:
+    needs: images
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    concurrency:
+      group: prod-deploy
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: read
+      id-token: write
+    env:
+      API_HOST: ${{ vars.PROD_API_DEPLOY_HOST }}
+      MEDIA_HOST: ${{ vars.PROD_MEDIA_DEPLOY_HOST }}
+    steps:
+      - id: prod
+        name: Skip if prod already moved on
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          head=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/prod" --jq .object.sha)
+          if [[ "$head" == "$GITHUB_SHA" ]]; then
+            echo "current=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Skipped: prod moved to $head."
+          fi
+      - name: Check repository variables
+        if: steps.prod.outputs.current == 'true'
+        env:
+          CLIENT_ID: ${{ vars.PROD_TAILSCALE_CLIENT_ID }}
+          AUDIENCE: ${{ vars.PROD_TAILSCALE_AUDIENCE }}
+        run: |
+          for host in "$API_HOST" "$MEDIA_HOST"; do
+            [[ "$host" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]] || { echo "::error::Set PROD_API_DEPLOY_HOST and PROD_MEDIA_DEPLOY_HOST."; exit 1; }
+          done
+          [[ -n "$CLIENT_ID" && -n "$AUDIENCE" ]] || { echo "::error::Set PROD_TAILSCALE_CLIENT_ID and PROD_TAILSCALE_AUDIENCE."; exit 1; }
+      - name: Join the tailnet
+        if: steps.prod.outputs.current == 'true'
+        uses: tailscale/github-action@064b10558093f38325e838ddea35486bdc6b1d5c # v4.4.0
+        with:
+          oauth-client-id: ${{ vars.PROD_TAILSCALE_CLIENT_ID }}
+          audience: ${{ vars.PROD_TAILSCALE_AUDIENCE }}
+          tags: tag:ci-deploy
+      - name: Deploy API
+        if: steps.prod.outputs.current == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DIGEST: ${{ needs.images.outputs.api }}
+          CONFIG: ${{ needs.images.outputs.config-api }}
+        run: |
+          remote() { tailscale ssh "adept-deploy@$API_HOST" sudo -n /opt/adept-deploy/deploy.sh; }
+          status=$(remote <<< status)
+          echo "$status"
+          grep -qx "config=$CONFIG" <<< "$status" || echo "::warning::The server's deploy files differ from this commit. Run setup-deploy.sh there."
+          printf '%s\n' deploy "$DIGEST" "$GITHUB_ACTOR" "$GH_TOKEN" | remote
+      - name: Deploy media if its code changed
+        if: steps.prod.outputs.current == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DIGEST: ${{ needs.images.outputs.media }}
+          FINGERPRINT: ${{ needs.images.outputs.fingerprint }}
+          CONFIG: ${{ needs.images.outputs.config-media }}
+        run: |
+          remote() { tailscale ssh "adept-deploy@$MEDIA_HOST" sudo -n /opt/adept-deploy/deploy.sh; }
+          status=$(remote <<< status)
+          echo "$status"
+          grep -qx "config=$CONFIG" <<< "$status" || echo "::warning::The VPS deploy files differ from this commit. Run setup-deploy.sh there."
+          if grep -qx "fingerprint=$FINGERPRINT" <<< "$status"; then
+            echo "::notice::Media unchanged: calls keep running."
+          else
+            printf '%s\n' deploy "$DIGEST" "$GITHUB_ACTOR" "$GH_TOKEN" | remote
+          fi

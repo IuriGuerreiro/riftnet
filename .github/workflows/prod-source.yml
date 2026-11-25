@@ -1,0 +1,21 @@
+name: Prod source
+
+# Only for PRs into prod, so a PR into main can never produce a passing check.
+# "edited" covers a PR that is retargeted to prod.
+on:
+  pull_request:
+    branches: [prod]
+    types: [opened, synchronize, reopened, edited]
+
+permissions: {}
+
+jobs:
+  prod-source:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require main from this repository
+        env:
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          [[ "$HEAD_REPO" == "$GITHUB_REPOSITORY" && "$HEAD_REF" == main ]] || { echo "::error::PRs into prod must come from main."; exit 1; }

@@ -13,4 +13,4 @@ This map describes features in the current web client and API. Each page shows w
 
 For planned work, see the [project idea and MVP plan](../product/README.md).
 
-For local setup, evidence, and cleanup, use the [verification skill](../../.agents/skills/verify-discord/SKILL.md).
+For local setup, evidence, and cleanup, use the [verification skill](../../.agents/skills/verify-adept/SKILL.md).

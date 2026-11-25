@@ -1,6 +1,7 @@
 # Prod prototype, media server. Host networking: the SFU binds the public IP
 # and advertises it to browsers, so no Docker NAT in the way.
 # Start (from repo root): docker compose -f infra/prod/media/compose.yml --env-file infra/prod/media/.env up -d --build
+# Keep this name: the live stack runs under it.
 name: discord2-media
 
 services:
@@ -16,3 +17,10 @@ services:
       MEDIA_PORT: ${MEDIA_PORT:-7110}
       NATS_URL: nats://app:${NATS_PASSWORD}@${MAIN_TAILSCALE_IP}:4222
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+    # /ready does a NATS round trip. Images older than /ready answer 200 on any path.
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "--max-time", "4", "http://127.0.0.1:7111/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

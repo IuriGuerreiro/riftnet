@@ -1,0 +1,5 @@
+# Added by deploy.sh on top of compose.yml.
+services:
+  media:
+    build: !reset null
+    image: ${DEPLOY_IMAGE:?Set by deploy.sh}

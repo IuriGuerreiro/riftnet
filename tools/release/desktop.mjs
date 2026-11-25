@@ -6,8 +6,7 @@ const config = JSON.parse(
 const { version } = config;
 const { DESKTOP_RELEASE_REPO: repo, TAURI_UPDATER_PUBLIC_KEY: pubkey, RELEASE_NOTES } = process.env;
 const assetNames = {
-  "windows-x86_64": "discord2-windows-x64-setup.exe",
-  "linux-x86_64": "discord2-linux-x64.AppImage",
+  "windows-x86_64": "adept-windows-x64-setup.exe",
 };
 
 if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version)) {

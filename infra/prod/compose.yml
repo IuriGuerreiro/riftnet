@@ -1,6 +1,7 @@
 # Prod prototype, main box. Nothing publishes a host port: the public way in
 # is Cloudflare Tunnel, and media (on another server) reaches NATS over Tailscale.
 # Start: docker compose -f infra/prod/compose.yml --env-file infra/prod/.env up -d --build
+# Keep this name: the live volumes belong to the discord2-prod project.
 name: discord2-prod
 
 x-restart: &restart
