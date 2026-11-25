@@ -72,11 +72,10 @@ export function login(i: number): Session {
 
 export function fresh(s: Session): Session {
   if (s.expiresAtMs - Date.now() > 120_000) return s;
-  const res = http.post(
-    `${API}/auth/refresh`,
-    JSON.stringify({ refresh_token: s.refreshToken }),
-    { headers: JSON_HEADERS, tags: { name: "POST /auth/refresh" } },
-  );
+  const res = http.post(`${API}/auth/refresh`, JSON.stringify({ refresh_token: s.refreshToken }), {
+    headers: JSON_HEADERS,
+    tags: { name: "POST /auth/refresh" },
+  });
   if (res.status !== 200) throw new Error(`refresh: ${res.status}`);
   return parseSession(res.body as string);
 }
