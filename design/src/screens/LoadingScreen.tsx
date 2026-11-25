@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import type { LoadingSearch } from "./loadingSearch";
 
 const STEPS = ["Starting up", "Checking your session"] as const;
+const PROGRESS = [20, 65, 100];
 const STEP_MS = 800;
 
 export function LoadingScreen({ state }: LoadingSearch) {
@@ -19,7 +20,7 @@ export function LoadingScreen({ state }: LoadingSearch) {
         className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_50%_44%,color-mix(in_srgb,var(--adept-violet)_16%,transparent),transparent_55%)]"
       />
       {state === "error" ? <Offline /> : <Booting hold={state === "hold"} />}
-      <p className="absolute bottom-6 text-[11px] text-muted-foreground/50">
+      <p className="absolute bottom-6 text-[11px] text-muted-foreground/80">
         v0.1.0 · design build
       </p>
     </div>
@@ -39,10 +40,11 @@ function Booting({ hold }: { hold: boolean }) {
 
   useEffect(() => {
     if (hold || step < STEPS.length) return;
-    void navigate({ to: "/login", replace: true });
+    const id = setTimeout(() => void navigate({ to: "/login", replace: true }), 300);
+    return () => clearTimeout(id);
   }, [hold, step, navigate]);
 
-  const progress = ((Math.min(step, STEPS.length - 1) + 1) / STEPS.length) * 100;
+  const progress = PROGRESS[step] ?? 100;
 
   return (
     <div className="flex flex-col items-center" role="status" aria-live="polite">
@@ -72,9 +74,7 @@ function Offline() {
         <WifiOff className="size-7 text-muted-foreground" />
       </div>
       <h1 className="mt-6 text-xl font-semibold">Can't reach Adept</h1>
-      <p className="mt-2 text-sm text-muted-foreground">
-        Check your connection. We'll keep trying in the background.
-      </p>
+      <p className="mt-2 text-sm text-muted-foreground">Check your connection, then try again.</p>
       <Button
         className="mt-6"
         variant="secondary"

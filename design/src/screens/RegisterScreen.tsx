@@ -43,7 +43,7 @@ export function RegisterScreen() {
       footer={
         <>
           Already have an account?{" "}
-          <Link to="/login" className="font-medium text-brand hover:underline">
+          <Link to="/login" className="font-medium text-brand-text hover:underline">
             Log in
           </Link>
         </>
@@ -67,6 +67,7 @@ export function RegisterScreen() {
             autoFocus
             placeholder="you@example.com"
             aria-invalid={!!errors.email}
+            aria-describedby={errors.email ? "email-error" : undefined}
             className="h-11"
             {...form.register("email")}
           />
@@ -76,6 +77,7 @@ export function RegisterScreen() {
             id="password"
             autoComplete="new-password"
             aria-invalid={!!errors.password}
+            aria-describedby={errors.password ? "password-error" : undefined}
             {...form.register("password")}
           />
           <PasswordStrength password={password} />
@@ -85,6 +87,7 @@ export function RegisterScreen() {
             id="confirm"
             autoComplete="new-password"
             aria-invalid={!!errors.confirm}
+            aria-describedby={errors.confirm ? "confirm-error" : undefined}
             {...form.register("confirm")}
           />
         </Field>

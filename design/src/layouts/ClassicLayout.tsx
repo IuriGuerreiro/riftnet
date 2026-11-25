@@ -38,7 +38,7 @@ function RailItem({
       <button type="button" aria-label={label} title={label} onClick={onClick} className="relative">
         {children}
         {mentions ? (
-          <span className="absolute -right-1 -bottom-1 grid h-5 min-w-5 place-items-center rounded-full border-[3px] border-ink bg-destructive px-1 text-[10px] font-bold text-white">
+          <span className="absolute -right-1 -bottom-1 grid h-5 min-w-5 place-items-center rounded-full border-[3px] border-ink bg-danger-fill px-1 text-[10px] font-bold text-white">
             {mentions}
           </span>
         ) : null}
@@ -124,7 +124,7 @@ function HomeSidebar({ active, onOpen }: { active: string; onOpen: (id: string) 
                 </span>
               </span>
               {c.unread > 0 && (
-                <span className="grid h-4 min-w-4 place-items-center rounded-full bg-destructive px-1 text-[10px] font-bold text-white">
+                <span className="grid h-4 min-w-4 place-items-center rounded-full bg-danger-fill px-1 text-[10px] font-bold text-white">
                   {c.unread}
                 </span>
               )}
@@ -188,7 +188,7 @@ function ServerSidebar({
                     )}
                     <span className="truncate">{c.name}</span>
                     {c.mentions ? (
-                      <span className="ml-auto grid h-4 min-w-4 place-items-center rounded-full bg-destructive px-1 text-[10px] font-bold text-white">
+                      <span className="ml-auto grid h-4 min-w-4 place-items-center rounded-full bg-danger-fill px-1 text-[10px] font-bold text-white">
                         {c.mentions}
                       </span>
                     ) : null}
@@ -201,7 +201,7 @@ function ServerSidebar({
                       <Avatar id={id} size={20} />
                       <span className="truncate">{user(id).name}</span>
                       {c.live === id && (
-                        <span className="ml-auto mr-2 rounded bg-destructive px-1 text-[9px] font-bold tracking-wide text-white">
+                        <span className="ml-auto mr-2 rounded bg-danger-fill px-1 text-[9px] font-bold tracking-wide text-white">
                           LIVE
                         </span>
                       )}
@@ -262,7 +262,7 @@ export function ClassicLayout() {
         <span className="grid size-12 place-items-center rounded-[38%] bg-surface-2 text-success transition-colors hover:bg-success hover:text-white">
           <Plus className="size-5" />
         </span>
-        <span className="grid size-12 place-items-center rounded-[38%] bg-surface-2 text-muted-foreground transition-colors hover:bg-brand hover:text-white">
+        <span className="grid size-12 place-items-center rounded-[38%] bg-surface-2 text-muted-foreground transition-colors hover:bg-brand-fill hover:text-white">
           <Compass className="size-5" />
         </span>
       </nav>

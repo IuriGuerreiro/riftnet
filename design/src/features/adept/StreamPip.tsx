@@ -8,23 +8,24 @@ export function StreamPip({
   room,
   sharing,
   onOpen,
+  onHide,
   onStopShare,
 }: {
   room: LiveRoom;
   sharing: boolean;
   onOpen: () => void;
+  onHide: () => void;
   onStopShare: () => void;
 }) {
   const streams = [...(sharing ? [ME] : []), ...(room.live ? [room.live] : [])];
   const [pick, setPick] = useState<string | null>(null);
-  const [hidden, setHidden] = useState<string | null>(null);
   const current = streams.find((s) => s === pick) ?? streams[0];
-  if (!current || hidden === streams.join()) return null;
+  if (!current) return null;
   const mine = current === ME;
   const label = mine ? "Your screen" : `${user(current).name}'s screen`;
 
   return (
-    <div className="animate-in fade-in slide-in-from-bottom-3 group/pip absolute right-4 bottom-24 z-40 w-80 overflow-hidden rounded-xl bg-black shadow-2xl ring-1 shadow-black/60 ring-white/10 duration-200">
+    <div className="animate-in fade-in slide-in-from-bottom-3 group/pip absolute right-4 bottom-24 z-10 w-44 @md:w-64 @4xl:w-80 overflow-hidden rounded-xl bg-black shadow-2xl ring-1 shadow-black/60 ring-white/10 duration-200">
       <button
         type="button"
         onClick={onOpen}
@@ -37,10 +38,10 @@ export function StreamPip({
           className="aspect-video w-full object-cover"
         />
       </button>
-      <span className="pointer-events-none absolute top-2 left-2 flex items-center gap-1 rounded bg-destructive px-1.5 py-0.5 text-[10px] font-bold text-white">
+      <span className="pointer-events-none absolute top-2 left-2 flex items-center gap-1 rounded bg-danger-fill px-1.5 py-0.5 text-[10px] font-bold text-white">
         <Radio className="size-3" /> LIVE
       </span>
-      <div className="absolute top-2 right-2 flex gap-1 opacity-0 transition-opacity group-hover/pip:opacity-100">
+      <div className="absolute top-2 right-2 flex gap-1 opacity-80 transition-opacity group-hover/pip:opacity-100 focus-within:opacity-100">
         <button
           type="button"
           aria-label="Open call"
@@ -52,7 +53,7 @@ export function StreamPip({
         <button
           type="button"
           aria-label="Hide preview"
-          onClick={() => setHidden(streams.join())}
+          onClick={onHide}
           className="grid size-7 place-items-center rounded-md bg-black/60 text-white backdrop-blur hover:bg-black/80"
         >
           <X className="size-3.5" />
@@ -69,7 +70,7 @@ export function StreamPip({
               className={cn(
                 "rounded-md px-1.5 py-0.5 text-[11px] font-medium",
                 s === current
-                  ? "bg-brand/20 text-brand"
+                  ? "bg-brand/20 text-brand-text"
                   : "text-muted-foreground hover:text-foreground",
               )}
             >

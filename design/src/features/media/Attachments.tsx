@@ -110,11 +110,11 @@ function FileIcon({ name }: { name: string }) {
 export function FileCard({ name, size, url }: { name: string; size: number; url?: string }) {
   return (
     <div className="flex w-[360px] max-w-full items-center gap-3 rounded-xl border border-border bg-surface-1 p-3">
-      <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-brand/15 text-brand">
+      <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-brand/15 text-brand-text">
         <FileIcon name={name} />
       </span>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-brand hover:underline">{name}</p>
+        <p className="truncate text-sm font-medium text-brand-text hover:underline">{name}</p>
         <p className="text-xs text-muted-foreground">{formatBytes(size)}</p>
       </div>
       <a

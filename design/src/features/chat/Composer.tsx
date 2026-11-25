@@ -1,5 +1,5 @@
 import { ArrowUp, CornerUpLeft, Plus, Smile, X } from "lucide-react";
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { Avatar } from "@/components/Avatar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -132,10 +132,22 @@ export function Composer({
   useEffect(() => {
     const el = area.current;
     if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, window.innerHeight * 0.4)}px`;
+    const fit = () => {
+      el.style.height = "auto";
+      el.style.height = `${Math.min(el.scrollHeight, window.innerHeight * 0.3)}px`;
+    };
+    fit();
+    let width = el.clientWidth;
+    const observer = new ResizeObserver(() => {
+      if (el.clientWidth === width) return;
+      width = el.clientWidth;
+      fit();
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
   }, [text]);
 
+  const listId = useId();
   const before = text.slice(0, caret);
   const emojiQuery = PARTIAL.exec(before)?.[2] ?? null;
   const mentionQuery = MENTION.exec(before)?.[2] ?? null;
@@ -220,24 +232,30 @@ export function Composer({
               {query}
             </span>
           </p>
-          {suggestions.map((sug, i) => (
-            <button
-              key={sug.key}
-              type="button"
-              onMouseEnter={() => setHighlight(i)}
-              onMouseDown={(ev) => {
-                ev.preventDefault();
-                accept(sug);
-              }}
-              className={cn(
-                "flex h-9 w-full items-center gap-3 rounded-lg px-2 text-left text-sm",
-                i === selected ? "bg-accent text-foreground" : "text-foreground/80",
-              )}
-            >
-              {sug.label}
-              <span className="ml-auto truncate text-xs text-muted-foreground">{sug.hint}</span>
-            </button>
-          ))}
+          <div role="listbox" id={listId} aria-label="Suggestions">
+            {suggestions.map((sug, i) => (
+              <button
+                key={sug.key}
+                id={`${listId}-${i}`}
+                role="option"
+                aria-selected={i === selected}
+                tabIndex={-1}
+                type="button"
+                onMouseEnter={() => setHighlight(i)}
+                onMouseDown={(ev) => {
+                  ev.preventDefault();
+                  accept(sug);
+                }}
+                className={cn(
+                  "flex h-9 w-full items-center gap-3 rounded-lg px-2 text-left text-sm",
+                  i === selected ? "bg-accent text-foreground" : "text-foreground/80",
+                )}
+              >
+                {sug.label}
+                <span className="ml-auto truncate text-xs text-muted-foreground">{sug.hint}</span>
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
@@ -245,7 +263,7 @@ export function Composer({
       <div className="overflow-hidden rounded-xl border border-border bg-surface-2 transition-colors focus-within:border-brand/50">
         {replyTo && (
           <div className="animate-in fade-in slide-in-from-bottom-1 flex items-center gap-2 border-b border-border bg-surface-1 px-3 py-2 text-xs duration-150">
-            <CornerUpLeft className="size-3.5 shrink-0 -scale-x-100 text-brand" />
+            <CornerUpLeft className="size-3.5 shrink-0 -scale-x-100 text-brand-text" />
             <span className="shrink-0 text-muted-foreground">
               Replying to{" "}
               <b className="font-semibold text-foreground">{user(replyTo.author).name}</b>
@@ -290,6 +308,11 @@ export function Composer({
             rows={1}
             value={text}
             placeholder={placeholder}
+            aria-label={placeholder}
+            role="combobox"
+            aria-expanded={suggestions.length > 0}
+            aria-controls={listId}
+            aria-activedescendant={suggestions.length > 0 ? `${listId}-${selected}` : undefined}
             onChange={(e) => onChange(e.target.value, e.target.selectionStart)}
             onSelect={(e) => setCaret(e.currentTarget.selectionStart)}
             onPaste={(e) => {
@@ -308,7 +331,7 @@ export function Composer({
                   setHighlight((selected + d + suggestions.length) % suggestions.length);
                   return;
                 }
-                if (e.key === "Enter" || e.key === "Tab") {
+                if ((e.key === "Enter" || e.key === "Tab") && !e.shiftKey) {
                   e.preventDefault();
                   const pick = suggestions[selected];
                   if (pick) accept(pick);
@@ -333,7 +356,7 @@ export function Composer({
                 send();
               }
             }}
-            className="min-h-9 flex-1 resize-none bg-transparent py-2 text-[15px] outline-none placeholder:text-muted-foreground/70"
+            className="min-h-9 min-w-0 flex-1 resize-none placeholder-shown:overflow-hidden placeholder-shown:whitespace-nowrap bg-transparent py-2 text-[15px] outline-none placeholder:text-muted-foreground/70"
           />
           <Popover open={gifOpen} onOpenChange={setGifOpen}>
             <PopoverTrigger asChild>
@@ -387,7 +410,7 @@ export function Composer({
             className={cn(
               "grid size-9 shrink-0 place-items-center rounded-lg transition-all",
               canSend
-                ? "bg-brand text-white hover:bg-brand-hover"
+                ? "bg-brand-fill text-white hover:bg-brand-fill/85"
                 : "pointer-events-none bg-surface-3 text-muted-foreground/50",
             )}
           >

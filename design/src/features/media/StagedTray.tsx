@@ -35,7 +35,7 @@ export function StagedTray({
                 </span>
               </>
             ) : (
-              <FileText className="size-8 text-brand" />
+              <FileText className="size-8 text-brand-text" />
             )}
             {att.kind === "gif" && (
               <span className="absolute top-1 left-1 rounded bg-black/60 px-1 text-[9px] font-bold text-white">
@@ -51,7 +51,7 @@ export function StagedTray({
             type="button"
             aria-label={`Remove ${att.name}`}
             onClick={() => onRemove(id)}
-            className="absolute -top-1.5 -right-1.5 grid size-6 place-items-center rounded-full border border-border bg-popover text-muted-foreground shadow transition-colors hover:bg-destructive hover:text-white"
+            className="absolute -top-1.5 -right-1.5 grid size-6 place-items-center rounded-full border border-border bg-popover text-muted-foreground shadow transition-colors hover:bg-danger-fill hover:text-white"
           >
             <X className="size-3.5" />
           </button>

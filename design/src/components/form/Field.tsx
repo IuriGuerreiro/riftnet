@@ -34,7 +34,11 @@ export function Field({
           {error}
         </p>
       ) : (
-        hint !== undefined && <p className="text-xs text-muted-foreground">{hint}</p>
+        hint !== undefined && (
+          <p id={`${id}-hint`} aria-live="polite" className="text-xs text-muted-foreground">
+            {hint}
+          </p>
+        )
       )}
     </div>
   );

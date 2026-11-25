@@ -7,6 +7,8 @@ import { EmojiText } from "@/features/emoji/EmojiText";
 import { cn } from "@/lib/utils";
 import { FRIENDS, LIVE_ROOMS, server } from "@/mock/data";
 
+export type RequestState = "pending" | "accepted" | "ignored";
+
 interface Note {
   id: string;
   kind: "mention" | "reply" | "request";
@@ -74,7 +76,7 @@ function Pill({
       type="button"
       title={label}
       onClick={onClick}
-      className="flex h-7 items-center gap-2 rounded-lg px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-surface-2 hover:text-foreground"
+      className="flex h-7 items-center gap-2 whitespace-nowrap rounded-lg px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-surface-2 hover:text-foreground"
     >
       {children}
     </button>
@@ -85,10 +87,14 @@ export function TopBarStatus({
   onOpen,
   onFriends,
   onLive,
+  request,
+  onRequest,
 }: {
   onOpen: (id: string) => void;
   onFriends: () => void;
   onLive: () => void;
+  request: RequestState;
+  onRequest: (r: RequestState) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [read, setRead] = useState<Set<string>>(new Set());
@@ -97,7 +103,9 @@ export function TopBarStatus({
   return (
     <div className="flex items-center justify-end gap-1">
       <Pill label="Friends online" onClick={onFriends}>
-        <AvatarStack ids={ONLINE.map((f) => f.id)} size={18} max={3} ringBg="var(--adept-ink)" />
+        <span className="hidden lg:block">
+          <AvatarStack ids={ONLINE.map((f) => f.id)} size={18} max={3} ringBg="var(--adept-ink)" />
+        </span>
         <span>
           <span className="text-foreground">{ONLINE.length}</span> online
         </span>
@@ -131,7 +139,7 @@ export function TopBarStatus({
               )}
             />
             {unread > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 grid h-3.5 min-w-3.5 place-items-center rounded-full border-2 border-ink bg-destructive px-0.5 text-[9px] leading-none font-bold text-white">
+              <span className="absolute -top-0.5 -right-0.5 grid h-3.5 min-w-3.5 place-items-center rounded-full border-2 border-ink bg-danger-fill px-0.5 text-[9px] leading-none font-bold text-white">
                 {unread}
               </span>
             )}
@@ -152,18 +160,22 @@ export function TopBarStatus({
             {NOTES.map((n) => {
               const isUnread = !read.has(n.id);
               return (
-                <button
+                <div
                   key={n.id}
-                  type="button"
-                  onClick={() => {
-                    setRead((r) => new Set(r).add(n.id));
-                    if (n.open) {
-                      onOpen(n.open);
-                      setOpen(false);
-                    }
-                  }}
-                  className="flex w-full items-start gap-3 rounded-lg p-2.5 text-left hover:bg-accent/60"
+                  className="relative flex w-full items-start gap-3 rounded-lg p-2.5 text-left hover:bg-accent/60"
                 >
+                  <button
+                    type="button"
+                    aria-label={`Open notification from ${FRIENDS.find((f) => f.id === n.who)?.name}`}
+                    className="absolute inset-0 rounded-lg"
+                    onClick={() => {
+                      setRead((r) => new Set(r).add(n.id));
+                      if (n.open) {
+                        onOpen(n.open);
+                        setOpen(false);
+                      }
+                    }}
+                  />
                   <span className="relative">
                     <Avatar id={n.who} size={36} />
                     <span className="absolute -right-1 -bottom-1 grid size-[18px] place-items-center rounded-full border-2 border-popover bg-surface-3 text-foreground">
@@ -191,19 +203,38 @@ export function TopBarStatus({
                         <EmojiText text={n.text} size={15} />
                       </span>
                     )}
-                    {n.kind === "request" && (
-                      <span className="mt-2 flex gap-1.5">
-                        <span className="rounded-md bg-brand px-2.5 py-1 text-xs font-semibold text-white">
+                    {n.kind === "request" && request !== "pending" && (
+                      <span className="mt-1 block text-xs text-muted-foreground">
+                        {request === "accepted" ? "You're now friends" : "Request ignored"}
+                      </span>
+                    )}
+                    {n.kind === "request" && request === "pending" && (
+                      <span className="relative mt-2 flex w-fit gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onRequest("accepted");
+                            setRead((r) => new Set(r).add(n.id));
+                          }}
+                          className="rounded-md bg-brand-fill px-2.5 py-1 text-xs font-semibold text-white"
+                        >
                           Accept
-                        </span>
-                        <span className="rounded-md bg-surface-3 px-2.5 py-1 text-xs font-medium">
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onRequest("ignored");
+                            setRead((r) => new Set(r).add(n.id));
+                          }}
+                          className="rounded-md bg-surface-3 px-2.5 py-1 text-xs font-medium"
+                        >
                           Ignore
-                        </span>
+                        </button>
                       </span>
                     )}
                   </span>
                   {isUnread && <span className="mt-1.5 size-2 shrink-0 rounded-full bg-brand" />}
-                </button>
+                </div>
               );
             })}
           </div>

@@ -44,12 +44,14 @@ function ControlButton({
 }
 
 function Track({
+  label,
   value,
   buffered = 0,
   onSeek,
   className,
   hoverLabel,
 }: {
+  label: string;
   value: number;
   buffered?: number;
   onSeek: (ratio: number) => void;
@@ -72,10 +74,18 @@ function Track({
     <div
       ref={ref}
       role="slider"
+      aria-label={label}
       aria-valuenow={Math.round(value * 100)}
       aria-valuemin={0}
       aria-valuemax={100}
-      tabIndex={-1}
+      tabIndex={0}
+      onKeyDown={(e) => {
+        const d = { ArrowRight: 0.05, ArrowUp: 0.05, ArrowLeft: -0.05, ArrowDown: -0.05 }[e.key];
+        if (d === undefined) return;
+        e.preventDefault();
+        e.stopPropagation();
+        onSeek(Math.min(1, Math.max(0, value + d)));
+      }}
       onPointerDown={onDown}
       onPointerMove={(e) => {
         setHover(ratioAt(e.clientX));
@@ -83,7 +93,10 @@ function Track({
       }}
       onPointerLeave={() => setHover(null)}
       onClick={(e) => e.stopPropagation()}
-      className={cn("group/track relative flex h-4 cursor-pointer items-center", className)}
+      className={cn(
+        "group/track relative flex h-4 rounded outline-none focus-visible:ring-2 focus-visible:ring-brand cursor-pointer items-center",
+        className,
+      )}
     >
       <div className="relative h-1 w-full overflow-hidden rounded-full bg-white/20 transition-[height] group-hover/track:h-1.5">
         <div
@@ -265,6 +278,7 @@ export function VideoPlayer({
         )}
       >
         <Track
+          label="Seek"
           value={duration ? time / duration : 0}
           buffered={buffered}
           onSeek={seek}
@@ -288,8 +302,13 @@ export function VideoPlayer({
             >
               <VolIcon className="size-[18px]" />
             </ControlButton>
-            <div className="w-0 overflow-hidden transition-[width] duration-200 group-hover/vol:w-20">
-              <Track value={muted ? 0 : volume} onSeek={setVol} className="mx-2 w-16" />
+            <div className="w-0 overflow-hidden transition-[width] duration-200 group-focus-within/vol:w-20 group-hover/vol:w-20">
+              <Track
+                label="Volume"
+                value={muted ? 0 : volume}
+                onSeek={setVol}
+                className="mx-2 w-16"
+              />
             </div>
           </div>
           <span className="ml-1 text-xs text-white/85 tabular-nums">

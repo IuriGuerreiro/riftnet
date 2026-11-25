@@ -14,7 +14,9 @@ export function SpeakingAvatar({
 }) {
   return (
     <span
-      className={cn("rounded-full transition-shadow duration-150 motion-reduce:transition-none")}
+      className={cn(
+        "inline-flex shrink-0 rounded-full transition-shadow duration-150 motion-reduce:transition-none",
+      )}
       style={{
         boxShadow: speaking
           ? `0 0 0 2px ${ringBg}, 0 0 0 4px var(--success)`

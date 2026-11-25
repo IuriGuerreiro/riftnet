@@ -56,7 +56,16 @@ export function UsernameScreen() {
   const status = useAvailability(username);
   const display = username.trim().toLowerCase();
 
+  const [queued, setQueued] = useState<string | null>(null);
+  const waiting = queued === display && status === "checking";
+  const error = errors.username?.message ?? (status === "taken" ? "That one's taken." : undefined);
+
+  useEffect(() => {
+    if (queued === display && status === "free") void navigate({ to: "/app" });
+  }, [queued, display, status, navigate]);
+
   const onSubmit = form.handleSubmit(async () => {
+    if (status === "checking") setQueued(display);
     if (status !== "free") return;
     await navigate({ to: "/app" });
   });
@@ -72,10 +81,12 @@ export function UsernameScreen() {
         <Field
           id="username"
           label="Username"
-          error={errors.username?.message ?? (status === "taken" ? "That one's taken." : undefined)}
+          error={error}
           hint={
             status === "free" ? (
               <span className="text-success">Nice, it's yours.</span>
+            ) : status === "checking" ? (
+              "Checking availability…"
             ) : (
               "3 to 32 characters: letters, numbers, _ and ."
             )
@@ -92,6 +103,7 @@ export function UsernameScreen() {
               spellCheck={false}
               placeholder="yourname"
               aria-invalid={!!errors.username || status === "taken"}
+              aria-describedby={error ? "username-error" : "username-hint"}
               className="h-11 pr-10 pl-7"
               {...form.register("username")}
             />
@@ -108,7 +120,7 @@ export function UsernameScreen() {
                 key={s}
                 type="button"
                 onClick={() => pick(s)}
-                className="rounded-full border border-border bg-surface-2 px-3 py-1 text-xs text-foreground transition-colors hover:border-brand hover:text-brand"
+                className="rounded-full border border-border bg-surface-2 px-3 py-1 text-xs text-foreground transition-colors hover:border-brand hover:text-brand-text"
               >
                 @{s}
               </button>
@@ -118,7 +130,9 @@ export function UsernameScreen() {
 
         <ProfilePreview name={display} />
 
-        <SubmitButton pending={isSubmitting}>Continue</SubmitButton>
+        <SubmitButton pending={isSubmitting || waiting} disabled={status === "taken"}>
+          Continue
+        </SubmitButton>
       </form>
     </AuthShell>
   );
@@ -129,7 +143,7 @@ function ProfilePreview({ name }: { name: string }) {
   return (
     <div className="flex items-center gap-3 rounded-xl border border-border bg-surface-1 p-3">
       <div className="relative">
-        <div className="grid size-11 place-items-center rounded-full bg-brand/20 text-base font-semibold text-brand">
+        <div className="grid size-11 place-items-center rounded-full bg-brand/20 text-base font-semibold text-brand-text">
           {initial}
         </div>
         <span className="absolute -right-0.5 -bottom-0.5 size-3.5 rounded-full border-[3px] border-surface-1 bg-success" />

@@ -52,7 +52,7 @@ export function PeoplePanel({ ids, server }: { ids: string[]; server?: Server })
             <div key={id} className="relative">
               <Row id={id} />
               {r.live === id && (
-                <span className="absolute top-1/2 right-2 flex -translate-y-1/2 items-center gap-1 rounded bg-destructive px-1.5 py-0.5 text-[9px] font-bold text-white">
+                <span className="absolute top-1/2 right-2 flex -translate-y-1/2 items-center gap-1 rounded bg-danger-fill px-1.5 py-0.5 text-[9px] font-bold text-white">
                   <Radio className="size-2.5" /> LIVE
                 </span>
               )}

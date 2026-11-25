@@ -247,6 +247,7 @@ function MessageRow({
   all,
   editing,
   flash,
+  last,
   actions,
 }: {
   m: Message;
@@ -254,6 +255,7 @@ function MessageRow({
   all: Message[];
   editing: boolean;
   flash: boolean;
+  last: boolean;
   actions: MessageActions;
 }) {
   const mine = m.author === ME;
@@ -276,8 +278,21 @@ function MessageRow({
       <ContextMenuTrigger asChild disabled={editing || m.status !== undefined}>
         <div
           id={`msg-${m.id}`}
+          data-message
+          tabIndex={last ? 0 : -1}
+          onKeyDown={(e) => {
+            if (e.target !== e.currentTarget) return;
+            if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+            e.preventDefault();
+            const rows = [
+              ...(e.currentTarget
+                .closest("[data-messages]")
+                ?.querySelectorAll<HTMLElement>("[data-message]") ?? []),
+            ];
+            rows[rows.indexOf(e.currentTarget) + (e.key === "ArrowUp" ? -1 : 1)]?.focus();
+          }}
           className={cn(
-            "group/msg relative px-4 transition-colors duration-700 focus-within:bg-white/[0.025] hover:bg-white/[0.025]",
+            "group/msg relative px-4 outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset transition-colors duration-700 hover:bg-white/[0.025]",
             head ? "mt-3 pt-1 pb-0.5" : "py-0.5",
             mentioned &&
               "bg-brand/[0.07] shadow-[inset_2px_0_0_var(--adept-violet)] hover:bg-brand/10",
@@ -420,7 +435,9 @@ function MessageRow({
             <div
               className={cn(
                 "absolute -top-4 right-4 z-20 items-center gap-0.5 rounded-xl border border-border bg-popover p-1 shadow-lg shadow-black/30",
-                toolbarPinned ? "flex" : "hidden group-focus-within/msg:flex group-hover/msg:flex",
+                toolbarPinned
+                  ? "flex"
+                  : "hidden group-focus-visible/msg:flex group-has-[:focus-visible]/msg:flex group-hover/msg:flex",
               )}
             >
               {QUICK.map((e) => (
@@ -493,7 +510,7 @@ function Divider({ children, tone = "muted" }: { children: ReactNode; tone?: "mu
     <div
       className={cn(
         "mt-4 flex items-center gap-3 px-4 text-[11px] font-semibold tracking-wider uppercase",
-        tone === "brand" ? "text-brand" : "text-muted-foreground",
+        tone === "brand" ? "text-brand-text" : "text-muted-foreground",
       )}
     >
       <span className={cn("h-px flex-1", tone === "brand" ? "bg-brand/50" : "bg-border")} />
@@ -517,7 +534,7 @@ export function MessageList({
   actions: MessageActions;
 }) {
   return (
-    <div className="pb-4">
+    <div data-messages className="pt-5 pb-4">
       {rows.map((row) =>
         row.kind === "day" ? (
           <Divider key={row.key}>{row.label}</Divider>
@@ -533,6 +550,7 @@ export function MessageList({
             all={messages}
             editing={editingId === row.m.id}
             flash={flashId === row.m.id}
+            last={row.m.id === messages.at(-1)?.id}
             actions={actions}
           />
         ),

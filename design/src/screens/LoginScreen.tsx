@@ -36,7 +36,7 @@ export function LoginScreen() {
       footer={
         <>
           New to Adept?{" "}
-          <Link to="/register" className="font-medium text-brand hover:underline">
+          <Link to="/register" className="font-medium text-brand-text hover:underline">
             Create an account
           </Link>
         </>
@@ -60,6 +60,7 @@ export function LoginScreen() {
             autoFocus
             placeholder="you@example.com"
             aria-invalid={!!errors.email}
+            aria-describedby={errors.email ? "email-error" : undefined}
             className="h-11"
             {...form.register("email")}
           />
@@ -69,7 +70,7 @@ export function LoginScreen() {
           label="Password"
           error={errors.password?.message}
           aside={
-            <button type="button" className="text-xs font-medium text-brand hover:underline">
+            <button type="button" className="text-xs font-medium text-brand-text hover:underline">
               Forgot password?
             </button>
           }
@@ -78,6 +79,7 @@ export function LoginScreen() {
             id="password"
             autoComplete="current-password"
             aria-invalid={!!errors.password}
+            aria-describedby={errors.password ? "password-error" : undefined}
             {...form.register("password")}
           />
         </Field>

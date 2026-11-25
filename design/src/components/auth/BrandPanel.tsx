@@ -35,7 +35,7 @@ export function BrandPanel({ className }: { className?: string }) {
       <div className="mt-10 flex h-20 flex-col items-center gap-3 text-center">
         <p
           key={caption.tag}
-          className="animate-in fade-in slide-in-from-bottom-1 text-[11px] font-semibold tracking-[0.3em] text-brand uppercase duration-500"
+          className="animate-in fade-in slide-in-from-bottom-1 text-[11px] font-semibold tracking-[0.3em] text-brand-text uppercase duration-500"
         >
           {caption.tag}
         </p>

@@ -7,6 +7,9 @@
 
 :root {
   --adept-violet: #7c6cf2;
+  --brand-fill: #6757dc;
+  --brand-text: #a99eff;
+  --danger-fill: #cf3440;
   --adept-violet-hover: #8e80f5;
   --adept-ink: #0b0d12;
 
@@ -18,7 +21,7 @@
   --card-foreground: #ecedf1;
   --popover: #1d1f26;
   --popover-foreground: #ecedf1;
-  --primary: var(--adept-violet);
+  --primary: var(--brand-fill);
   --primary-foreground: #ffffff;
   --secondary: #272a33;
   --secondary-foreground: #ecedf1;
@@ -80,6 +83,9 @@
   --color-success: var(--success);
   --color-warning: var(--warning);
 
+  --color-brand-fill: var(--brand-fill);
+  --color-brand-text: var(--brand-text);
+  --color-danger-fill: var(--danger-fill);
   --color-brand: var(--adept-violet);
   --color-brand-hover: var(--adept-violet-hover);
   --color-ink: var(--adept-ink);
@@ -137,6 +143,17 @@
 
   ::selection {
     background: color-mix(in srgb, var(--adept-violet) 40%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-in,
+  .animate-out,
+  .animate-bounce,
+  .animate-ping,
+  .animate-pulse,
+  [class*="animate-[wiggle"] {
+    animation: none !important;
   }
 }
 

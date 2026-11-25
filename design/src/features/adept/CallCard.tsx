@@ -29,7 +29,7 @@ function CallButton({
       className={cn(
         "grid h-8 flex-1 place-items-center rounded-lg transition-colors",
         danger
-          ? "bg-destructive/90 text-white hover:bg-destructive"
+          ? "bg-danger-fill/90 text-white hover:bg-danger-fill"
           : on
             ? "bg-foreground text-background"
             : "bg-surface-3 text-foreground hover:bg-surface-4",
@@ -44,6 +44,9 @@ export function CallCard({
   room,
   onLeave,
   onOpen,
+  inStage,
+  ringing,
+  onShowPreview,
   muted,
   deafened,
   sharing,
@@ -60,6 +63,9 @@ export function CallCard({
   room: LiveRoom;
   onLeave: () => void;
   onOpen: () => void;
+  inStage: boolean;
+  ringing: boolean;
+  onShowPreview?: () => void;
 }) {
   const speaker = useSpeaker(room.people);
 
@@ -72,10 +78,10 @@ export function CallCard({
         </span>
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[13px] font-semibold text-success">
-            Voice connected
+            {ringing ? "Calling…" : "Voice connected"}
           </span>
           <span className="block truncate text-[11px] text-muted-foreground">
-            {room.name} · {server(room.serverId)?.name}
+            {room.name} · {server(room.serverId)?.name ?? "Direct call"}
           </span>
         </span>
         <span className="flex -space-x-1.5">
@@ -84,8 +90,8 @@ export function CallCard({
               key={id}
               id={id}
               size={20}
-              speaking={speaker === id && !(id === ME && (muted || deafened))}
-              ringBg="var(--surface-1)"
+              speaking={!ringing && speaker === id && !(id === ME && (muted || deafened))}
+              ringBg="var(--adept-ink)"
             />
           ))}
         </span>
@@ -95,15 +101,25 @@ export function CallCard({
         onClick={onOpen}
         className="mt-2 block w-full rounded-md px-1 py-1 text-left text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
       >
-        {room.people.length} in call · Open call
+        {ringing ? "Waiting for an answer" : `${room.people.length} in call`} ·{" "}
+        {inStage ? "Back to chat" : "Open call"}
       </button>
+      {onShowPreview && (
+        <button
+          type="button"
+          onClick={onShowPreview}
+          className="block w-full rounded-md px-1 py-1 text-left text-[11px] font-medium text-brand-text hover:bg-accent"
+        >
+          Show stream preview
+        </button>
+      )}
       {sharing && (
         <div className="mt-2 flex items-center gap-2 rounded-lg bg-brand/10 px-2 py-1.5 text-[11px]">
           <span className="relative flex size-1.5">
             <span className="absolute inline-flex size-full animate-ping rounded-full bg-brand opacity-70 motion-reduce:animate-none" />
             <span className="relative inline-flex size-1.5 rounded-full bg-brand" />
           </span>
-          <span className="flex-1 font-medium text-brand">You're sharing your screen</span>
+          <span className="flex-1 font-medium text-brand-text">You're sharing your screen</span>
           <button
             type="button"
             onClick={onShare}

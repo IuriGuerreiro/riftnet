@@ -193,7 +193,7 @@ export function FocusLayout() {
               <button
                 type="button"
                 onClick={() => setPalette(true)}
-                className="text-sm font-medium text-brand hover:underline"
+                className="text-sm font-medium text-brand-text hover:underline"
               >
                 Jump to something (⌘K)
               </button>

@@ -167,7 +167,7 @@ export function EmojiPicker({ onPick }: { onPick: (unicode: string) => void }) {
             className={cn(
               "grid size-8 flex-1 place-items-center rounded-md transition-colors",
               activeGroup === id && !query
-                ? "bg-brand/15 text-brand"
+                ? "bg-brand/15 text-brand-text"
                 : "text-muted-foreground hover:bg-accent hover:text-foreground",
             )}
           >

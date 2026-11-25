@@ -15,7 +15,7 @@ function Mentions({ text }: { text: string }) {
           part.startsWith("@") ? (
             <span
               key={`${key}-${i}`}
-              className="cursor-pointer rounded bg-brand/20 px-0.5 font-medium text-brand hover:bg-brand/30"
+              className="cursor-pointer rounded bg-brand/20 px-0.5 font-medium text-brand-text hover:bg-brand/30"
             >
               {part}
             </span>

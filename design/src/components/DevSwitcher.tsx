@@ -33,7 +33,7 @@ export function DevSwitcher() {
                 to={s.to}
                 search={s.search}
                 activeOptions={{ includeSearch: true }}
-                className="rounded-md px-2 py-1.5 text-sm text-foreground/80 hover:bg-accent hover:text-foreground data-[status=active]:bg-brand/15 data-[status=active]:text-brand"
+                className="rounded-md px-2 py-1.5 text-sm text-foreground/80 hover:bg-accent hover:text-foreground data-[status=active]:bg-brand/15 data-[status=active]:text-brand-text"
               >
                 {s.label}
               </Link>
@@ -81,7 +81,7 @@ function EmojiStylePicker() {
             className={cn(
               "h-6 rounded-md px-2 text-[11px] font-medium transition-colors",
               current === s.id
-                ? "bg-brand/20 text-brand"
+                ? "bg-brand/20 text-brand-text"
                 : "bg-surface-3 text-muted-foreground hover:text-foreground",
             )}
           >

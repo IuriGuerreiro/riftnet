@@ -1,4 +1,4 @@
-import { Headphones, Mic, MicOff, Settings } from "lucide-react";
+import { HeadphoneOff, Headphones, Mic, MicOff, Settings } from "lucide-react";
 import { useState } from "react";
 
 import { Avatar } from "@/components/Avatar";
@@ -73,7 +73,11 @@ export function UserBar({
         danger
         onClick={audio?.onDeafen}
       >
-        <Headphones className="size-[18px]" />
+        {audio?.deafened ? (
+          <HeadphoneOff className="size-[18px]" />
+        ) : (
+          <Headphones className="size-[18px]" />
+        )}
       </IconToggle>
       <IconToggle label="Settings">
         <Settings className="size-[18px]" />

@@ -20,7 +20,7 @@ export function ScreenSharePreview({ onStop }: { onStop: () => void }) {
         </span>
       </div>
       <div className="flex items-center gap-2 p-2.5">
-        <Monitor className="size-4 shrink-0 text-brand" />
+        <Monitor className="size-4 shrink-0 text-brand-text" />
         <span className="min-w-0 flex-1">
           <span className="block text-xs font-semibold">Your screen</span>
           <span className="block text-[11px] text-muted-foreground">Screen 1 · 1080p / 30 fps</span>

@@ -14,7 +14,7 @@ import {
   VideoOff,
   Volume2,
 } from "lucide-react";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import { Avatar } from "@/components/Avatar";
 import { cn } from "@/lib/utils";
@@ -22,18 +22,26 @@ import { type LiveRoom, ME, server, user } from "@/mock/data";
 
 import { useSpeaker } from "./useSpeaker";
 
+export interface CallState {
+  id: string;
+  startedAt: number;
+  camera: boolean;
+  focused: string | null;
+  ringing: boolean;
+  previewHidden: boolean;
+}
+
 type Tile = { kind: "person"; id: string } | { kind: "screen"; id: string };
 
 const tileKey = (t: Tile) => `${t.kind}:${t.id}`;
 
-function useElapsed() {
-  const [start] = useState(() => Date.now());
-  const [now, setNow] = useState(start);
+function useElapsed(start: number) {
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, []);
-  const s = Math.floor((now - start) / 1000);
+  const s = Math.max(0, Math.floor((now - start) / 1000));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
@@ -42,10 +50,12 @@ function PersonTile({
   speaking,
   muted,
   camera,
+  ringing,
   small,
   onFocus,
 }: {
   id: string;
+  ringing: boolean;
   speaking: boolean;
   muted: boolean;
   camera: boolean;
@@ -58,7 +68,9 @@ function PersonTile({
       type="button"
       onClick={onFocus}
       className={cn(
-        "group/tile relative aspect-video w-full overflow-hidden rounded-2xl text-left transition-shadow duration-150",
+        "group/tile relative aspect-video overflow-hidden rounded-2xl text-left transition-shadow duration-150",
+        small ? "w-40 shrink-0" : "w-full",
+        ringing && "opacity-60",
         speaking
           ? "ring-2 ring-success shadow-[0_0_24px_-4px_var(--success)]"
           : "ring-1 ring-white/5",
@@ -75,6 +87,7 @@ function PersonTile({
             className={cn(
               "rounded-full transition-transform duration-200",
               speaking && "scale-105",
+              ringing && "animate-pulse",
             )}
           >
             <Avatar id={id} size={small ? 44 : 80} />
@@ -85,7 +98,7 @@ function PersonTile({
         {muted && <MicOff className="size-3 text-destructive" />}
         <span className="truncate">
           {u.name}
-          {id === ME ? " (you)" : ""}
+          {id === ME ? " (you)" : ringing ? " · calling…" : ""}
         </span>
       </span>
     </button>
@@ -106,11 +119,13 @@ function ScreenTile({
   onStop: () => void;
 }) {
   const label = mine ? "Your screen" : `${user(id).name}'s screen`;
+  const box = useRef<HTMLDivElement>(null);
   return (
     <div
+      ref={box}
       className={cn(
-        "group/screen relative w-full overflow-hidden rounded-2xl bg-black ring-1 ring-white/10",
-        small ? "aspect-video" : "h-full",
+        "group/screen relative overflow-hidden rounded-2xl bg-black ring-1 ring-white/10",
+        small ? "aspect-video w-40 shrink-0" : "h-full w-full",
       )}
     >
       <button
@@ -125,7 +140,7 @@ function ScreenTile({
           className="size-full object-contain"
         />
       </button>
-      <span className="pointer-events-none absolute top-2 left-2 flex items-center gap-1 rounded bg-destructive px-1.5 py-0.5 text-[10px] font-bold text-white">
+      <span className="pointer-events-none absolute top-2 left-2 flex items-center gap-1 rounded bg-danger-fill px-1.5 py-0.5 text-[10px] font-bold text-white">
         <Radio className="size-3" /> LIVE
       </span>
       <span className="pointer-events-none absolute bottom-2 left-2 flex items-center gap-1.5 rounded-lg bg-black/60 px-2 py-1 text-xs font-medium text-white backdrop-blur">
@@ -133,12 +148,12 @@ function ScreenTile({
         {label}
       </span>
       {!small && (
-        <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 transition-opacity group-hover/screen:opacity-100">
+        <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 transition-opacity group-focus-within/screen:opacity-100 group-hover/screen:opacity-100">
           {mine && (
             <button
               type="button"
               onClick={onStop}
-              className="flex h-8 items-center gap-1.5 rounded-lg bg-destructive px-3 text-xs font-semibold text-white hover:bg-destructive/85"
+              className="flex h-8 items-center gap-1.5 rounded-lg bg-danger-fill px-3 text-xs font-semibold text-white hover:bg-danger-fill/85"
             >
               <Square className="size-3 fill-current" /> Stop sharing
             </button>
@@ -146,6 +161,10 @@ function ScreenTile({
           <button
             type="button"
             aria-label="Fullscreen"
+            onClick={() => {
+              if (document.fullscreenElement) void document.exitFullscreen();
+              else void box.current?.requestFullscreen();
+            }}
             className="grid size-8 place-items-center rounded-lg bg-black/60 text-white backdrop-blur hover:bg-black/80"
           >
             <Maximize2 className="size-4" />
@@ -182,7 +201,7 @@ function ControlButton({
         "grid h-12 place-items-center rounded-2xl transition-all duration-150 active:scale-95",
         wide ? "w-16" : "w-12",
         danger
-          ? "bg-destructive text-white hover:bg-destructive/85"
+          ? "bg-danger-fill text-white hover:bg-danger-fill/85"
           : active
             ? "bg-white text-ink hover:bg-white/90"
             : "bg-white/10 text-white hover:bg-white/20",
@@ -195,6 +214,8 @@ function ControlButton({
 
 export function CallStage({
   room,
+  call,
+  onCall,
   muted,
   deafened,
   sharing,
@@ -205,6 +226,8 @@ export function CallStage({
   onOpenChat,
 }: {
   room: LiveRoom;
+  call: CallState;
+  onCall: (patch: Partial<CallState>) => void;
   muted: boolean;
   deafened: boolean;
   sharing: boolean;
@@ -214,9 +237,9 @@ export function CallStage({
   onLeave: () => void;
   onOpenChat: () => void;
 }) {
-  const elapsed = useElapsed();
-  const [camera, setCamera] = useState(false);
-  const [focused, setFocused] = useState<string | null>(null);
+  const elapsed = useElapsed(call.startedAt);
+  const { camera, focused, ringing } = call;
+  const setFocused = (key: string) => onCall({ focused: focused === key ? null : key });
   const speaker = useSpeaker(room.people);
 
   const screens: Tile[] = [
@@ -244,8 +267,9 @@ export function CallStage({
         id={t.id}
         small={small}
         camera={t.id === ME && camera}
+        ringing={ringing && t.id !== ME}
         muted={t.id === ME && (muted || deafened)}
-        speaking={speaker === t.id && !(t.id === ME && (muted || deafened))}
+        speaking={!ringing && speaker === t.id && !(t.id === ME && (muted || deafened))}
         onFocus={() => setFocused(tileKey(t))}
       />
     );
@@ -259,8 +283,15 @@ export function CallStage({
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-[15px] leading-tight font-semibold">{room.name}</h2>
           <p className="truncate text-xs text-muted-foreground">
-            {server(room.serverId)?.name} · <span className="text-success">Voice connected</span> ·{" "}
-            <span className="tabular-nums">{elapsed}</span>
+            {server(room.serverId)?.name ?? "Direct call"} ·{" "}
+            {ringing ? (
+              <span role="status">Calling…</span>
+            ) : (
+              <>
+                <span className="text-success">Voice connected</span> ·{" "}
+                <span className="tabular-nums">{elapsed}</span>
+              </>
+            )}
           </p>
         </div>
         <span className="flex items-center gap-1.5 rounded-lg bg-white/5 px-2.5 py-1 text-xs text-muted-foreground">
@@ -280,13 +311,13 @@ export function CallStage({
           <div className="flex h-full flex-col gap-3">
             <div className="min-h-0 flex-1">{render(focus)}</div>
             {rest.length > 0 && (
-              <div className="grid shrink-0 grid-cols-[repeat(auto-fill,minmax(160px,200px))] justify-center gap-3">
-                {rest.map((t) => render(t, true))}
+              <div className="shrink-0 overflow-x-auto p-1">
+                <div className="mx-auto flex w-max gap-3">{rest.map((t) => render(t, true))}</div>
               </div>
             )}
           </div>
         ) : (
-          <div className="mx-auto grid h-full max-w-5xl content-center gap-3 [grid-template-columns:repeat(auto-fit,minmax(260px,1fr))]">
+          <div className="mx-auto grid min-h-full max-w-5xl gap-3 [align-content:safe_center] [grid-template-columns:repeat(auto-fit,minmax(260px,1fr))]">
             {tiles.map((t) => render(t))}
           </div>
         )}
@@ -307,7 +338,7 @@ export function CallStage({
           <ControlButton
             label={camera ? "Turn camera off" : "Turn camera on"}
             active={camera}
-            onClick={() => setCamera((v) => !v)}
+            onClick={() => onCall({ camera: !camera })}
           >
             {camera ? <Video className="size-5" /> : <VideoOff className="size-5" />}
           </ControlButton>
@@ -319,7 +350,12 @@ export function CallStage({
             <MonitorUp className="size-5" />
           </ControlButton>
           <span className="mx-1 h-8 w-px bg-white/10" />
-          <ControlButton label="Leave call" danger wide onClick={onLeave}>
+          <ControlButton
+            label={ringing ? "Cancel call" : "Leave call"}
+            danger
+            wide
+            onClick={onLeave}
+          >
             <PhoneOff className="size-5" />
           </ControlButton>
         </div>

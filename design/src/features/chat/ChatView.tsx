@@ -6,6 +6,7 @@ import { EmojiText } from "@/features/emoji/EmojiText";
 import { type Staged } from "@/features/media/StagedTray";
 import { toAttachment } from "@/features/media/toAttachment";
 import { activityText } from "@/features/shell/activityText";
+import { scrollBehavior } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import {
   type Attachment,
@@ -81,6 +82,11 @@ export function ChatView({
   lane = "full",
   panelInDm = false,
   aside,
+  previewId,
+  floating,
+  onCloseAside,
+  onCall,
+  onUnread,
   headerLeading,
   className,
 }: {
@@ -90,6 +96,11 @@ export function ChatView({
   lane?: "full" | "center" | "left";
   panelInDm?: boolean;
   aside?: ReactNode;
+  previewId?: string | null;
+  floating?: ReactNode;
+  onCloseAside?: () => void;
+  onCall?: (video: boolean) => void;
+  onUnread?: (unread: boolean) => void;
   headerLeading?: ReactNode;
   className?: string;
 }) {
@@ -102,6 +113,11 @@ export function ChatView({
   );
   const [staged, setStaged] = useState<Staged[]>(() => getDraft(c.id).staged);
   const [panel, setPanel] = useState<"search" | "mentions" | "pins" | null>(null);
+  const [seenPreview, setSeenPreview] = useState(previewId);
+  if (previewId !== seenPreview) {
+    setSeenPreview(previewId);
+    if (previewId) setPanel(null);
+  }
   const [query, setQuery] = useState("");
   const [notice, setNotice] = useState("");
   const [away, setAway] = useState(false);
@@ -146,7 +162,10 @@ export function ChatView({
   const actions: MessageActions = {
     react: (id, emoji) => dispatch({ type: "react", id, emoji }),
     pin: (id) => dispatch({ type: "pin", id }),
-    markUnread: (id) => dispatch({ type: "markUnread", id }),
+    markUnread: (id) => {
+      dispatch({ type: "markUnread", id });
+      onUnread?.(true);
+    },
     retry: (id) => dispatch({ type: "retry", id }),
     copyText: (m) => copy(m.text),
     copyLink: (id) => {
@@ -163,7 +182,9 @@ export function ChatView({
       else setDeleting(messages.find((m) => m.id === id) ?? null);
     },
     jumpTo: (id) => {
-      document.getElementById(`msg-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      document
+        .getElementById(`msg-${id}`)
+        ?.scrollIntoView({ behavior: scrollBehavior(), block: "center" });
       setFlashId(id);
       setTimeout(() => setFlashId((f) => (f === id ? null : f)), 1400);
     },
@@ -214,7 +235,7 @@ export function ChatView({
       {dragging && (
         <div className="animate-in fade-in pointer-events-none absolute inset-3 z-30 grid place-items-center rounded-2xl border-2 border-dashed border-brand bg-background/85 backdrop-blur-sm duration-150">
           <div className="flex flex-col items-center gap-3 text-center">
-            <span className="grid size-14 place-items-center rounded-2xl bg-brand/15 text-brand">
+            <span className="grid size-14 place-items-center rounded-2xl bg-brand/15 text-brand-text">
               <Upload className="size-7" />
             </span>
             <p className="text-lg font-semibold">Drop to upload</p>
@@ -236,10 +257,10 @@ export function ChatView({
         <div className="flex items-center gap-0.5">
           {c.kind !== "channel" && (
             <>
-              <HeaderButton label="Start voice call">
+              <HeaderButton label="Start voice call" onClick={() => onCall?.(false)}>
                 <Phone className="size-[18px]" />
               </HeaderButton>
-              <HeaderButton label="Start video call">
+              <HeaderButton label="Start video call" onClick={() => onCall?.(true)}>
                 <Video className="size-[18px]" />
               </HeaderButton>
             </>
@@ -247,8 +268,11 @@ export function ChatView({
           {(c.kind !== "dm" || panelInDm) && onToggleMembers && (
             <HeaderButton
               label={c.kind === "dm" ? "Profile" : "Members"}
-              active={membersOpen}
-              onClick={onToggleMembers}
+              active={membersOpen && !panel}
+              onClick={() => {
+                setPanel(null);
+                if (!panel || !membersOpen) onToggleMembers();
+              }}
             >
               <Users className="size-[18px]" />
             </HeaderButton>
@@ -276,72 +300,86 @@ export function ChatView({
           </HeaderButton>
         </div>
       </header>
-      {notice && (
-        <div
-          role="status"
-          className="flex items-center justify-between bg-surface-2 px-4 py-2 text-xs"
-        >
-          {notice}
-          <button type="button" aria-label="Dismiss notification" onClick={() => setNotice("")}>
-            <X className="size-4" />
-          </button>
-        </div>
-      )}
-      {state.unreadFrom && (
-        <div className="flex items-center justify-between bg-brand/15 px-4 py-2 text-xs">
-          <button
-            type="button"
-            onClick={() => state.unreadFrom && actions.jumpTo(state.unreadFrom)}
-          >
-            Jump to unread messages
-          </button>
-          <button type="button" onClick={() => dispatch({ type: "markUnread", id: null })}>
-            Mark as read
-          </button>
-        </div>
-      )}
-      <div className="flex min-h-0 flex-1">
-        <div className="flex min-w-0 flex-1 flex-col">
-          <div
-            ref={scroller}
-            onScroll={(e) => {
-              const el = e.currentTarget;
-              setAway(el.scrollHeight - el.scrollTop - el.clientHeight > 120);
-            }}
-            className="min-h-0 flex-1 overflow-y-auto"
-          >
-            <div className={cn("flex min-h-full flex-col justify-end", laneClass)}>
-              {messages.length === 0 && (
-                <div className="p-8">
-                  <h3 className="text-lg font-semibold">Start the conversation</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Send the first message to {c.title}.
-                  </p>
-                </div>
-              )}
-              <MessageList
-                messages={messages}
-                rows={buildRows(messages, state.unreadFrom)}
-                editingId={state.editing}
-                flashId={flashId}
-                actions={actions}
-              />
-            </div>
-          </div>
-          {away && (
-            <button
-              type="button"
-              onClick={() =>
-                scroller.current?.scrollTo({
-                  top: scroller.current.scrollHeight,
-                  behavior: "smooth",
-                })
-              }
-              className="mx-auto rounded-full bg-brand px-4 py-1 text-sm text-white"
+      <div className="@container relative flex min-h-0 flex-1">
+        <div className="@container relative flex min-w-0 flex-1 flex-col">
+          {notice && (
+            <div
+              role="status"
+              className="flex items-center justify-between bg-surface-2 px-4 py-2 text-xs"
             >
-              Jump to present
-            </button>
+              {notice}
+              <button type="button" aria-label="Dismiss notification" onClick={() => setNotice("")}>
+                <X className="size-4" />
+              </button>
+            </div>
           )}
+          {state.unreadFrom && (
+            <div className="flex items-center justify-between bg-brand/15 px-4 py-2 text-xs">
+              <button
+                type="button"
+                onClick={() => state.unreadFrom && actions.jumpTo(state.unreadFrom)}
+              >
+                Jump to unread messages
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  dispatch({ type: "markUnread", id: null });
+                  onUnread?.(false);
+                }}
+              >
+                Mark as read
+              </button>
+            </div>
+          )}
+          <div className="relative flex min-h-0 flex-1 flex-col">
+            <div
+              ref={scroller}
+              onScroll={(e) => {
+                const el = e.currentTarget;
+                setAway(el.scrollHeight - el.scrollTop - el.clientHeight > 120);
+              }}
+              className="min-h-0 flex-1 overflow-y-auto"
+            >
+              <div className={cn("flex min-h-full flex-col justify-end", laneClass)}>
+                {messages.length === 0 && (
+                  <div className="p-8">
+                    <h3 className="text-lg font-semibold">Start the conversation</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Send the first message to {c.title}.
+                    </p>
+                  </div>
+                )}
+                <MessageList
+                  messages={messages}
+                  rows={buildRows(messages, state.unreadFrom)}
+                  editingId={state.editing}
+                  flashId={flashId}
+                  actions={actions}
+                />
+              </div>
+            </div>
+            {away && (
+              <button
+                type="button"
+                onClick={() =>
+                  scroller.current?.scrollTo({
+                    top: scroller.current.scrollHeight,
+                    behavior: scrollBehavior(),
+                  })
+                }
+                className={cn(
+                  "absolute z-20 rounded-full bg-brand-fill px-4 py-1 text-sm whitespace-nowrap text-white shadow-lg",
+                  floating
+                    ? "top-3 left-1/2 -translate-x-1/2"
+                    : "bottom-3 left-1/2 -translate-x-1/2",
+                )}
+              >
+                Jump to present
+              </button>
+            )}
+          </div>
+          {floating}
           <div className={laneClass}>
             <Composer
               draftKey={c.id}
@@ -366,7 +404,7 @@ export function ChatView({
             />
           </div>
         </div>
-        {panel && (
+        {panel ? (
           <aside
             aria-label={
               panel === "pins"
@@ -375,7 +413,7 @@ export function ChatView({
                   ? "Mentions"
                   : "Search messages"
             }
-            className="flex w-72 shrink-0 flex-col border-l border-border bg-surface-1"
+            className="flex w-72 max-w-full shrink-0 flex-col @max-3xl:absolute @max-3xl:inset-y-0 @max-3xl:right-0 @max-3xl:z-30 @max-3xl:shadow-2xl border-l border-border bg-surface-1"
           >
             <div className="flex items-center justify-between p-4">
               <h3 className="font-semibold">
@@ -396,7 +434,7 @@ export function ChatView({
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search this conversation"
-                className="mx-3 mb-3 rounded border border-border bg-background p-2 text-sm"
+                className="mx-3 mb-3 rounded border border-border bg-background p-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-brand"
               />
             )}
             <div className="flex-1 overflow-y-auto p-3">
@@ -424,8 +462,23 @@ export function ChatView({
               ))}
             </div>
           </aside>
+        ) : (
+          Boolean(aside) && (
+            <div className="flex shrink-0 @max-3xl:absolute @max-3xl:inset-y-0 @max-3xl:right-0 @max-3xl:z-30 @max-3xl:max-w-full @max-3xl:shadow-2xl">
+              {aside}
+              {onCloseAside && (
+                <button
+                  type="button"
+                  aria-label="Close panel"
+                  onClick={onCloseAside}
+                  className="absolute top-2 right-2 hidden size-7 place-items-center rounded-md bg-black/50 text-white @max-3xl:grid"
+                >
+                  <X className="size-4" />
+                </button>
+              )}
+            </div>
+          )
         )}
-        {aside}
       </div>
       <DeleteDialog
         message={deleting}

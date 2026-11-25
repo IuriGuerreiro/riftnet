@@ -77,7 +77,7 @@ function ServerChannels({
                   <span className="ml-auto text-xs text-success">{ch.voice?.length} in voice</span>
                 )}
                 {ch.unread ? (
-                  <span className="ml-auto grid h-[18px] min-w-[18px] place-items-center rounded-full bg-brand px-1.5 text-[11px] font-bold text-white">
+                  <span className="ml-auto grid h-[18px] min-w-[18px] place-items-center rounded-full bg-brand-fill px-1.5 text-[11px] font-bold text-white">
                     {ch.unread}
                   </span>
                 ) : null}

@@ -47,14 +47,14 @@ export function MessageEditor({
       />
       <p className="mt-1 text-xs text-muted-foreground">
         escape to{" "}
-        <button type="button" onClick={onCancel} className="text-brand hover:underline">
+        <button type="button" onClick={onCancel} className="text-brand-text hover:underline">
           cancel
         </button>{" "}
         · enter to{" "}
         <button
           type="button"
           onClick={() => onSave(text.trim())}
-          className="text-brand hover:underline"
+          className="text-brand-text hover:underline"
         >
           save
         </button>

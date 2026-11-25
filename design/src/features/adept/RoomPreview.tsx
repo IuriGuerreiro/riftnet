@@ -55,14 +55,9 @@ export function RoomPreview({
         </div>
       )}
       {room.live && (
-        <div
-          className="relative mx-4 mt-3 aspect-video overflow-hidden rounded-xl border border-white/5"
-          style={{
-            background:
-              "radial-gradient(circle at 25% 35%, hsl(150 45% 30%), transparent 60%), radial-gradient(circle at 80% 75%, hsl(262 50% 32%), transparent 55%), var(--surface-3)",
-          }}
-        >
-          <span className="absolute top-2 left-2 flex items-center gap-1 rounded bg-destructive px-1.5 py-0.5 text-[10px] font-bold text-white">
+        <div className="relative mx-4 mt-3 aspect-video overflow-hidden rounded-xl border border-white/5">
+          <img src="/media/photo-3.jpg" alt="" className="size-full object-cover" />
+          <span className="absolute top-2 left-2 flex items-center gap-1 rounded bg-danger-fill px-1.5 py-0.5 text-[10px] font-bold text-white">
             <Radio className="size-3" /> LIVE
           </span>
           <span className="absolute bottom-2 left-2 rounded-md bg-black/55 px-1.5 py-0.5 text-[11px] text-white/90 backdrop-blur">
@@ -88,7 +83,7 @@ export function RoomPreview({
                 {u.activity && u.activity.kind !== "voice" && <ActivityLine a={u.activity} />}
               </span>
               {id === ME && sharing && (
-                <MonitorUp aria-label="Sharing screen" className="size-3.5 text-brand" />
+                <MonitorUp aria-label="Sharing screen" className="size-3.5 text-brand-text" />
               )}
               {id === ME && deafened ? (
                 <HeadphoneOff aria-label="Deafened" className="size-3.5 text-destructive" />
@@ -120,7 +115,7 @@ export function RoomPreview({
           </Button>
         )}
         {room.live && (
-          <Button variant="secondary" className="h-10 w-full">
+          <Button variant="secondary" onClick={onJoin} className="h-10 w-full">
             Watch {user(room.live).name}'s stream
           </Button>
         )}

@@ -1,4 +1,5 @@
-import { MessageSquare, Phone, UserPlus } from "lucide-react";
+import { Phone, UserPlus } from "lucide-react";
+import { useState } from "react";
 
 import { Avatar } from "@/components/Avatar";
 import { ServerIcon } from "@/components/ServerIcon";
@@ -10,7 +11,9 @@ const SHARED = [1, 2, 3, 4, 5].map((n) => `/media/photo-${n}.jpg`).concat("/medi
 
 const STATUS_LABEL = { online: "Online", idle: "Idle", dnd: "Do not disturb", offline: "Offline" };
 
-export function ProfilePanel({ id }: { id: string }) {
+export function ProfilePanel({ id, onCall }: { id: string; onCall: () => void }) {
+  const [invited, setInvited] = useState(false);
+  const [asked, setAsked] = useState(false);
   const u = user(id);
   const mutual = SERVERS.filter((s) => s.members.includes(id));
   const Icon = u.activity ? ACTIVITY_ICON[u.activity.kind] : null;
@@ -38,15 +41,18 @@ export function ProfilePanel({ id }: { id: string }) {
         <div className="mt-3 grid grid-cols-2 gap-2">
           <button
             type="button"
+            onClick={onCall}
             className="flex h-8 items-center justify-center gap-1.5 rounded-lg bg-surface-3 text-xs font-medium hover:bg-surface-4"
           >
             <Phone className="size-3.5" /> Call
           </button>
           <button
             type="button"
+            disabled={invited}
+            onClick={() => setInvited(true)}
             className="flex h-8 items-center justify-center gap-1.5 rounded-lg bg-surface-3 text-xs font-medium hover:bg-surface-4"
           >
-            <UserPlus className="size-3.5" /> Invite
+            <UserPlus className="size-3.5" /> {invited ? "Invited" : "Invite"}
           </button>
         </div>
       </div>
@@ -82,9 +88,11 @@ export function ProfilePanel({ id }: { id: string }) {
           {u.activity.kind === "playing" && (
             <button
               type="button"
-              className="mt-3 h-8 w-full rounded-lg bg-brand text-xs font-semibold text-white hover:bg-brand-hover"
+              disabled={asked}
+              onClick={() => setAsked(true)}
+              className="mt-3 disabled:opacity-60 h-8 w-full rounded-lg bg-brand-fill text-xs font-semibold text-white hover:bg-brand-fill/85"
             >
-              Ask to join
+              {asked ? "Request sent" : "Ask to join"}
             </button>
           )}
         </section>
@@ -120,12 +128,6 @@ export function ProfilePanel({ id }: { id: string }) {
             />
           ))}
         </div>
-        <button
-          type="button"
-          className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-        >
-          <MessageSquare className="size-3.5" /> Search in conversation
-        </button>
       </section>
     </aside>
   );

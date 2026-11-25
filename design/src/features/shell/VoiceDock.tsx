@@ -36,7 +36,7 @@ function DockButton({
       className={cn(
         "grid h-10 w-11 place-items-center rounded-xl transition-colors",
         tone === "danger"
-          ? "bg-destructive text-white hover:bg-destructive/85"
+          ? "bg-danger-fill text-white hover:bg-danger-fill/85"
           : active
             ? "bg-foreground text-background"
             : "bg-surface-3 text-foreground hover:bg-surface-4",

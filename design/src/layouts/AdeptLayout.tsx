@@ -6,12 +6,12 @@ import { AdeptMark } from "@/components/brand/AdeptMark";
 import { ServerIcon } from "@/components/ServerIcon";
 import { ActivityLine } from "@/features/adept/ActivityLine";
 import { CallCard } from "@/features/adept/CallCard";
-import { CallStage } from "@/features/adept/CallStage";
+import { CallStage, type CallState } from "@/features/adept/CallStage";
 import { PeoplePanel } from "@/features/adept/PeoplePanel";
 import { ProfilePanel } from "@/features/adept/ProfilePanel";
 import { RoomPreview } from "@/features/adept/RoomPreview";
 import { StreamPip } from "@/features/adept/StreamPip";
-import { TopBarStatus } from "@/features/adept/TopBarStatus";
+import { type RequestState, TopBarStatus } from "@/features/adept/TopBarStatus";
 import { ChatView } from "@/features/chat/ChatView";
 import { EmojiText } from "@/features/emoji/EmojiText";
 import { ConversationAvatar } from "@/features/shell/ConversationRow";
@@ -32,10 +32,14 @@ import {
   user,
 } from "@/mock/data";
 
+type UnreadOf = (id: string, base: number) => number;
+
+const WIDE = "(min-width: 1100px)";
+
 const DMS = CONVERSATIONS.filter((c) => c.kind !== "channel");
 
-function mentionsIn(s: Server) {
-  return s.channels.reduce((n, c) => n + (c.mentions ?? 0), 0);
+function mentionsIn(s: Server, unreadOf: UnreadOf) {
+  return s.channels.reduce((n, c) => n + (unreadOf(c.id, 1) ? (c.mentions ?? 0) : 0), 0);
 }
 
 function SectionLabel({ children, action }: { children: ReactNode; action?: ReactNode }) {
@@ -49,7 +53,7 @@ function SectionLabel({ children, action }: { children: ReactNode; action?: Reac
 
 function MentionPill({ count }: { count: number }) {
   return (
-    <span className="grid h-[18px] min-w-[18px] shrink-0 place-items-center rounded-full bg-destructive px-1.5 text-[11px] font-bold text-white">
+    <span className="grid h-[18px] min-w-[18px] shrink-0 place-items-center rounded-full bg-danger-fill px-1.5 text-[11px] font-bold text-white">
       {count}
     </span>
   );
@@ -95,7 +99,7 @@ function RailTile({
       >
         {children}
         {mentions ? (
-          <span className="absolute -top-1.5 -right-1.5 grid h-[18px] min-w-[18px] place-items-center rounded-full border-2 border-ink bg-destructive px-1 text-[10px] font-bold text-white">
+          <span className="absolute -top-1.5 -right-1.5 grid h-[18px] min-w-[18px] place-items-center rounded-full border-2 border-ink bg-danger-fill px-1 text-[10px] font-bold text-white">
             {mentions}
           </span>
         ) : null}
@@ -139,7 +143,7 @@ function LiveRow({
           <span className="block truncate text-[13px] font-semibold">{room.name}</span>
           <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
             {room.live && (
-              <span className="flex shrink-0 items-center gap-0.5 rounded bg-destructive px-1 text-[9px] font-bold text-white">
+              <span className="flex shrink-0 items-center gap-0.5 rounded bg-danger-fill px-1 text-[9px] font-bold text-white">
                 <Radio className="size-2.5" />
                 LIVE
               </span>
@@ -164,9 +168,19 @@ function LiveRow({
   );
 }
 
-function DmRow({ c, active, onClick }: { c: Conversation; active: boolean; onClick: () => void }) {
+function DmRow({
+  c,
+  active,
+  unreadOf,
+  onClick,
+}: {
+  c: Conversation;
+  active: boolean;
+  unreadOf: UnreadOf;
+  onClick: () => void;
+}) {
   const u = user(c.members[0] ?? "");
-  const unread = c.unread > 0 && !active;
+  const unread = unreadOf(c.id, c.unread) > 0 && !active;
   return (
     <button
       type="button"
@@ -198,7 +212,7 @@ function DmRow({ c, active, onClick }: { c: Conversation; active: boolean; onCli
           <ActivityLine a={u.activity} />
         ) : null}
       </span>
-      {c.mentions > 0 && !active ? (
+      {c.mentions > 0 && unread ? (
         <MentionPill count={c.mentions} />
       ) : unread ? (
         <UnreadDot />
@@ -218,7 +232,13 @@ function HomeSidebar({
   preview,
   onPreview,
   onJoin,
+  unreadOf,
+  request,
+  onRequest,
 }: {
+  unreadOf: UnreadOf;
+  request: RequestState;
+  onRequest: (r: RequestState) => void;
   tab: HomeTab;
   setTab: (t: HomeTab) => void;
   active: string;
@@ -230,7 +250,7 @@ function HomeSidebar({
 }) {
   const pinned = DMS.filter((c) => c.pinned);
   const rest = DMS.filter((c) => !c.pinned);
-  const friends = [...FRIENDS].sort(
+  const friends = FRIENDS.filter((f) => f.id !== "rui" || request === "accepted").sort(
     (a, b) => Number(a.status === "offline") - Number(b.status === "offline"),
   );
 
@@ -251,6 +271,9 @@ function HomeSidebar({
               )}
             >
               {t}
+              {t === "requests" && request === "pending" && (
+                <span className="ml-1 text-brand-text">1</span>
+              )}
             </button>
           ))}
         </div>
@@ -280,7 +303,13 @@ function HomeSidebar({
               Pinned
             </SectionLabel>
             {pinned.map((c) => (
-              <DmRow key={c.id} c={c} active={active === c.id} onClick={() => onOpen(c.id)} />
+              <DmRow
+                key={c.id}
+                c={c}
+                active={active === c.id}
+                unreadOf={unreadOf}
+                onClick={() => onOpen(c.id)}
+              />
             ))}
             <SectionLabel
               action={<Plus className="size-3.5 cursor-pointer hover:text-foreground" />}
@@ -288,7 +317,13 @@ function HomeSidebar({
               Direct messages
             </SectionLabel>
             {rest.map((c) => (
-              <DmRow key={c.id} c={c} active={active === c.id} onClick={() => onOpen(c.id)} />
+              <DmRow
+                key={c.id}
+                c={c}
+                active={active === c.id}
+                unreadOf={unreadOf}
+                onClick={() => onOpen(c.id)}
+              />
             ))}
           </>
         )}
@@ -321,7 +356,36 @@ function HomeSidebar({
             ))}
           </>
         )}
-        {tab === "requests" && (
+        {tab === "requests" && request === "pending" && (
+          <div className="mt-3 rounded-xl border border-border bg-surface-1 p-3">
+            <div className="flex items-center gap-2.5">
+              <Avatar id="rui" size={32} />
+              <p className="text-sm font-medium">
+                {user("rui").name}
+                <span className="block text-xs font-normal text-muted-foreground">
+                  wants to be friends
+                </span>
+              </p>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => onRequest("accepted")}
+                className="h-8 rounded-lg bg-brand-fill text-xs font-semibold text-white hover:bg-brand-fill/85"
+              >
+                Accept
+              </button>
+              <button
+                type="button"
+                onClick={() => onRequest("ignored")}
+                className="h-8 rounded-lg bg-surface-3 text-xs font-medium hover:bg-surface-4"
+              >
+                Ignore
+              </button>
+            </div>
+          </div>
+        )}
+        {tab === "requests" && request !== "pending" && (
           <div className="flex flex-col items-center gap-2 px-4 py-14 text-center">
             <Inbox className="size-8 text-surface-4" />
             <p className="text-sm font-medium">No pending requests</p>
@@ -342,7 +406,9 @@ function ServerSidebar({
   joined,
   preview,
   onPreview,
+  unreadOf,
 }: {
+  unreadOf: UnreadOf;
   s: Server;
   active: string;
   onOpen: (id: string) => void;
@@ -396,7 +462,7 @@ function ServerSidebar({
                 .filter((c) => !isClosed || active === c.id || (c.voice?.length ?? 0) > 0)
                 .map((c) => {
                   const isActive = active === c.id || preview === c.id;
-                  const unread = (c.unread ?? 0) > 0 && !isActive;
+                  const unread = unreadOf(c.id, c.unread ?? 0) > 0 && !isActive;
                   return (
                     <div key={c.id}>
                       <button
@@ -425,7 +491,7 @@ function ServerSidebar({
                         {joined === c.id && (
                           <span className="text-[11px] font-semibold text-success">In</span>
                         )}
-                        {c.mentions && !isActive ? (
+                        {c.mentions && unread ? (
                           <MentionPill count={c.mentions} />
                         ) : unread ? (
                           <UnreadDot />
@@ -439,7 +505,7 @@ function ServerSidebar({
                           <Avatar id={id} size={18} />
                           <span className="min-w-0 flex-1 truncate">{user(id).name}</span>
                           {c.live === id && (
-                            <span className="rounded bg-destructive px-1 text-[9px] font-bold text-white">
+                            <span className="rounded bg-danger-fill px-1 text-[9px] font-bold text-white">
                               LIVE
                             </span>
                           )}
@@ -472,12 +538,14 @@ export function AdeptLayout() {
     books: "books-general",
   });
   const [tab, setTab] = useState<HomeTab>("chats");
-  const [joined, setJoined] = useState<string | null>(null);
+  const [call, setCall] = useState<CallState | null>(null);
+  const [counts, setCounts] = useState<Record<string, number>>({ "dm-maya": 0 });
+  const [request, setRequest] = useState<RequestState>("pending");
   const [preview, setPreview] = useState<string | null>(null);
   const [muted, setMuted] = useState(false);
   const [deafened, setDeafened] = useState(false);
   const [sharing, setSharing] = useState(false);
-  const [panelOpen, setPanelOpen] = useState(true);
+  const [panelOpen, setPanelOpen] = useState(() => window.matchMedia(WIDE).matches);
   const [palette, setPalette] = useState(false);
 
   useEffect(() => {
@@ -491,6 +559,26 @@ export function AdeptLayout() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  useEffect(() => {
+    const query = window.matchMedia(WIDE);
+    const onChange = () => setPanelOpen(query.matches);
+    query.addEventListener("change", onChange);
+    return () => query.removeEventListener("change", onChange);
+  }, []);
+
+  const ringing = call?.ringing ?? false;
+  useEffect(() => {
+    if (!ringing) return;
+    const timer = setTimeout(
+      () => setCall((x) => x && { ...x, ringing: false, startedAt: Date.now() }),
+      3500,
+    );
+    return () => clearTimeout(timer);
+  }, [ringing, call?.id]);
+
+  const joined = call?.id ?? null;
+  const unreadOf: UnreadOf = (id, base) => counts[id] ?? base;
+  const markUnread = (id: string, n: number) => setCounts((x) => ({ ...x, [id]: n }));
   const s = SERVERS.find((x) => x.id === place);
   const activeId = openIn[place] ?? "dm-maya";
   const c = conversation(activeId);
@@ -506,26 +594,68 @@ export function AdeptLayout() {
         live: channel.live,
       })),
   );
-  const joinedRoom = rooms.find((r) => r.channelId === joined);
+  const callTarget = joined ? conversation(joined) : undefined;
+  const callConversation = callTarget?.kind === "channel" ? undefined : callTarget;
+  const joinedBase: LiveRoom | undefined = callConversation
+    ? {
+        channelId: callConversation.id,
+        serverId: "",
+        name: callConversation.title,
+        people: callConversation.members,
+        live: undefined,
+      }
+    : rooms.find((r) => r.channelId === joined);
+  const joinedRoom = joinedBase && {
+    ...joinedBase,
+    people: [...new Set([...joinedBase.people, ME])],
+  };
+  const inStage = joinedRoom !== undefined && preview === joined;
+  const hasStream = sharing || joinedRoom?.live !== undefined;
   const previewRoom = rooms.find((r) => r.channelId === preview);
-  const dmMentions = DMS.reduce((n, x) => n + x.mentions, 0);
+  const dmMentions = DMS.reduce((n, x) => n + (unreadOf(x.id, x.unread) ? x.mentions : 0), 0);
 
   const openConversation = (id: string) => {
     const conv = conversation(id);
     const where = conv.kind === "channel" ? (conv.serverId ?? "home") : "home";
     setPlace(where);
     setOpenIn((o) => ({ ...o, [where]: id }));
+    markUnread(id, 0);
     setPreview(null);
     setPalette(false);
   };
-  const join = (id: string) => {
-    setJoined(id);
-    setSharing(false);
-    setPreview(id);
+  const go = (where: string) => {
+    setPlace(where);
+    setPreview(null);
+    const id = openIn[where];
+    if (id) markUnread(id, 0);
   };
-  const leave = () => {
-    setJoined(null);
+  const openVoice = (id: string) => {
+    const room = rooms.find((r) => r.channelId === id);
+    if (room) go(room.serverId);
+    setPreview(id);
+    setPalette(false);
+  };
+  const connect = (id: string, direct: boolean, camera: boolean) => {
+    setPreview(id);
+    setPalette(false);
+    if (id === joined) return;
+    setCall({
+      id,
+      startedAt: Date.now(),
+      camera,
+      focused: null,
+      ringing: direct,
+      previewHidden: false,
+    });
     setSharing(false);
+  };
+  const join = (id: string) => connect(id, false, false);
+  const startCall = (video: boolean) => connect(activeId, true, video);
+  const patchCall = (patch: Partial<CallState>) => setCall((x) => x && { ...x, ...patch });
+  const leave = () => {
+    setCall(null);
+    setSharing(false);
+    setPreview(null);
   };
   const toggleMute = () => {
     if (deafened) {
@@ -534,18 +664,29 @@ export function AdeptLayout() {
     } else setMuted((value) => !value);
   };
   const toggleDeafen = () => setDeafened((value) => !value);
-  const toggleShare = () => setSharing((value) => !value);
+  const toggleShare = () => {
+    setSharing((value) => !value);
+    patchCall({ previewHidden: false });
+  };
 
   return (
     <div className="flex h-full flex-col bg-ink">
-      <header className="grid h-11 shrink-0 grid-cols-[1fr_minmax(0,440px)_1fr] items-center gap-4 px-3">
+      <header className="grid h-11 shrink-0 grid-cols-[minmax(0,1fr)_minmax(120px,300px)_auto] xl:grid-cols-[1fr_minmax(0,440px)_1fr] items-center gap-4 px-3">
         <div className="flex min-w-0 items-center gap-2.5 text-sm">
           <AdeptMark className="size-5" />
           <span className="truncate text-muted-foreground">
-            {chatServer ? chatServer.name : "Home"}
+            {inStage
+              ? (findServer(joinedRoom.serverId)?.name ?? "Home")
+              : chatServer
+                ? chatServer.name
+                : "Home"}
             <span className="px-1.5 text-surface-4">/</span>
             <span className="font-medium text-foreground">
-              <EmojiText text={c.kind === "channel" ? `# ${c.title}` : c.title} size={15} />
+              {inStage && <Volume2 className="mr-1 inline size-3.5 text-success" />}
+              <EmojiText
+                text={inStage ? joinedRoom.name : c.kind === "channel" ? `# ${c.title}` : c.title}
+                size={15}
+              />
             </span>
           </span>
         </div>
@@ -555,17 +696,23 @@ export function AdeptLayout() {
           className="flex h-7 items-center gap-2 rounded-lg border border-white/[0.06] bg-surface-1 px-3 text-xs text-muted-foreground transition-colors hover:border-white/10 hover:text-foreground"
         >
           <Search className="size-3.5" />
-          <span className="flex-1 text-left">Jump to a chat, channel or person</span>
-          <kbd className="rounded bg-surface-3 px-1.5 text-[10px]">Ctrl K</kbd>
+          <span className="min-w-0 flex-1 truncate text-left">
+            Jump to a chat, channel or person
+          </span>
+          <kbd className="shrink-0 whitespace-nowrap rounded bg-surface-3 px-1.5 text-[10px]">
+            Ctrl K
+          </kbd>
         </button>
         <TopBarStatus
           onOpen={openConversation}
           onFriends={() => {
-            setPlace("home");
+            go("home");
             setTab("friends");
           }}
+          request={request}
+          onRequest={setRequest}
           onLive={() => {
-            setPlace("home");
+            go("home");
             setTab("chats");
           }}
         />
@@ -577,7 +724,7 @@ export function AdeptLayout() {
             label="Home"
             active={place === "home"}
             mentions={dmMentions}
-            onClick={() => setPlace("home")}
+            onClick={() => go("home")}
           >
             <span
               className={cn(
@@ -594,10 +741,10 @@ export function AdeptLayout() {
               key={srv.id}
               label={srv.name}
               active={place === srv.id}
-              unread={srv.channels.some((x) => (x.unread ?? 0) > 0)}
-              mentions={mentionsIn(srv)}
+              unread={srv.channels.some((x) => unreadOf(x.id, x.unread ?? 0) > 0)}
+              mentions={mentionsIn(srv, unreadOf)}
               voice={srv.channels.some((x) => (x.voice?.length ?? 0) > 0)}
-              onClick={() => setPlace(srv.id)}
+              onClick={() => go(srv.id)}
             >
               <ServerIcon server={srv} size={40} className="rounded-xl" />
             </RailTile>
@@ -607,7 +754,7 @@ export function AdeptLayout() {
               type="button"
               aria-label="Add a server"
               title="Add a server"
-              className="grid size-10 place-items-center rounded-xl border border-dashed border-surface-4 text-muted-foreground transition-colors hover:border-brand hover:text-brand"
+              className="grid size-10 place-items-center rounded-xl border border-dashed border-surface-4 text-muted-foreground transition-colors hover:border-brand hover:text-brand-text"
             >
               <Plus className="size-4" />
             </button>
@@ -626,7 +773,8 @@ export function AdeptLayout() {
           {s ? (
             <ServerSidebar
               s={s}
-              active={activeId}
+              active={inStage ? joinedRoom.channelId : activeId}
+              unreadOf={unreadOf}
               onOpen={openConversation}
               joined={joined}
               preview={preview}
@@ -636,17 +784,20 @@ export function AdeptLayout() {
             <HomeSidebar
               tab={tab}
               setTab={setTab}
-              active={activeId}
+              active={inStage ? joinedRoom.channelId : activeId}
+              unreadOf={unreadOf}
               onOpen={openConversation}
               joined={joined}
               preview={preview}
               onPreview={setPreview}
               onJoin={join}
+              request={request}
+              onRequest={setRequest}
             />
           )}
           {joinedRoom && (
             <CallCard
-              room={{ ...joinedRoom, people: [...new Set([...joinedRoom.people, ME])] }}
+              room={joinedRoom}
               onLeave={leave}
               muted={muted || deafened}
               deafened={deafened}
@@ -654,7 +805,14 @@ export function AdeptLayout() {
               onMute={toggleMute}
               onDeafen={toggleDeafen}
               onShare={toggleShare}
-              onOpen={() => setPreview(joinedRoom.channelId)}
+              inStage={inStage}
+              ringing={ringing}
+              onShowPreview={
+                call?.previewHidden && hasStream && !inStage
+                  ? () => patchCall({ previewHidden: false })
+                  : undefined
+              }
+              onOpen={() => setPreview(inStage ? null : joinedRoom.channelId)}
             />
           )}
           <UserBar
@@ -669,9 +827,11 @@ export function AdeptLayout() {
         </aside>
 
         <main className="relative mr-2 mb-2 flex min-w-0 flex-1 overflow-hidden rounded-xl border border-white/[0.06] bg-background shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-          {joinedRoom && preview === joined ? (
+          {inStage && call ? (
             <CallStage
-              room={{ ...joinedRoom, people: [...new Set([...joinedRoom.people, ME])] }}
+              call={call}
+              onCall={patchCall}
+              room={joinedRoom}
               muted={muted || deafened}
               deafened={deafened}
               sharing={sharing}
@@ -687,6 +847,21 @@ export function AdeptLayout() {
               conversationId={activeId}
               lane="left"
               panelInDm
+              previewId={previewRoom?.channelId ?? null}
+              onCall={startCall}
+              onUnread={(value) => markUnread(activeId, value ? 1 : 0)}
+              onCloseAside={previewRoom ? undefined : () => setPanelOpen(false)}
+              floating={
+                joinedRoom && call && !call.previewHidden ? (
+                  <StreamPip
+                    room={joinedRoom}
+                    sharing={sharing}
+                    onOpen={() => setPreview(joinedRoom.channelId)}
+                    onHide={() => patchCall({ previewHidden: true })}
+                    onStopShare={toggleShare}
+                  />
+                ) : null
+              }
               membersOpen={panelOpen && !previewRoom}
               onToggleMembers={() => {
                 setPreview(null);
@@ -711,7 +886,11 @@ export function AdeptLayout() {
                   />
                 ) : panelOpen ? (
                   c.kind === "dm" ? (
-                    <ProfilePanel id={c.members[0] ?? ""} />
+                    <ProfilePanel
+                      key={c.id}
+                      id={c.members[0] ?? ""}
+                      onCall={() => startCall(false)}
+                    />
                   ) : (
                     <PeoplePanel
                       ids={c.kind === "group" ? [ME, ...c.members] : c.members}
@@ -722,18 +901,17 @@ export function AdeptLayout() {
               }
             />
           )}
-          {joinedRoom && preview !== joined && (
-            <StreamPip
-              room={joinedRoom}
-              sharing={sharing}
-              onOpen={() => setPreview(joinedRoom.channelId)}
-              onStopShare={toggleShare}
-            />
-          )}
         </main>
       </div>
 
-      <JumpPalette open={palette} onOpenChange={setPalette} onOpen={openConversation} />
+      <JumpPalette
+        open={palette}
+        onOpenChange={setPalette}
+        onOpen={openConversation}
+        onOpenVoice={openVoice}
+        onCall={c.kind === "channel" ? undefined : () => startCall(false)}
+        unreadOf={unreadOf}
+      />
     </div>
   );
 }

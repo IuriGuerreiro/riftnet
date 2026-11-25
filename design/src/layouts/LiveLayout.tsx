@@ -61,7 +61,7 @@ function RoomCard({
               "radial-gradient(circle at 25% 35%, hsl(150 45% 30%), transparent 60%), radial-gradient(circle at 80% 75%, hsl(262 50% 32%), transparent 55%), var(--surface-3)",
           }}
         >
-          <span className="absolute top-1.5 left-1.5 flex items-center gap-1 rounded bg-destructive px-1.5 py-0.5 text-[10px] font-bold text-white">
+          <span className="absolute top-1.5 left-1.5 flex items-center gap-1 rounded bg-danger-fill px-1.5 py-0.5 text-[10px] font-bold text-white">
             <Radio className="size-3" /> LIVE
           </span>
           <span className="absolute bottom-1.5 left-1.5 flex items-center gap-1.5 rounded-md bg-black/55 px-1.5 py-0.5 text-[11px] text-white/90 backdrop-blur">
@@ -83,7 +83,7 @@ function RoomCard({
           <button
             type="button"
             onClick={onJoin}
-            className="h-7 rounded-md bg-brand px-3 text-xs font-semibold text-white hover:bg-brand-hover"
+            className="h-7 rounded-md bg-brand-fill px-3 text-xs font-semibold text-white hover:bg-brand-fill/85"
           >
             Join
           </button>

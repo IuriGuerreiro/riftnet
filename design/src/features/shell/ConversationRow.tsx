@@ -78,7 +78,7 @@ export function ConversationRow({
           <span
             className={cn(
               "ml-auto shrink-0 text-[11px]",
-              unread ? "text-brand" : "text-muted-foreground/70",
+              unread ? "text-brand-text" : "text-muted-foreground/70",
             )}
           >
             {c.at}
@@ -96,11 +96,11 @@ export function ConversationRow({
               {c.preview}
             </span>
             {c.mentions > 0 ? (
-              <span className="ml-auto grid h-[18px] min-w-[18px] shrink-0 place-items-center rounded-full bg-destructive px-1.5 text-[11px] font-bold text-white">
+              <span className="ml-auto grid h-[18px] min-w-[18px] shrink-0 place-items-center rounded-full bg-danger-fill px-1.5 text-[11px] font-bold text-white">
                 @{c.mentions}
               </span>
             ) : unread ? (
-              <span className="ml-auto grid h-[18px] min-w-[18px] shrink-0 place-items-center rounded-full bg-brand px-1.5 text-[11px] font-bold text-white">
+              <span className="ml-auto grid h-[18px] min-w-[18px] shrink-0 place-items-center rounded-full bg-brand-fill px-1.5 text-[11px] font-bold text-white">
                 {c.unread}
               </span>
             ) : null}

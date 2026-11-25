@@ -20,10 +20,16 @@ export function JumpPalette({
   open,
   onOpenChange,
   onOpen,
+  onOpenVoice,
+  onCall,
+  unreadOf,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onOpen: (id: string) => void;
+  onOpenVoice?: (id: string) => void;
+  onCall?: () => void;
+  unreadOf?: (id: string, base: number) => number;
 }) {
   return (
     <CommandDialog
@@ -40,7 +46,9 @@ export function JumpPalette({
             <CommandItem key={x.id} value={`${x.title} ${x.id}`} onSelect={() => onOpen(x.id)}>
               <ConversationAvatar c={x} size={22} />
               <span>{x.kind === "channel" ? `#${x.title}` : x.title}</span>
-              {x.unread > 0 && <CommandShortcut>{x.unread} new</CommandShortcut>}
+              {(unreadOf?.(x.id, x.unread) ?? x.unread) > 0 && (
+                <CommandShortcut>{x.unread} new</CommandShortcut>
+              )}
             </CommandItem>
           ))}
         </CommandGroup>
@@ -51,7 +59,7 @@ export function JumpPalette({
               <CommandItem
                 key={ch.id}
                 value={`${ch.name} ${s.name}`}
-                onSelect={() => ch.kind === "text" && onOpen(ch.id)}
+                onSelect={() => (ch.kind === "text" ? onOpen(ch.id) : onOpenVoice?.(ch.id))}
               >
                 <ServerIcon server={s} size={20} />
                 {ch.kind === "text" ? <Hash /> : <Volume2 />}
@@ -77,14 +85,16 @@ export function JumpPalette({
         </CommandGroup>
         <CommandSeparator />
         <CommandGroup heading="Actions">
-          <CommandItem onSelect={() => onOpenChange(false)}>
+          <CommandItem disabled={!onCall} onSelect={() => onCall?.()}>
             <Phone /> Start a call
           </CommandItem>
-          <CommandItem onSelect={() => onOpenChange(false)}>
+          <CommandItem disabled>
             <Users /> Create a group
+            <CommandShortcut>Soon</CommandShortcut>
           </CommandItem>
-          <CommandItem onSelect={() => onOpenChange(false)}>
+          <CommandItem disabled>
             <Settings /> Settings
+            <CommandShortcut>Soon</CommandShortcut>
           </CommandItem>
         </CommandGroup>
       </CommandList>
