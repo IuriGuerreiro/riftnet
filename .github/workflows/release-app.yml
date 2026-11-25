@@ -7,7 +7,7 @@ on:
         description: Release notes shown in the app
         type: string
       create_draft:
-        description: Upload a draft to the distribution repository
+        description: Create a draft release in this repository
         type: boolean
         default: false
 
@@ -18,7 +18,7 @@ concurrency:
   group: desktop-release
 
 env:
-  DESKTOP_RELEASE_REPO: ${{ vars.DESKTOP_RELEASE_REPO }}
+  DESKTOP_RELEASE_REPO: ${{ github.repository }}
   RELEASE_NOTES: ${{ inputs.notes }}
 
 jobs:
@@ -102,8 +102,9 @@ jobs:
 
   release:
     needs: build
-    environment: desktop-release
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -129,16 +130,15 @@ jobs:
         if: inputs.create_draft
         working-directory: release-assets
         env:
-          GH_TOKEN: ${{ secrets.DESKTOP_RELEASE_TOKEN }}
-          GH_REPO: ${{ vars.DESKTOP_RELEASE_REPO }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           if [[ "$GITHUB_REF" != refs/heads/prod ]]; then
             echo "Dispatch draft releases from the prod branch." >&2
             exit 1
           fi
-          if [[ "${GH_REPO,,}" == "${GITHUB_REPOSITORY,,}" ]] ||
-             [[ "$(gh repo view --json visibility --jq .visibility)" != PUBLIC ]]; then
-            echo "DESKTOP_RELEASE_REPO must be a separate public repository." >&2
+          if [[ "$(gh repo view "$GH_REPO" --json visibility --jq .visibility)" != PUBLIC ]]; then
+            echo "Make this repository public first. Installed apps download updates without logging in." >&2
             exit 1
           fi
 
@@ -155,5 +155,5 @@ jobs:
             gh release upload "$tag" "${assets[@]}" --clobber
             gh release edit "$tag" --notes-file "$notes_file"
           else
-            gh release create "$tag" "${assets[@]}" --draft --title "Adept $tag" --notes-file "$notes_file"
+            gh release create "$tag" "${assets[@]}" --draft --target "$GITHUB_SHA" --title "Adept $tag" --notes-file "$notes_file"
           fi

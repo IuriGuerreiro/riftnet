@@ -91,7 +91,7 @@ tailscale serve --bg --https=7099 http://127.0.0.1:7100   # api
 ```
 
 Then run the stack, `cargo run -p api` and `pnpm dev`, and open
-**https://server.tailcbbc1b.ts.net:7103** from any device on the tailnet.
+**https://<your-machine>.ts.net:7103** from any device on the tailnet.
 The UI picks the Tailscale api URL automatically when opened via `*.ts.net`.
 
 ## Changing the API
