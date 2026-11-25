@@ -38,11 +38,6 @@ jobs:
             bundle_dir: nsis
             pattern: "*-setup.exe"
             asset: adept-windows-x64-setup.exe
-          - runner: ubuntu-22.04
-            bundle: appimage
-            bundle_dir: appimage
-            pattern: "*.AppImage"
-            asset: adept-linux-x64.AppImage
     env:
       CARGO_TARGET_DIR: ${{ github.workspace }}/target
       VITE_API_HTTP: ${{ vars.PROD_API_HTTP }}
@@ -59,11 +54,6 @@ jobs:
           cache: pnpm
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - name: Install Linux build dependencies
-        if: matrix.bundle == 'appimage'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xdg-utils
       - name: Check production API URLs
         shell: bash
         run: |
@@ -156,7 +146,7 @@ jobs:
           marker="<!-- source-commit: $GITHUB_SHA -->"
           notes_file="$(mktemp)"
           printf '%s\n\n%s\n' "$RELEASE_NOTES" "$marker" > "$notes_file"
-          assets=(adept-*.exe adept-*.AppImage adept-*.sig latest.json)
+          assets=(adept-*.exe adept-*.sig latest.json)
           if release=$(gh release view "$tag" --json body,isDraft); then
             if ! jq -e --arg marker "$marker" '.isDraft and (.body | contains($marker))' <<< "$release" > /dev/null; then
               echo "$tag already belongs to a published release or a different commit. Bump the app version." >&2

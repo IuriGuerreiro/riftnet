@@ -1,3 +1,5 @@
+use std::sync::{Arc, OnceLock};
+
 use futures::StreamExt;
 use protocol::Message;
 use protocol::v1::{MediaEvent, MediaEventKind, MediaJoin, MediaJoinReply, MediaLeave, MediaRoute};
@@ -30,10 +32,13 @@ pub async fn serve(
     nats: async_nats::Client,
     sfu: Sfu,
     mut notices: tokio::sync::mpsc::UnboundedReceiver<Notice>,
+    ready: Arc<OnceLock<async_nats::Client>>,
 ) -> anyhow::Result<()> {
     let mut joins = nats.subscribe(JOIN).await?;
     let mut leaves = nats.subscribe(LEAVE).await?;
     let mut routes = nats.subscribe(ROUTE).await?;
+    let _ = ready.set(nats.clone());
+    tracing::info!("media ready");
 
     loop {
         tokio::select! {

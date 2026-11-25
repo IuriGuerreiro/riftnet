@@ -1,0 +1,19 @@
+# Added by deploy.sh on top of compose.yml. External networks and volumes mean
+# a wrong project name fails instead of creating an empty stack.
+services:
+  api:
+    build: !reset null
+    image: ${DEPLOY_IMAGE:?Set by deploy.sh}
+
+networks:
+  edge: !override { external: true, name: "${DEPLOY_PROJECT:?}_edge" }
+  data: !override { external: true, name: "${DEPLOY_PROJECT:?}_data" }
+  storage: !override { external: true, name: "${DEPLOY_PROJECT:?}_storage" }
+  nats: !override { external: true, name: "${DEPLOY_PROJECT:?}_nats" }
+
+volumes:
+  postgres: !override { external: true, name: "${DEPLOY_PROJECT:?}_postgres" }
+  scylla: !override { external: true, name: "${DEPLOY_PROJECT:?}_scylla" }
+  redis: !override { external: true, name: "${DEPLOY_PROJECT:?}_redis" }
+  minio: !override { external: true, name: "${DEPLOY_PROJECT:?}_minio" }
+  secrets: !override { external: true, name: "${DEPLOY_PROJECT:?}_secrets" }

@@ -1,3 +1,5 @@
+use std::sync::{Arc, OnceLock};
+
 use metrics_exporter_prometheus::{
     Matcher, PrometheusBuilder, PrometheusHandle, PrometheusRecorder,
 };
@@ -50,19 +52,30 @@ pub fn recorder() -> anyhow::Result<(PrometheusRecorder, PrometheusHandle)> {
     Ok((recorder, handle))
 }
 
-pub async fn serve(addr: std::net::SocketAddr, handle: PrometheusHandle) -> anyhow::Result<()> {
+pub async fn serve(
+    addr: std::net::SocketAddr,
+    handle: PrometheusHandle,
+    nats: Arc<OnceLock<async_nats::Client>>,
+) -> anyhow::Result<()> {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     let listener = tokio::net::TcpListener::bind(addr).await?;
     tracing::info!(%addr, "media metrics listening");
     loop {
         let (mut conn, _) = listener.accept().await?;
         let handle = handle.clone();
+        let nats = nats.clone();
         tokio::spawn(async move {
             let mut buf = [0u8; 1024];
-            let _ = conn.read(&mut buf).await;
-            let body = handle.render();
+            let n = conn.read(&mut buf).await.unwrap_or(0);
+            let (status, body) = if !crate::ready::is_probe(&buf[..n]) {
+                ("200 OK", handle.render())
+            } else if crate::ready::nats_round_trip(nats.get()).await {
+                ("200 OK", "ready\n".into())
+            } else {
+                ("503 Service Unavailable", "nats not ready\n".into())
+            };
             let head = format!(
-                "HTTP/1.1 200 OK\r\ncontent-type: text/plain; version=0.0.4\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
+                "HTTP/1.1 {status}\r\ncontent-type: text/plain; version=0.0.4\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
                 body.len()
             );
             let _ = conn.write_all(head.as_bytes()).await;
