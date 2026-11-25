@@ -4,8 +4,11 @@ Two machines:
 
 | Machine | Runs | Compose project |
 |---|---|---|
-| **Server** (main box, at home) | web, api, zitadel, postgres, scylla, redis, nats, minio, cloudflared | `adept-prod` |
-| **VPS** | media (voice/video SFU) | `adept-media` |
+| **Server** (main box, at home) | web, api, zitadel, postgres, scylla, redis, nats, minio, cloudflared | `discord2-prod` |
+| **VPS** | media (voice/video SFU) | `discord2-media` |
+
+The Compose projects keep the old `discord2-*` names. Renaming them would start
+a second, empty stack.
 
 - The server opens **no public ports**. Cloudflare Tunnel is the only way in.
 - The VPS opens **one public UDP port** for voice/video, because Cloudflare
@@ -96,14 +99,14 @@ Needs Docker + Compose, and the public IP on its own network interface
 **On the server** (building on the VPS is very slow, so build here):
 ```sh
 docker compose -f infra/prod/media/compose.yml --env-file infra/prod/media/.env build
-docker save adept-media-media:latest | gzip > ~/adept-media-image.tar.gz
+docker save discord2-media-media:latest | gzip > ~/adept-media-image.tar.gz
 tar czf ~/adept-media.tar.gz infra/prod/media     # first time: compose + .env
 scp ~/adept-media.tar.gz ~/adept-media-image.tar.gz root@<vps>:/opt/
 ```
 
 **On the VPS**:
 ```sh
-mkdir -p /opt/adept && cd /opt/adept
+mkdir -p /opt/discord2 && cd /opt/discord2
 tar xzf ../adept-media.tar.gz                     # first time / config change
 gunzip -c ../adept-media-image.tar.gz | docker load
 docker compose -f infra/prod/media/compose.yml --env-file infra/prod/media/.env up -d --force-recreate
@@ -136,14 +139,99 @@ Use a separate release repository and signing key for an end-to-end test. Instal
 
 ## Update / redeploy
 
-- **Server**: pull the `prod` branch, then the same `up -d --build`.
-- **VPS**: repeat step 4 (build image → scp → load → `--force-recreate`).
+- **API and media**: merge `main` into `prod`. The **Deploy** workflow does the rest.
+- **Web**: not automated. On the server: `up -d --build --no-deps web`.
+- **Desktop app**: see section 5.
 - Changing the domain: rebuild `web` and the desktop app (URLs baked in).
+
+Always pass `--no-deps <service>`. A plain `up -d --build` would replace the
+deployed API with a local build.
+
+### What a deploy does
+
+1. Run CI, then build both images and push them to private GHCR
+   (GitHub's image registry).
+2. Skip if `prod` already has a newer commit. Only one deploy runs at a time.
+3. Join Tailscale with a short-lived OIDC login. No key is stored.
+4. **API**: dump Postgres to `/var/backups/adept` (newest 14 kept), replace only
+   `api`, check the container, then the public `/health`.
+5. **Media**: only if the API deploy passed and the media fingerprint differs from
+   the running container's. The fingerprint (`scripts/media-fingerprint.sh`) covers
+   media code, its shared libs, protos and crates. A restart drops live calls.
+   The check is `/ready`, which does a real NATS round trip.
+6. If a check fails, put the old image back and fail the run.
+
+**Migrations are not undone.** The old API starts on the newer database, so every
+migration must work with the previous API version. Add columns first, remove them in
+a later release. API images built before this pipeline refuse to start after a newer
+migration, so ship no migration in the first automated deploy.
+
+A changed Compose file or `.env` is not deployed by CI. Run the setup script again, then
+`sudo /opt/adept-deploy/deploy.sh apply`. The workflow warns when the installed files are old.
+
+### Set up automatic deploys (once)
+
+1. **Server**. Use a checkout of this version and the live `.env`:
+
+   ```sh
+   sudo infra/prod/setup-deploy.sh api /path/to/live/infra/prod/.env
+   ```
+
+   The script also sets `ip_nonlocal_bind`, so NATS can start before Tailscale
+   after a reboot. `.env` is used where it is. Keep that folder.
+
+2. **VPS**. From the server checkout, then on the VPS:
+
+   ```sh
+   tar c infra/prod/setup-deploy.sh infra/prod/deploy.sh infra/prod/media/compose.yml infra/prod/media/compose.deploy.yml |
+     ssh root@<vps> 'mkdir -p /root/adept-setup && tar x -C /root/adept-setup'
+   ssh root@<vps> /root/adept-setup/infra/prod/setup-deploy.sh media /opt/discord2/infra/prod/media/.env
+   ```
+
+   Each script creates the `adept-deploy` user. Its only sudo right is running
+   `/opt/adept-deploy/deploy.sh` without arguments.
+
+3. **Tailscale policy**. Merge these in, keep the existing rules and `tests`:
+
+   ```jsonc
+   "tagOwners": { "tag:ci-deploy": ["autogroup:admin"] },
+   "acls": [
+     { "action": "accept", "src": ["tag:ci-deploy"], "dst": ["tag:servers:22", "tag:vps:22"] },
+   ],
+   "ssh": [
+     { "action": "accept", "src": ["tag:ci-deploy"], "dst": ["tag:servers", "tag:vps"], "users": ["adept-deploy"] },
+   ],
+   ```
+
+4. **Tailscale → Settings → Trust credentials → OpenID Connect → GitHub**:
+   - Scope **Auth Keys: Write**, tag `tag:ci-deploy`.
+   - Subject: `repo:IuriGuerreiro@128285759/adept@1456372594:ref:refs/heads/prod`
+   - Claim `workflow_ref`: `IuriGuerreiro/adept/.github/workflows/deploy.yml@refs/heads/prod`
+
+5. **GitHub repository variables**:
+
+   | Variable | Value |
+   |---|---|
+   | `PROD_TAILSCALE_CLIENT_ID` | from the credential |
+   | `PROD_TAILSCALE_AUDIENCE` | from the credential |
+   | `PROD_API_DEPLOY_HOST` | server's Tailscale name |
+   | `PROD_MEDIA_DEPLOY_HOST` | VPS's Tailscale name or IP |
+
+### Roll back by hand
+
+On the machine. The next push to `prod` deploys the new version again.
+
+```sh
+sudo /opt/adept-deploy/deploy.sh rollback
+sudo cat /opt/adept-deploy/last-deploy.log     # what the last run did
+```
 
 ## Troubleshooting
 
 | Symptom | Cause |
 |---|---|
+| NATS runs but port 4222 is closed after a reboot | Docker dropped its network: `docker network connect discord2-prod_nats discord2-prod-nats-1` |
+| Deploy: `Expected one ... container` | Wrong machine or project, or a hard-killed deploy left an extra `Created` container: remove only that one |
 | NATS logs `authentication error` every minute | VPS runs an old media image, or `NATS_PASSWORD` differs |
 | Media `Connection refused` to NATS | Tailscale down, or policy missing `tag:vps → tag:servers:4222` |
 | `ssh: tailnet policy does not permit you` | `ssh` section of the Tailscale policy is missing the rule |
