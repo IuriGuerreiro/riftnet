@@ -9,13 +9,23 @@ import {
 import { DevSwitcher } from "@/components/DevSwitcher";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AdeptLayout } from "@/layouts/AdeptLayout";
+import { ForgotScreen } from "@/screens/ForgotScreen";
 import { LoadingScreen } from "@/screens/LoadingScreen";
 import { readLoadingSearch } from "@/screens/loadingSearch";
 import { LoginScreen } from "@/screens/LoginScreen";
 import { RegisterScreen } from "@/screens/RegisterScreen";
 import { UsernameScreen } from "@/screens/UsernameScreen";
+import { VerifyScreen } from "@/screens/VerifyScreen";
 
 const rootRoute = createRootRoute({
+  errorComponent: () => (
+    <div className="grid h-full place-content-center gap-3 text-center">
+      <h1 className="text-xl font-semibold">Something broke</h1>
+      <a href="/app" className="text-brand-text hover:underline">
+        Reload Adept
+      </a>
+    </div>
+  ),
   component: () => (
     <TooltipProvider>
       <Outlet />
@@ -45,6 +55,8 @@ const routeTree = rootRoute.addChildren([
   loadingRoute,
   createRoute({ getParentRoute: () => rootRoute, path: "/login", component: LoginScreen }),
   createRoute({ getParentRoute: () => rootRoute, path: "/register", component: RegisterScreen }),
+  createRoute({ getParentRoute: () => rootRoute, path: "/forgot", component: ForgotScreen }),
+  createRoute({ getParentRoute: () => rootRoute, path: "/verify", component: VerifyScreen }),
   createRoute({ getParentRoute: () => rootRoute, path: "/username", component: UsernameScreen }),
   createRoute({
     getParentRoute: () => rootRoute,

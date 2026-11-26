@@ -25,6 +25,8 @@ export function buildRows(messages: Message[], unreadFrom: string | null): Row[]
       !prev ||
       newDay ||
       unread ||
+      m.system === true ||
+      prev.system === true ||
       prev.author !== m.author ||
       m.replyTo !== undefined ||
       Math.abs(minutes(m.time) - minutes(prev.time)) > GAP_MINUTES;

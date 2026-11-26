@@ -3,7 +3,10 @@ import {
   Copy,
   CornerUpLeft,
   EyeOff,
+  Flag,
+  Forward,
   Link2,
+  MessagesSquare,
   MoreHorizontal,
   Pencil,
   Pin,
@@ -35,17 +38,23 @@ import { Emoji } from "@/features/emoji/Emoji";
 import { EmojiPicker } from "@/features/emoji/EmojiPicker";
 import { EmojiText, isOnlyEmoji } from "@/features/emoji/EmojiText";
 import { Attachments } from "@/features/media/Attachments";
+import { ProfileTrigger } from "@/features/profile/ProfileCard";
 import { cn } from "@/lib/utils";
 import { FRIENDS, ME, type Message, type Reaction, user } from "@/mock/data";
+import { useWorld, world } from "@/mock/world";
 
 import { Embed, embedsIn } from "./Embed";
 import { Markdown } from "./Markdown";
+import { mentionsMe } from "./mentions";
 import { MessageEditor } from "./MessageEditor";
 import type { Row } from "./rows";
 
 const QUICK = ["👍", "😂", "🔥"];
 
 export interface MessageActions {
+  forward: (m: Message) => void;
+  report: (m: Message) => void;
+  thread: (id: string) => void;
   reply: (id: string) => void;
   startEdit: (id: string) => void;
   saveEdit: (id: string, text: string) => void;
@@ -73,8 +82,10 @@ function menuFor(m: Message, actions: MessageActions, openPicker: () => void): M
   const items: (MenuItem | false)[] = [
     { label: "Add reaction", icon: <SmilePlus />, onSelect: openPicker },
     { label: "Reply", icon: <CornerUpLeft />, onSelect: () => actions.reply(m.id) },
+    { label: "Open thread", icon: <MessagesSquare />, onSelect: () => actions.thread(m.id) },
+    !!m.text && { label: "Forward", icon: <Forward />, onSelect: () => actions.forward(m) },
     mine &&
-      !!m.text && {
+      (!!m.text || !!m.attachments?.length) && {
         label: "Edit message",
         icon: <Pencil />,
         onSelect: () => actions.startEdit(m.id),
@@ -92,6 +103,13 @@ function menuFor(m: Message, actions: MessageActions, openPicker: () => void): M
     },
     !!m.text && { label: "Copy text", icon: <Copy />, onSelect: () => actions.copyText(m) },
     { label: "Copy message link", icon: <Link2 />, onSelect: () => actions.copyLink(m.id) },
+    !mine && {
+      label: "Report message",
+      icon: <Flag />,
+      onSelect: () => actions.report(m),
+      danger: true,
+      separatorBefore: true,
+    },
     mine && {
       label: "Delete message",
       icon: <Trash2 />,
@@ -259,12 +277,12 @@ function MessageRow({
   actions: MessageActions;
 }) {
   const mine = m.author === ME;
-  const mentioned = m.text.includes(`@${user(ME).handle}`);
+  const mentioned = mentionsMe(m.text);
   const reactions = m.reactions ?? [];
   const [picker, setPicker] = useState<"toolbar" | "row" | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const jumbo = isOnlyEmoji(m.text);
-  const embeds = m.text ? embedsIn(m.text) : [];
+  const embeds = m.text && world.settings.embeds ? embedsIn(m.text) : [];
   const menu = menuFor(m, actions, () => requestAnimationFrame(() => setPicker("toolbar")));
 
   const toggle = (emoji: string) => actions.react(m.id, emoji);
@@ -272,6 +290,29 @@ function MessageRow({
     if (!reactions.some((r) => r.emoji === emoji && r.mine)) toggle(emoji);
   };
   const toolbarPinned = picker === "toolbar" || menuOpen;
+
+  useWorld();
+  const [shown, setShown] = useState(false);
+  const replies = world.threads[m.id]?.length ?? 0;
+  if (m.system)
+    return (
+      <p
+        id={`msg-${m.id}`}
+        className="flex items-center gap-2 px-4 py-2 text-xs text-muted-foreground"
+      >
+        <span className="h-px w-6 bg-border" />
+        {m.text} · {m.time}
+      </p>
+    );
+  if (world.blocked.has(m.author) && !shown)
+    return (
+      <p className="px-4 py-1 text-xs text-muted-foreground">
+        Message from someone you blocked.{" "}
+        <button type="button" onClick={() => setShown(true)} className="font-medium underline">
+          Show
+        </button>
+      </p>
+    );
 
   return (
     <ContextMenu>
@@ -293,7 +334,7 @@ function MessageRow({
           }}
           className={cn(
             "group/msg relative px-4 outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset transition-colors duration-700 hover:bg-white/[0.025]",
-            head ? "mt-3 pt-1 pb-0.5" : "py-0.5",
+            head ? "mt-3 pt-1 pb-0.5 [.compact_&]:mt-1" : "py-0.5 [.compact_&]:py-0",
             mentioned &&
               "bg-brand/[0.07] shadow-[inset_2px_0_0_var(--adept-violet)] hover:bg-brand/10",
             (picker !== null || editing || menuOpen) && "bg-white/[0.025]",
@@ -306,7 +347,9 @@ function MessageRow({
           <div className="flex gap-3">
             <div className="w-[38px] shrink-0">
               {head ? (
-                <Avatar id={m.author} size={38} className="mt-0.5" />
+                <ProfileTrigger id={m.author} className="rounded-full">
+                  <Avatar id={m.author} size={38} className="mt-0.5" />
+                </ProfileTrigger>
               ) : (
                 <span className="hidden pt-1 text-center text-[10px] text-muted-foreground/70 tabular-nums group-hover/msg:block">
                   {m.time}
@@ -316,10 +359,16 @@ function MessageRow({
             <div className="min-w-0 flex-1">
               {head && (
                 <div className="flex items-baseline gap-2">
-                  <span className="cursor-pointer text-[15px] font-semibold hover:underline">
+                  <ProfileTrigger
+                    id={m.author}
+                    className="text-[15px] font-semibold hover:underline"
+                  >
                     {user(m.author).name}
-                  </span>
-                  <span className="text-[11px] text-muted-foreground">
+                  </ProfileTrigger>
+                  <span
+                    title={`${m.day ?? "Today"} at ${m.time}`}
+                    className="text-[11px] text-muted-foreground"
+                  >
                     {m.day && m.day !== "Today" ? `${m.day} at ` : ""}
                     {m.time}
                   </span>
@@ -399,6 +448,15 @@ function MessageRow({
               {embeds.map((e) => (
                 <Embed key={e.url} e={e} />
               ))}
+              {replies > 0 && (
+                <button
+                  type="button"
+                  onClick={() => actions.thread(m.id)}
+                  className="mt-1 text-xs font-medium text-brand-text hover:underline"
+                >
+                  {replies} {replies === 1 ? "reply" : "replies"}
+                </button>
+              )}
               {reactions.length > 0 && (
                 <div className="mt-1.5 flex flex-wrap items-center gap-1">
                   {reactions.map((r) => (
@@ -445,7 +503,8 @@ function MessageRow({
                   key={e}
                   type="button"
                   aria-label={`React ${e}`}
-                  onClick={() => add(e)}
+                  aria-pressed={reactions.some((r) => r.emoji === e && r.mine)}
+                  onClick={() => toggle(e)}
                   className="grid size-8 place-items-center rounded-lg transition-transform hover:scale-110 hover:bg-accent focus-visible:bg-accent"
                 >
                   <Emoji emoji={e} size={20} />

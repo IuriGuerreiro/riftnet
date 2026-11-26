@@ -1,535 +1,49 @@
-import { ChevronDown, Compass, Hash, Inbox, Pin, Plus, Radio, Search, Volume2 } from "lucide-react";
-import { type ReactNode, useEffect, useState } from "react";
+import { Compass, Menu, Plus, Search, Volume2 } from "lucide-react";
+import { useEffect, useState } from "react";
 
-import { Avatar, AvatarStack } from "@/components/Avatar";
 import { AdeptMark } from "@/components/brand/AdeptMark";
 import { ServerIcon } from "@/components/ServerIcon";
-import { ActivityLine } from "@/features/adept/ActivityLine";
 import { CallCard } from "@/features/adept/CallCard";
+import { IncomingCall, SharePlayBanner } from "@/features/adept/CallPrompts";
 import { CallStage, type CallState } from "@/features/adept/CallStage";
 import { PeoplePanel } from "@/features/adept/PeoplePanel";
 import { ProfilePanel } from "@/features/adept/ProfilePanel";
 import { RoomPreview } from "@/features/adept/RoomPreview";
 import { StreamPip } from "@/features/adept/StreamPip";
-import { type RequestState, TopBarStatus } from "@/features/adept/TopBarStatus";
+import { TopBarStatus } from "@/features/adept/TopBarStatus";
 import { ChatView } from "@/features/chat/ChatView";
+import { Dialogs } from "@/features/dialogs/Dialogs";
 import { EmojiText } from "@/features/emoji/EmojiText";
-import { ConversationAvatar } from "@/features/shell/ConversationRow";
+import { onOpenChat } from "@/features/profile/openChat";
 import { JumpPalette } from "@/features/shell/JumpPalette";
+import { Banners, Toasts } from "@/features/shell/Notices";
+import {
+  HomeSidebar,
+  type HomeTab,
+  mentionsIn,
+  RailTile,
+  ServerSidebar,
+  type UnreadOf,
+} from "@/features/shell/Sidebars";
 import { UserBar } from "@/features/shell/UserBar";
 import { cn } from "@/lib/utils";
 import {
-  type Conversation,
   conversation,
   CONVERSATIONS,
-  FRIENDS,
-  LIVE_ROOMS,
   type LiveRoom,
   ME,
-  type Server,
   server as findServer,
   SERVERS,
-  user,
 } from "@/mock/data";
-
-type UnreadOf = (id: string, base: number) => number;
+import { change, ensureDm, openDialog, systemMessage, toast, useWorld, world } from "@/mock/world";
 
 const WIDE = "(min-width: 1100px)";
 
-const DMS = CONVERSATIONS.filter((c) => c.kind !== "channel");
-
-function mentionsIn(s: Server, unreadOf: UnreadOf) {
-  return s.channels.reduce((n, c) => n + (unreadOf(c.id, 1) ? (c.mentions ?? 0) : 0), 0);
-}
-
-function SectionLabel({ children, action }: { children: ReactNode; action?: ReactNode }) {
-  return (
-    <div className="flex items-center justify-between px-2 pt-4 pb-1.5 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
-      <span className="flex items-center gap-1.5">{children}</span>
-      {action}
-    </div>
-  );
-}
-
-function MentionPill({ count }: { count: number }) {
-  return (
-    <span className="grid h-[18px] min-w-[18px] shrink-0 place-items-center rounded-full bg-danger-fill px-1.5 text-[11px] font-bold text-white">
-      {count}
-    </span>
-  );
-}
-
-function UnreadDot() {
-  return <span className="size-2 shrink-0 rounded-full bg-brand" />;
-}
-
-function RailTile({
-  label,
-  active,
-  unread,
-  mentions,
-  voice,
-  onClick,
-  children,
-}: {
-  label: string;
-  active: boolean;
-  unread?: boolean;
-  mentions?: number;
-  voice?: boolean;
-  onClick: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <div className="relative flex w-full justify-center">
-      {unread && !active && (
-        <span className="absolute top-1/2 left-0 size-1.5 -translate-y-1/2 rounded-full bg-brand" />
-      )}
-      <button
-        type="button"
-        aria-label={label}
-        title={label}
-        onClick={onClick}
-        className={cn(
-          "relative rounded-xl transition-all duration-150",
-          active
-            ? "ring-2 ring-brand ring-offset-2 ring-offset-ink"
-            : "opacity-80 hover:-translate-y-px hover:opacity-100",
-        )}
-      >
-        {children}
-        {mentions ? (
-          <span className="absolute -top-1.5 -right-1.5 grid h-[18px] min-w-[18px] place-items-center rounded-full border-2 border-ink bg-danger-fill px-1 text-[10px] font-bold text-white">
-            {mentions}
-          </span>
-        ) : null}
-        {voice && (
-          <span className="absolute -right-1 -bottom-1 grid size-4 place-items-center rounded-full border-2 border-ink bg-success">
-            <Volume2 className="size-2 text-ink" strokeWidth={3} />
-          </span>
-        )}
-      </button>
-    </div>
-  );
-}
-
-function LiveRow({
-  room,
-  joined,
-  previewing,
-  onPreview,
-  onJoin,
-}: {
-  room: LiveRoom;
-  joined: boolean;
-  previewing: boolean;
-  onPreview: () => void;
-  onJoin: () => void;
-}) {
-  return (
-    <div
-      className={cn(
-        "flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors",
-        previewing ? "bg-accent" : "hover:bg-accent/60",
-      )}
-    >
-      <button
-        type="button"
-        onClick={onPreview}
-        className="flex min-w-0 flex-1 items-center gap-2 text-left"
-      >
-        <Volume2 className="size-4 shrink-0 text-success" />
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13px] font-semibold">{room.name}</span>
-          <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-            {room.live && (
-              <span className="flex shrink-0 items-center gap-0.5 rounded bg-danger-fill px-1 text-[9px] font-bold text-white">
-                <Radio className="size-2.5" />
-                LIVE
-              </span>
-            )}
-            <span className="truncate">{findServer(room.serverId)?.name}</span>
-          </span>
-        </span>
-        <AvatarStack ids={room.people} size={18} max={3} ringBg="var(--adept-ink)" />
-      </button>
-      {joined ? (
-        <span className="text-[11px] font-semibold text-success">In</span>
-      ) : (
-        <button
-          type="button"
-          onClick={onJoin}
-          className="h-6 shrink-0 rounded-md bg-success/15 px-2 text-[11px] font-semibold text-success transition-colors hover:bg-success hover:text-ink"
-        >
-          Join
-        </button>
-      )}
-    </div>
-  );
-}
-
-function DmRow({
-  c,
-  active,
-  unreadOf,
-  onClick,
-}: {
-  c: Conversation;
-  active: boolean;
-  unreadOf: UnreadOf;
-  onClick: () => void;
-}) {
-  const u = user(c.members[0] ?? "");
-  const unread = unreadOf(c.id, c.unread) > 0 && !active;
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "flex h-12 w-full items-center gap-2.5 rounded-lg px-2 text-left transition-colors",
-        active ? "bg-accent" : "hover:bg-accent/60",
-      )}
-    >
-      {c.kind === "group" ? (
-        <ConversationAvatar c={c} size={32} />
-      ) : (
-        <Avatar id={u.id} size={32} status ringBg="var(--adept-ink)" />
-      )}
-      <span className="min-w-0 flex-1">
-        <span
-          className={cn(
-            "block truncate text-sm",
-            unread || active ? "font-semibold text-foreground" : "font-medium text-foreground/75",
-          )}
-        >
-          <EmojiText text={c.title} size={16} />
-        </span>
-        {c.kind === "group" ? (
-          <span className="block truncate text-xs text-muted-foreground">
-            {c.members.length + 1} members
-          </span>
-        ) : u.activity ? (
-          <ActivityLine a={u.activity} />
-        ) : null}
-      </span>
-      {c.mentions > 0 && unread ? (
-        <MentionPill count={c.mentions} />
-      ) : unread ? (
-        <UnreadDot />
-      ) : null}
-    </button>
-  );
-}
-
-type HomeTab = "chats" | "friends" | "requests";
-
-function HomeSidebar({
-  tab,
-  setTab,
-  active,
-  onOpen,
-  joined,
-  preview,
-  onPreview,
-  onJoin,
-  unreadOf,
-  request,
-  onRequest,
-}: {
-  unreadOf: UnreadOf;
-  request: RequestState;
-  onRequest: (r: RequestState) => void;
-  tab: HomeTab;
-  setTab: (t: HomeTab) => void;
-  active: string;
-  onOpen: (id: string) => void;
-  joined: string | null;
-  preview: string | null;
-  onPreview: (id: string) => void;
-  onJoin: (id: string) => void;
-}) {
-  const pinned = DMS.filter((c) => c.pinned);
-  const rest = DMS.filter((c) => !c.pinned);
-  const friends = FRIENDS.filter((f) => f.id !== "rui" || request === "accepted").sort(
-    (a, b) => Number(a.status === "offline") - Number(b.status === "offline"),
-  );
-
-  return (
-    <>
-      <div className="px-2 pt-1">
-        <div className="grid grid-cols-3 rounded-lg bg-surface-1 p-0.5">
-          {(["chats", "friends", "requests"] as const).map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setTab(t)}
-              className={cn(
-                "h-7 rounded-md text-xs font-medium capitalize transition-colors",
-                tab === t
-                  ? "bg-surface-3 text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {t}
-              {t === "requests" && request === "pending" && (
-                <span className="ml-1 text-brand-text">1</span>
-              )}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
-        {tab === "chats" && (
-          <>
-            <SectionLabel>
-              <span className="relative flex size-1.5">
-                <span className="absolute inline-flex size-full animate-ping rounded-full bg-success opacity-60 motion-reduce:animate-none" />
-                <span className="relative inline-flex size-1.5 rounded-full bg-success" />
-              </span>
-              Live now
-            </SectionLabel>
-            {LIVE_ROOMS.map((r) => (
-              <LiveRow
-                key={r.channelId}
-                room={r}
-                joined={joined === r.channelId}
-                previewing={preview === r.channelId}
-                onPreview={() => onPreview(r.channelId)}
-                onJoin={() => onJoin(r.channelId)}
-              />
-            ))}
-            <SectionLabel>
-              <Pin className="size-3" />
-              Pinned
-            </SectionLabel>
-            {pinned.map((c) => (
-              <DmRow
-                key={c.id}
-                c={c}
-                active={active === c.id}
-                unreadOf={unreadOf}
-                onClick={() => onOpen(c.id)}
-              />
-            ))}
-            <SectionLabel
-              action={<Plus className="size-3.5 cursor-pointer hover:text-foreground" />}
-            >
-              Direct messages
-            </SectionLabel>
-            {rest.map((c) => (
-              <DmRow
-                key={c.id}
-                c={c}
-                active={active === c.id}
-                unreadOf={unreadOf}
-                onClick={() => onOpen(c.id)}
-              />
-            ))}
-          </>
-        )}
-        {tab === "friends" && (
-          <>
-            <SectionLabel>All friends — {friends.length}</SectionLabel>
-            {friends.map((f) => (
-              <button
-                key={f.id}
-                type="button"
-                onClick={() => {
-                  setTab("chats");
-                  onOpen(`dm-${f.id}`);
-                }}
-                className={cn(
-                  "flex h-12 w-full items-center gap-2.5 rounded-lg px-2 text-left hover:bg-accent/60",
-                  f.status === "offline" && "opacity-45",
-                )}
-              >
-                <Avatar id={f.id} size={32} status ringBg="var(--adept-ink)" />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium">{f.name}</span>
-                  {f.activity ? (
-                    <ActivityLine a={f.activity} />
-                  ) : (
-                    <span className="block text-xs text-muted-foreground">@{f.handle}</span>
-                  )}
-                </span>
-              </button>
-            ))}
-          </>
-        )}
-        {tab === "requests" && request === "pending" && (
-          <div className="mt-3 rounded-xl border border-border bg-surface-1 p-3">
-            <div className="flex items-center gap-2.5">
-              <Avatar id="rui" size={32} />
-              <p className="text-sm font-medium">
-                {user("rui").name}
-                <span className="block text-xs font-normal text-muted-foreground">
-                  wants to be friends
-                </span>
-              </p>
-            </div>
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => onRequest("accepted")}
-                className="h-8 rounded-lg bg-brand-fill text-xs font-semibold text-white hover:bg-brand-fill/85"
-              >
-                Accept
-              </button>
-              <button
-                type="button"
-                onClick={() => onRequest("ignored")}
-                className="h-8 rounded-lg bg-surface-3 text-xs font-medium hover:bg-surface-4"
-              >
-                Ignore
-              </button>
-            </div>
-          </div>
-        )}
-        {tab === "requests" && request !== "pending" && (
-          <div className="flex flex-col items-center gap-2 px-4 py-14 text-center">
-            <Inbox className="size-8 text-surface-4" />
-            <p className="text-sm font-medium">No pending requests</p>
-            <p className="text-xs text-muted-foreground">
-              Friend requests and message requests land here.
-            </p>
-          </div>
-        )}
-      </div>
-    </>
-  );
-}
-
-function ServerSidebar({
-  s,
-  active,
-  onOpen,
-  joined,
-  preview,
-  onPreview,
-  unreadOf,
-}: {
-  unreadOf: UnreadOf;
-  s: Server;
-  active: string;
-  onOpen: (id: string) => void;
-  joined: string | null;
-  preview: string | null;
-  onPreview: (id: string) => void;
-}) {
-  const [closed, setClosed] = useState<Set<string>>(new Set());
-  const categories = [...new Set(s.channels.map((c) => c.category))];
-  const online = s.members.filter((id) => user(id).status !== "offline").length;
-
-  return (
-    <>
-      <button
-        type="button"
-        className="mx-2 flex h-11 shrink-0 items-center gap-2 rounded-lg px-2 text-left hover:bg-accent/60"
-      >
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-[15px] font-semibold">{s.name}</span>
-          <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
-            <span className="size-1.5 rounded-full bg-success" />
-            {online} online · {s.members.length} members
-          </span>
-        </span>
-        <ChevronDown className="size-4 text-muted-foreground" />
-      </button>
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
-        {categories.map((cat) => {
-          const isClosed = closed.has(cat);
-          return (
-            <div key={cat}>
-              <button
-                type="button"
-                onClick={() =>
-                  setClosed((prev) => {
-                    const next = new Set(prev);
-                    if (next.has(cat)) next.delete(cat);
-                    else next.add(cat);
-                    return next;
-                  })
-                }
-                className="flex w-full items-center gap-1 px-1 pt-4 pb-1 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase hover:text-foreground"
-              >
-                <ChevronDown
-                  className={cn("size-3 transition-transform", isClosed && "-rotate-90")}
-                />
-                {cat}
-              </button>
-              {s.channels
-                .filter((c) => c.category === cat)
-                .filter((c) => !isClosed || active === c.id || (c.voice?.length ?? 0) > 0)
-                .map((c) => {
-                  const isActive = active === c.id || preview === c.id;
-                  const unread = unreadOf(c.id, c.unread ?? 0) > 0 && !isActive;
-                  return (
-                    <div key={c.id}>
-                      <button
-                        type="button"
-                        onClick={() => (c.kind === "text" ? onOpen(c.id) : onPreview(c.id))}
-                        className={cn(
-                          "flex h-9 w-full items-center gap-2 rounded-lg px-2 text-left text-sm transition-colors",
-                          isActive
-                            ? "bg-accent font-semibold text-foreground"
-                            : unread
-                              ? "font-semibold text-foreground hover:bg-accent/60"
-                              : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
-                        )}
-                      >
-                        {c.kind === "text" ? (
-                          <Hash className="size-4 shrink-0 opacity-60" />
-                        ) : (
-                          <Volume2
-                            className={cn(
-                              "size-4 shrink-0",
-                              (c.voice?.length ?? 0) > 0 ? "text-success" : "opacity-60",
-                            )}
-                          />
-                        )}
-                        <span className="min-w-0 flex-1 truncate">{c.name}</span>
-                        {joined === c.id && (
-                          <span className="text-[11px] font-semibold text-success">In</span>
-                        )}
-                        {c.mentions && unread ? (
-                          <MentionPill count={c.mentions} />
-                        ) : unread ? (
-                          <UnreadDot />
-                        ) : null}
-                      </button>
-                      {c.voice?.map((id) => (
-                        <div
-                          key={id}
-                          className="flex h-7 items-center gap-2 pr-2 pl-8 text-[13px] text-muted-foreground"
-                        >
-                          <Avatar id={id} size={18} />
-                          <span className="min-w-0 flex-1 truncate">{user(id).name}</span>
-                          {c.live === id && (
-                            <span className="rounded bg-danger-fill px-1 text-[9px] font-bold text-white">
-                              LIVE
-                            </span>
-                          )}
-                        </div>
-                      ))}
-                      {joined === c.id && (
-                        <div className="flex h-7 items-center gap-2 pr-2 pl-8 text-[13px] text-foreground">
-                          <Avatar id={ME} size={18} />
-                          <span className="truncate">{user(ME).name}</span>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-            </div>
-          );
-        })}
-      </div>
-    </>
-  );
-}
-
 export function AdeptLayout() {
-  const [place, setPlace] = useState("home");
+  useWorld();
+  const [placeId, setPlace] = useState("home");
+  const place = SERVERS.some((x) => x.id === placeId) ? placeId : "home";
+  const [nav, setNav] = useState(false);
   const [openIn, setOpenIn] = useState<Record<string, string>>({
     home: "dm-maya",
     owls: "owls-general",
@@ -540,24 +54,12 @@ export function AdeptLayout() {
   const [tab, setTab] = useState<HomeTab>("chats");
   const [call, setCall] = useState<CallState | null>(null);
   const [counts, setCounts] = useState<Record<string, number>>({ "dm-maya": 0 });
-  const [request, setRequest] = useState<RequestState>("pending");
   const [preview, setPreview] = useState<string | null>(null);
   const [muted, setMuted] = useState(false);
   const [deafened, setDeafened] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [panelOpen, setPanelOpen] = useState(() => window.matchMedia(WIDE).matches);
   const [palette, setPalette] = useState(false);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        setPalette((p) => !p);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
 
   useEffect(() => {
     const query = window.matchMedia(WIDE);
@@ -576,11 +78,22 @@ export function AdeptLayout() {
     return () => clearTimeout(timer);
   }, [ringing, call?.id]);
 
+  const asking = call?.control?.role === "viewer" && !call.control.active;
+  useEffect(() => {
+    if (!asking) return;
+    const timer = setTimeout(
+      () => setCall((x) => (x?.control ? { ...x, control: { ...x.control, active: true } } : x)),
+      3000,
+    );
+    return () => clearTimeout(timer);
+  }, [asking]);
+
   const joined = call?.id ?? null;
   const unreadOf: UnreadOf = (id, base) => counts[id] ?? base;
   const markUnread = (id: string, n: number) => setCounts((x) => ({ ...x, [id]: n }));
+  const dms = CONVERSATIONS.filter((x) => x.kind !== "channel");
   const s = SERVERS.find((x) => x.id === place);
-  const activeId = openIn[place] ?? "dm-maya";
+  const activeId = openIn[place] ?? s?.channels.find((x) => x.kind === "text")?.id ?? "dm-maya";
   const c = conversation(activeId);
   const chatServer = c.serverId ? findServer(c.serverId) : undefined;
   const rooms = SERVERS.flatMap((srv) =>
@@ -612,16 +125,21 @@ export function AdeptLayout() {
   const inStage = joinedRoom !== undefined && preview === joined;
   const hasStream = sharing || joinedRoom?.live !== undefined;
   const previewRoom = rooms.find((r) => r.channelId === preview);
-  const dmMentions = DMS.reduce((n, x) => n + (unreadOf(x.id, x.unread) ? x.mentions : 0), 0);
+  const dmMentions = dms.reduce((n, x) => n + (unreadOf(x.id, x.unread) ? x.mentions : 0), 0);
 
   const openConversation = (id: string) => {
-    const conv = conversation(id);
+    const conv = conversation(id.startsWith("dm-") ? ensureDm(id.slice(3)) : id);
     const where = conv.kind === "channel" ? (conv.serverId ?? "home") : "home";
     setPlace(where);
     setOpenIn((o) => ({ ...o, [where]: id }));
     markUnread(id, 0);
     setPreview(null);
     setPalette(false);
+    setNav(false);
+    if (id.startsWith("dm-") && world.empty)
+      change(() => {
+        world.empty = false;
+      });
   };
   const go = (where: string) => {
     setPlace(where);
@@ -639,6 +157,23 @@ export function AdeptLayout() {
     setPreview(id);
     setPalette(false);
     if (id === joined) return;
+    if (call) {
+      setPreview(joined);
+      openDialog({
+        kind: "confirm",
+        title: "Switch calls?",
+        body: "You leave the call you're in now.",
+        action: "Switch",
+        run: () => {
+          setPreview(id);
+          begin(id, direct, camera);
+        },
+      });
+      return;
+    }
+    begin(id, direct, camera);
+  };
+  const begin = (id: string, direct: boolean, camera: boolean) => {
     setCall({
       id,
       startedAt: Date.now(),
@@ -646,6 +181,8 @@ export function AdeptLayout() {
       focused: null,
       ringing: direct,
       previewHidden: false,
+      chat: false,
+      control: null,
     });
     setSharing(false);
   };
@@ -653,6 +190,13 @@ export function AdeptLayout() {
   const startCall = (video: boolean) => connect(activeId, true, video);
   const patchCall = (patch: Partial<CallState>) => setCall((x) => x && { ...x, ...patch });
   const leave = () => {
+    if (call && callConversation)
+      systemMessage(
+        call.id,
+        call.ringing
+          ? "Call cancelled."
+          : `Call ended after ${Math.max(1, Math.round((Date.now() - call.startedAt) / 60000))} min.`,
+      );
     setCall(null);
     setSharing(false);
     setPreview(null);
@@ -664,16 +208,115 @@ export function AdeptLayout() {
     } else setMuted((value) => !value);
   };
   const toggleDeafen = () => setDeafened((value) => !value);
-  const toggleShare = () => {
-    setSharing((value) => !value);
+  const goLive = () => {
+    setSharing(true);
     patchCall({ previewHidden: false });
   };
+  const toggleShare = () => {
+    if (!sharing) {
+      openDialog({ kind: "share" });
+      return;
+    }
+    setSharing(false);
+    patchCall({ control: null });
+  };
+  const answer = (video: boolean) => {
+    const who = world.ringing?.who;
+    if (!who) return;
+    const id = ensureDm(who);
+    const take = () => {
+      change(() => {
+        world.ringing = null;
+      });
+      setSharing(false);
+      openConversation(id);
+      begin(id, false, video);
+      setPreview(id);
+    };
+    if (call)
+      openDialog({
+        kind: "confirm",
+        title: "Switch calls?",
+        body: "You leave the call you're in now.",
+        action: "Switch",
+        run: take,
+      });
+    else take();
+  };
+  const step = (by: number, unreadOnly: boolean) => {
+    const list = s
+      ? s.channels
+          .filter((x) => x.kind === "text")
+          .map((x) => ({ id: x.id, unread: unreadOf(x.id, x.unread ?? 0) }))
+      : dms
+          .filter((x) => !world.closed.has(x.id))
+          .map((x) => ({ id: x.id, unread: unreadOf(x.id, x.unread) }));
+    const at = list.findIndex((x) => x.id === activeId);
+    for (let i = 1; i <= list.length; i += 1) {
+      const next = list[(at + by * i + list.length * i) % list.length];
+      if (next && (!unreadOnly || next.unread > 0)) {
+        openConversation(next.id);
+        return;
+      }
+    }
+  };
+  const shortcuts = (e: KeyboardEvent) => {
+    const mod = e.ctrlKey || e.metaKey;
+    const key = e.key.toLowerCase();
+    const run =
+      mod && e.shiftKey && key === "m"
+        ? toggleMute
+        : mod && e.shiftKey && key === "d"
+          ? toggleDeafen
+          : mod && e.shiftKey && key === "f12"
+            ? () => patchCall({ control: null })
+            : mod && key === "k"
+              ? () => setPalette((p) => !p)
+              : mod && key === ","
+                ? () => openDialog({ kind: "settings" })
+                : mod && key === "/"
+                  ? () => openDialog({ kind: "shortcuts" })
+                  : e.altKey && (key === "arrowdown" || key === "arrowup")
+                    ? () => step(key === "arrowdown" ? 1 : -1, e.shiftKey)
+                    : null;
+    if (!run) return;
+    e.preventDefault();
+    run();
+  };
+  useEffect(() => {
+    onOpenChat(openConversation);
+    window.addEventListener("keydown", shortcuts);
+    return () => window.removeEventListener("keydown", shortcuts);
+  });
 
   return (
-    <div className="flex h-full flex-col bg-ink">
+    <div
+      className={cn(
+        "flex h-full flex-col bg-ink",
+        world.settings.reduceMotion && "reduce-motion",
+        world.settings.density === "compact" && "compact",
+      )}
+      style={{ zoom: world.settings.scale / 100, height: `${10000 / world.settings.scale}%` }}
+    >
+      <a
+        href="#chat"
+        className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-brand-fill focus:p-2 focus:text-white"
+      >
+        Skip to chat
+      </a>
+      <Banners />
       <header className="grid h-11 shrink-0 grid-cols-[minmax(0,1fr)_minmax(120px,300px)_auto] xl:grid-cols-[1fr_minmax(0,440px)_1fr] items-center gap-4 px-3">
         <div className="flex min-w-0 items-center gap-2.5 text-sm">
-          <AdeptMark className="size-5" />
+          <button
+            type="button"
+            aria-label="Toggle sidebar"
+            aria-expanded={nav}
+            onClick={() => setNav(!nav)}
+            className="grid size-7 shrink-0 place-items-center rounded-lg hover:bg-surface-2 md:hidden"
+          >
+            <Menu className="size-4" />
+          </button>
+          <AdeptMark className="size-5 shrink-0" />
           <span className="truncate text-muted-foreground">
             {inStage
               ? (findServer(joinedRoom.serverId)?.name ?? "Home")
@@ -684,7 +327,15 @@ export function AdeptLayout() {
             <span className="font-medium text-foreground">
               {inStage && <Volume2 className="mr-1 inline size-3.5 text-success" />}
               <EmojiText
-                text={inStage ? joinedRoom.name : c.kind === "channel" ? `# ${c.title}` : c.title}
+                text={
+                  inStage
+                    ? joinedRoom.name
+                    : world.empty && place === "home"
+                      ? "Welcome"
+                      : c.kind === "channel"
+                        ? `# ${c.title}`
+                        : c.title
+                }
                 size={15}
               />
             </span>
@@ -709,8 +360,6 @@ export function AdeptLayout() {
             go("home");
             setTab("friends");
           }}
-          request={request}
-          onRequest={setRequest}
           onLive={() => {
             go("home");
             setTab("chats");
@@ -718,13 +367,19 @@ export function AdeptLayout() {
         />
       </header>
 
-      <div className="flex min-h-0 flex-1">
-        <nav className="flex w-[60px] shrink-0 flex-col items-center gap-3 overflow-y-auto pt-1 pb-3">
+      <div className="relative flex min-h-0 flex-1">
+        <nav
+          aria-label="Servers"
+          className="flex w-[60px] shrink-0 flex-col items-center gap-3 overflow-y-auto pt-1 pb-3"
+        >
           <RailTile
             label="Home"
             active={place === "home"}
             mentions={dmMentions}
-            onClick={() => go("home")}
+            onClick={() => {
+              go("home");
+              setNav(true);
+            }}
           >
             <span
               className={cn(
@@ -736,15 +391,21 @@ export function AdeptLayout() {
             </span>
           </RailTile>
           <span className="h-px w-6 bg-surface-3" />
-          {SERVERS.map((srv) => (
+          {(world.empty ? [] : SERVERS).map((srv) => (
             <RailTile
               key={srv.id}
               label={srv.name}
               active={place === srv.id}
-              unread={srv.channels.some((x) => unreadOf(x.id, x.unread ?? 0) > 0)}
+              unread={
+                !world.muted.has(srv.id) &&
+                srv.channels.some((x) => unreadOf(x.id, x.unread ?? 0) > 0)
+              }
               mentions={mentionsIn(srv, unreadOf)}
               voice={srv.channels.some((x) => (x.voice?.length ?? 0) > 0)}
-              onClick={() => go(srv.id)}
+              onClick={() => {
+                go(srv.id);
+                setNav(true);
+              }}
             >
               <ServerIcon server={srv} size={40} className="rounded-xl" />
             </RailTile>
@@ -753,6 +414,7 @@ export function AdeptLayout() {
             <button
               type="button"
               aria-label="Add a server"
+              onClick={() => openDialog({ kind: "addServer" })}
               title="Add a server"
               className="grid size-10 place-items-center rounded-xl border border-dashed border-surface-4 text-muted-foreground transition-colors hover:border-brand hover:text-brand-text"
             >
@@ -761,6 +423,7 @@ export function AdeptLayout() {
             <button
               type="button"
               aria-label="Explore"
+              onClick={() => openDialog({ kind: "discover" })}
               title="Explore"
               className="grid size-10 place-items-center rounded-xl text-muted-foreground transition-colors hover:bg-surface-2 hover:text-foreground"
             >
@@ -769,7 +432,13 @@ export function AdeptLayout() {
           </div>
         </nav>
 
-        <aside className="flex w-[248px] shrink-0 flex-col">
+        <aside
+          aria-label="Chats"
+          className={cn(
+            "flex w-[248px] shrink-0 flex-col bg-ink max-md:absolute max-md:inset-y-0 max-md:left-[60px] max-md:z-40 max-md:shadow-2xl",
+            !nav && "max-md:hidden",
+          )}
+        >
           {s ? (
             <ServerSidebar
               s={s}
@@ -791,8 +460,7 @@ export function AdeptLayout() {
               preview={preview}
               onPreview={setPreview}
               onJoin={join}
-              request={request}
-              onRequest={setRequest}
+              onRead={(id) => markUnread(id, 0)}
             />
           )}
           {joinedRoom && (
@@ -826,21 +494,68 @@ export function AdeptLayout() {
           />
         </aside>
 
-        <main className="relative mr-2 mb-2 flex min-w-0 flex-1 overflow-hidden rounded-xl border border-white/[0.06] bg-background shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-          {inStage && call ? (
-            <CallStage
-              call={call}
-              onCall={patchCall}
-              room={joinedRoom}
-              muted={muted || deafened}
-              deafened={deafened}
-              sharing={sharing}
-              onMute={toggleMute}
-              onDeafen={toggleDeafen}
-              onShare={toggleShare}
-              onLeave={leave}
-              onOpenChat={() => setPreview(null)}
-            />
+        <main
+          id="chat"
+          tabIndex={-1}
+          className="relative outline-none mr-2 mb-2 flex min-w-0 flex-1 overflow-hidden rounded-xl border border-white/[0.06] bg-background shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
+        >
+          {s?.denied ? (
+            <div className="m-auto max-w-sm p-8 text-center">
+              <h2 className="text-lg font-semibold">You can&apos;t open {s.name}</h2>
+              <p className="mt-2 text-sm text-muted-foreground">
+                You were removed, or the server no longer exists.
+              </p>
+            </div>
+          ) : world.empty && place === "home" ? (
+            <div className="m-auto max-w-sm p-8 text-center">
+              <h2 className="text-lg font-semibold">Welcome to Adept</h2>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Add a friend or make a server to start talking.
+              </p>
+              <div className="mt-4 flex justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTab("friends");
+                    setNav(true);
+                  }}
+                  className="h-9 rounded-lg bg-brand-fill px-4 text-sm font-semibold text-white"
+                >
+                  Add a friend
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openDialog({ kind: "addServer" })}
+                  className="h-9 rounded-lg bg-surface-3 px-4 text-sm font-medium"
+                >
+                  Add a server
+                </button>
+              </div>
+            </div>
+          ) : inStage && call ? (
+            <>
+              <CallStage
+                call={call}
+                onCall={patchCall}
+                room={joinedRoom}
+                muted={muted || deafened}
+                deafened={deafened}
+                sharing={sharing}
+                onMute={toggleMute}
+                onDeafen={toggleDeafen}
+                onShare={toggleShare}
+                onLeave={leave}
+                onOpenChat={() => {
+                  if (window.matchMedia(WIDE).matches) patchCall({ chat: !call.chat });
+                  else setPreview(null);
+                }}
+              />
+              {call.chat && (
+                <div className="flex w-[380px] shrink-0 border-l border-border max-lg:hidden">
+                  <ChatView key={activeId} conversationId={activeId} />
+                </div>
+              )}
+            </>
           ) : (
             <ChatView
               key={activeId}
@@ -904,6 +619,17 @@ export function AdeptLayout() {
         </main>
       </div>
 
+      <Dialogs onShare={goLive} />
+      <Toasts />
+      <IncomingCall onAnswer={answer} />
+      <SharePlayBanner
+        control={call?.control ?? null}
+        onStop={() => {
+          patchCall({ control: null });
+          toast("Remote control stopped");
+        }}
+        onGrant={(who) => patchCall({ control: { who, role: "host", active: true } })}
+      />
       <JumpPalette
         open={palette}
         onOpenChange={setPalette}

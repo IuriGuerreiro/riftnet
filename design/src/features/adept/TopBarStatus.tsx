@@ -5,9 +5,8 @@ import { Avatar, AvatarStack } from "@/components/Avatar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { EmojiText } from "@/features/emoji/EmojiText";
 import { cn } from "@/lib/utils";
-import { FRIENDS, LIVE_ROOMS, server } from "@/mock/data";
-
-export type RequestState = "pending" | "accepted" | "ignored";
+import { FRIENDS, LIVE_ROOMS, server, user } from "@/mock/data";
+import { answerRequest, useWorld, world } from "@/mock/world";
 
 interface Note {
   id: string;
@@ -59,7 +58,6 @@ const NOTES: Note[] = [
   { id: "n5", kind: "request", who: "rui", text: "sent you a friend request", at: "1h" },
 ];
 
-const ONLINE = FRIENDS.filter((f) => f.status !== "offline");
 const IN_VOICE = [...new Set(LIVE_ROOMS.flatMap((r) => r.people))];
 
 function Pill({
@@ -87,17 +85,26 @@ export function TopBarStatus({
   onOpen,
   onFriends,
   onLive,
-  request,
-  onRequest,
 }: {
   onOpen: (id: string) => void;
   onFriends: () => void;
   onLive: () => void;
-  request: RequestState;
-  onRequest: (r: RequestState) => void;
 }) {
+  useWorld();
+  const request = world.incoming.includes("rui")
+    ? "pending"
+    : world.friends.has("rui")
+      ? "accepted"
+      : "ignored";
+  const ONLINE = (world.empty ? [] : [...world.friends])
+    .map(user)
+    .filter((f) => f.status !== "offline");
+  const [filter, setFilter] = useState<"all" | "unread" | "mentions">("all");
   const [open, setOpen] = useState(false);
   const [read, setRead] = useState<Set<string>>(new Set());
+  const shown = NOTES.filter((n) =>
+    filter === "unread" ? !read.has(n.id) : filter === "mentions" ? n.kind === "mention" : true,
+  );
   const unread = NOTES.filter((n) => !read.has(n.id)).length;
 
   return (
@@ -145,7 +152,11 @@ export function TopBarStatus({
             )}
           </button>
         </PopoverTrigger>
-        <PopoverContent align="end" sideOffset={8} className="w-[380px] p-0">
+        <PopoverContent
+          align="end"
+          sideOffset={8}
+          className="w-[380px] max-w-[calc(100vw-1rem)] p-0"
+        >
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
             <p className="text-sm font-semibold">Notifications</p>
             <button
@@ -157,7 +168,28 @@ export function TopBarStatus({
             </button>
           </div>
           <div className="max-h-[420px] overflow-y-auto p-1.5">
-            {NOTES.map((n) => {
+            <div className="flex gap-1 p-1">
+              {(["all", "unread", "mentions"] as const).map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  aria-pressed={filter === f}
+                  onClick={() => setFilter(f)}
+                  className={cn(
+                    "h-7 rounded-md px-2.5 text-xs capitalize",
+                    filter === f ? "bg-accent" : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {f}
+                </button>
+              ))}
+            </div>
+            {shown.length === 0 && (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                You&apos;re all caught up.
+              </p>
+            )}
+            {shown.map((n) => {
               const isUnread = !read.has(n.id);
               return (
                 <div
@@ -213,7 +245,7 @@ export function TopBarStatus({
                         <button
                           type="button"
                           onClick={() => {
-                            onRequest("accepted");
+                            answerRequest("rui", true);
                             setRead((r) => new Set(r).add(n.id));
                           }}
                           className="rounded-md bg-brand-fill px-2.5 py-1 text-xs font-semibold text-white"
@@ -223,7 +255,7 @@ export function TopBarStatus({
                         <button
                           type="button"
                           onClick={() => {
-                            onRequest("ignored");
+                            answerRequest("rui", false);
                             setRead((r) => new Set(r).add(n.id));
                           }}
                           className="rounded-md bg-surface-3 px-2.5 py-1 text-xs font-medium"

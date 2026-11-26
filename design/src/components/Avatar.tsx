@@ -5,6 +5,7 @@ const STATUS_COLOR: Record<Status, string> = {
   online: "bg-success",
   idle: "bg-warning",
   dnd: "bg-destructive",
+  invisible: "bg-surface-4",
   offline: "bg-surface-4",
 };
 
@@ -19,6 +20,7 @@ export function StatusDot({
 }) {
   return (
     <span
+      role="img"
       aria-label={status}
       style={{ width: size, height: size }}
       className={cn(
@@ -57,7 +59,11 @@ export function Avatar({
           fontSize: size * 0.42,
         }}
       >
-        {u.name.at(0)}
+        {u.avatar ? (
+          <img src={u.avatar} alt="" className="size-full rounded-full object-cover" />
+        ) : (
+          u.name.at(0)
+        )}
       </span>
       {status && (
         <StatusDot status={u.status} size={dot} className="absolute -right-0.5 -bottom-0.5" />

@@ -157,6 +157,12 @@
   }
 }
 
+.reduce-motion *,
+.reduce-motion ~ * {
+  animation: none !important;
+  transition: none !important;
+}
+
 .message-code .hljs-keyword,
 .message-code .hljs-selector-tag,
 .message-code .hljs-literal {

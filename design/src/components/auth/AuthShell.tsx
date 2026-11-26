@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { Lockup } from "@/components/brand/Lockup";
 
 import { BrandPanel } from "./BrandPanel";
+import { LegalLink } from "./LegalLink";
 
 const YEAR = new Date().getFullYear();
 
@@ -31,7 +32,10 @@ export function AuthShell({
             )}
           </div>
         </div>
-        <p className="text-xs text-muted-foreground/70">© {YEAR} Adept · Terms · Privacy</p>
+        <p className="text-xs text-muted-foreground/70">
+          © {YEAR} Adept · <LegalLink title="Terms of Service">Terms</LegalLink> ·{" "}
+          <LegalLink title="Privacy Policy">Privacy</LegalLink>
+        </p>
       </main>
       <div className="hidden p-3 lg:flex">
         <BrandPanel className="flex flex-1" />

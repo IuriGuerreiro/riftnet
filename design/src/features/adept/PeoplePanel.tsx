@@ -2,6 +2,7 @@ import { ChevronRight, Radio } from "lucide-react";
 import { useState } from "react";
 
 import { Avatar } from "@/components/Avatar";
+import { ProfileTrigger } from "@/features/profile/ProfileCard";
 import { cn } from "@/lib/utils";
 import { type Server, user } from "@/mock/data";
 
@@ -10,11 +11,11 @@ import { ActivityLine } from "./ActivityLine";
 function Row({ id }: { id: string }) {
   const u = user(id);
   return (
-    <button
-      type="button"
+    <ProfileTrigger
+      id={id}
       className={cn(
         "flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left hover:bg-accent/60",
-        u.status === "offline" && "opacity-45",
+        u.status === "offline" && "opacity-70",
       )}
     >
       <Avatar id={id} size={32} status ringBg="var(--surface-1)" />
@@ -22,7 +23,7 @@ function Row({ id }: { id: string }) {
         <span className="block truncate text-sm font-medium">{u.name}</span>
         {u.activity && u.activity.kind !== "voice" && <ActivityLine a={u.activity} />}
       </span>
-    </button>
+    </ProfileTrigger>
   );
 }
 
@@ -34,15 +35,24 @@ function Label({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function PeoplePanel({ ids, server }: { ids: string[]; server?: Server }) {
+export function PeoplePanel({ ids: all, server }: { ids: string[]; server?: Server }) {
+  const [q, setQ] = useState("");
   const [showOffline, setShowOffline] = useState(false);
-  const rooms = server?.channels.filter((c) => (c.voice?.length ?? 0) > 0) ?? [];
+  const ids = all.filter((id) => user(id).name.toLowerCase().includes(q.trim().toLowerCase()));
+  const rooms = q ? [] : (server?.channels.filter((c) => (c.voice?.length ?? 0) > 0) ?? []);
   const inVoice = new Set(rooms.flatMap((r) => r.voice ?? []));
   const online = ids.filter((id) => user(id).status !== "offline" && !inVoice.has(id));
   const offline = ids.filter((id) => user(id).status === "offline");
 
   return (
     <aside className="w-[260px] shrink-0 overflow-y-auto border-l border-border bg-surface-1 px-2 pb-4">
+      <input
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        aria-label="Search members"
+        placeholder="Search members"
+        className="mt-3 h-8 w-full rounded-lg border border-border bg-background px-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-brand"
+      />
       {rooms.map((r) => (
         <div key={r.id}>
           <Label>

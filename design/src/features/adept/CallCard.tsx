@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { type LiveRoom, ME, server } from "@/mock/data";
 
 import { SpeakingAvatar } from "./SpeakingAvatar";
+import { UserCallMenu } from "./UserCallMenu";
 import { useSpeaker } from "./useSpeaker";
 
 function CallButton({
@@ -86,13 +87,16 @@ export function CallCard({
         </span>
         <span className="flex -space-x-1.5">
           {room.people.slice(0, 4).map((id) => (
-            <SpeakingAvatar
-              key={id}
-              id={id}
-              size={20}
-              speaking={!ringing && speaker === id && !(id === ME && (muted || deafened))}
-              ringBg="var(--adept-ink)"
-            />
+            <UserCallMenu key={id} id={id} self={{ muted, deafened, onMute, onDeafen }}>
+              <span className="inline-flex">
+                <SpeakingAvatar
+                  id={id}
+                  size={20}
+                  speaking={!ringing && speaker === id && !(id === ME && (muted || deafened))}
+                  ringBg="var(--adept-ink)"
+                />
+              </span>
+            </UserCallMenu>
           ))}
         </span>
       </button>

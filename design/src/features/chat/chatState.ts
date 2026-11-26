@@ -6,10 +6,12 @@ export interface ChatState {
   editing: string | null;
   unreadFrom: string | null;
   sent: number;
+  older: number;
 }
 
 export type ChatAction =
   | { type: "send"; text: string; attachments?: Attachment[] }
+  | { type: "prepend"; messages: Message[] }
   | { type: "receive"; message: Message }
   | { type: "delivered"; id: string; ok: boolean }
   | { type: "retry"; id: string }
@@ -27,7 +29,14 @@ export function clock(d = new Date()) {
 
 export function initChat({ messages, unread }: { messages: Message[]; unread: number }): ChatState {
   const first = unread > 0 ? messages.at(-Math.min(unread, messages.length)) : undefined;
-  return { messages, replyTo: null, editing: null, unreadFrom: first?.id ?? null, sent: 0 };
+  return {
+    messages,
+    replyTo: null,
+    editing: null,
+    unreadFrom: first?.id ?? null,
+    sent: 0,
+    older: messages.length > 0 ? 2 : 0,
+  };
 }
 
 const patch = (state: ChatState, id: string, fn: (m: Message) => Message): ChatState => ({
@@ -55,6 +64,12 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         sent: state.sent + 1,
       };
     }
+    case "prepend":
+      return {
+        ...state,
+        messages: [...action.messages, ...state.messages],
+        older: state.older - 1,
+      };
     case "receive":
       return { ...state, messages: [...state.messages, action.message] };
     case "delivered":

@@ -1,15 +1,23 @@
-import { Phone, UserPlus } from "lucide-react";
+import { MoreHorizontal, Phone, UserPlus } from "lucide-react";
 import { useState } from "react";
 
 import { Avatar } from "@/components/Avatar";
 import { ServerIcon } from "@/components/ServerIcon";
+import { openChat } from "@/features/profile/openChat";
+import { bannerStyle, UserMenu } from "@/features/profile/ProfileCard";
 import { SERVERS, user } from "@/mock/data";
 
 import { ACTIVITY_ICON } from "./ActivityLine";
 
 const SHARED = [1, 2, 3, 4, 5].map((n) => `/media/photo-${n}.jpg`).concat("/media/flower.gif");
 
-const STATUS_LABEL = { online: "Online", idle: "Idle", dnd: "Do not disturb", offline: "Offline" };
+const STATUS_LABEL = {
+  online: "Online",
+  idle: "Idle",
+  dnd: "Do not disturb",
+  invisible: "Offline",
+  offline: "Offline",
+};
 
 export function ProfilePanel({ id, onCall }: { id: string; onCall: () => void }) {
   const [invited, setInvited] = useState(false);
@@ -20,12 +28,7 @@ export function ProfilePanel({ id, onCall }: { id: string; onCall: () => void })
 
   return (
     <aside className="flex w-[280px] shrink-0 flex-col overflow-y-auto border-l border-border bg-surface-1">
-      <div
-        className="h-24 shrink-0"
-        style={{
-          background: `linear-gradient(135deg, hsl(${u.hue} 45% 30%), hsl(${u.hue + 40} 40% 18%))`,
-        }}
-      />
+      <div className="h-24 shrink-0" style={bannerStyle(u)} />
       <div className="-mt-10 px-4">
         <Avatar
           id={id}
@@ -38,7 +41,10 @@ export function ProfilePanel({ id, onCall }: { id: string; onCall: () => void })
         <p className="text-sm text-muted-foreground">
           @{u.handle} · {STATUS_LABEL[u.status]}
         </p>
-        <div className="mt-3 grid grid-cols-2 gap-2">
+        {u.pronouns && <p className="text-xs text-muted-foreground">{u.pronouns}</p>}
+        {u.customStatus && <p className="mt-2 text-sm">{u.customStatus}</p>}
+        {u.bio && <p className="mt-2 text-sm text-foreground/80">{u.bio}</p>}
+        <div className="mt-3 grid grid-cols-[1fr_1fr_auto] gap-2">
           <button
             type="button"
             onClick={onCall}
@@ -54,6 +60,15 @@ export function ProfilePanel({ id, onCall }: { id: string; onCall: () => void })
           >
             <UserPlus className="size-3.5" /> {invited ? "Invited" : "Invite"}
           </button>
+          <UserMenu id={id}>
+            <button
+              type="button"
+              aria-label="More"
+              className="grid size-8 place-items-center rounded-lg bg-surface-3 hover:bg-surface-4"
+            >
+              <MoreHorizontal className="size-4" />
+            </button>
+          </UserMenu>
         </div>
       </div>
 
@@ -103,13 +118,15 @@ export function ProfilePanel({ id, onCall }: { id: string; onCall: () => void })
           Mutual servers — {mutual.length}
         </p>
         {mutual.map((s) => (
-          <div
+          <button
             key={s.id}
-            className="flex items-center gap-2.5 rounded-lg px-1 py-1.5 hover:bg-accent/60"
+            type="button"
+            onClick={() => openChat(s.channels.find((x) => x.kind === "text")?.id ?? "")}
+            className="flex w-full items-center gap-2.5 rounded-lg px-1 py-1.5 hover:bg-accent/60"
           >
             <ServerIcon server={s} size={28} />
             <span className="truncate text-sm">{s.name}</span>
-          </div>
+          </button>
         ))}
       </section>
 

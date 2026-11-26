@@ -1,11 +1,23 @@
-import { HeadphoneOff, Mic, MicOff, MonitorUp, PhoneOff, Radio, Volume2, X } from "lucide-react";
+import {
+  HeadphoneOff,
+  Mic,
+  MicOff,
+  MonitorUp,
+  PhoneOff,
+  Radio,
+  Volume2,
+  VolumeX,
+  X,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { type LiveRoom, ME, server, user } from "@/mock/data";
+import { isSilenced } from "@/mock/world";
 
 import { ActivityLine } from "./ActivityLine";
 import { ScreenSharePreview } from "./ScreenSharePreview";
 import { SpeakingAvatar } from "./SpeakingAvatar";
+import { UserCallMenu } from "./UserCallMenu";
 import { useSpeaker } from "./useSpeaker";
 
 export function RoomPreview({
@@ -69,30 +81,38 @@ export function RoomPreview({
         {room.people.map((id) => {
           const u = user(id);
           return (
-            <div key={id} className="flex items-center gap-2.5 rounded-lg px-2 py-1.5">
-              <SpeakingAvatar
-                id={id}
-                size={30}
-                speaking={speaker === id && !(id === ME && (muted || deafened))}
-              />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium">
-                  {u.name}
-                  {id === ME ? " (you)" : ""}
+            <UserCallMenu key={id} id={id}>
+              <div className="flex items-center gap-2.5 rounded-lg px-2 py-1.5">
+                <SpeakingAvatar
+                  id={id}
+                  size={30}
+                  speaking={speaker === id && !(id === ME && (muted || deafened))}
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium">
+                    {u.name}
+                    {id === ME ? " (you)" : ""}
+                  </span>
+                  {u.activity && u.activity.kind !== "voice" && <ActivityLine a={u.activity} />}
                 </span>
-                {u.activity && u.activity.kind !== "voice" && <ActivityLine a={u.activity} />}
-              </span>
-              {id === ME && sharing && (
-                <MonitorUp aria-label="Sharing screen" className="size-3.5 text-brand-text" />
-              )}
-              {id === ME && deafened ? (
-                <HeadphoneOff aria-label="Deafened" className="size-3.5 text-destructive" />
-              ) : id === ME && muted ? (
-                <MicOff aria-label="Muted" className="size-3.5 text-destructive" />
-              ) : (
-                <Mic aria-label="Microphone on" className="size-3.5 text-muted-foreground" />
-              )}
-            </div>
+                {id === ME && sharing && (
+                  <MonitorUp aria-label="Sharing screen" className="size-3.5 text-brand-text" />
+                )}
+                {id !== ME && isSilenced(id) && (
+                  <VolumeX
+                    aria-label="Muted for you"
+                    className="size-3.5 shrink-0 text-destructive"
+                  />
+                )}
+                {id === ME && deafened ? (
+                  <HeadphoneOff aria-label="Deafened" className="size-3.5 text-destructive" />
+                ) : id === ME && muted ? (
+                  <MicOff aria-label="Muted" className="size-3.5 text-destructive" />
+                ) : (
+                  <Mic aria-label="Microphone on" className="size-3.5 text-muted-foreground" />
+                )}
+              </div>
+            </UserCallMenu>
           );
         })}
       </div>
@@ -114,7 +134,7 @@ export function RoomPreview({
             Join voice
           </Button>
         )}
-        {room.live && (
+        {room.live && !joined && (
           <Button variant="secondary" onClick={onJoin} className="h-10 w-full">
             Watch {user(room.live).name}'s stream
           </Button>

@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Controller, useForm, useWatch } from "react-hook-form";
 
 import { AuthShell } from "@/components/auth/AuthShell";
+import { LegalLink } from "@/components/auth/LegalLink";
 import { Field } from "@/components/form/Field";
 import { PasswordInput } from "@/components/form/PasswordInput";
 import { PasswordStrength } from "@/components/form/PasswordStrength";
@@ -30,7 +31,7 @@ export function RegisterScreen() {
     setError(null);
     try {
       await mockRegister(email);
-      await navigate({ to: "/username" });
+      await navigate({ to: "/verify" });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong.");
     }
@@ -110,7 +111,10 @@ export function RegisterScreen() {
               htmlFor="terms"
               className="text-sm leading-snug font-normal text-muted-foreground"
             >
-              I agree to the Terms of Service and Privacy Policy.
+              <span>
+                I agree to the <LegalLink title="Terms of Service">Terms of Service</LegalLink> and{" "}
+                <LegalLink title="Privacy Policy">Privacy Policy</LegalLink>.
+              </span>
             </Label>
           </div>
           {errors.terms && (

@@ -3,26 +3,46 @@ import { Check, Copy } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 
 import { EmojiText } from "@/features/emoji/EmojiText";
+import { openChat } from "@/features/profile/openChat";
+import { ProfileTrigger } from "@/features/profile/ProfileCard";
 import { type Block, type Inline, parseMarkdown } from "@/lib/markdown/parse";
 import { cn } from "@/lib/utils";
+import { SERVERS, USERS } from "@/mock/data";
+
+function MentionChip({ part }: { part: string }) {
+  const style = "rounded bg-brand/20 px-0.5 font-medium text-brand-text hover:bg-brand/30";
+  if (part.startsWith("#")) {
+    const channel = SERVERS.flatMap((s) => s.channels).find((c) => `#${c.name}` === part);
+    if (!channel) return part;
+    return (
+      <button type="button" onClick={() => openChat(channel.id)} className={style}>
+        {part}
+      </button>
+    );
+  }
+  const who = Object.values(USERS).find((u) => `@${u.handle}` === part);
+  if (!who) return <span className={style}>{part}</span>;
+  return (
+    <ProfileTrigger id={who.id} className={style}>
+      {part}
+    </ProfileTrigger>
+  );
+}
 
 function Mentions({ text }: { text: string }) {
   return (
     <EmojiText
       text={text}
       renderText={(chunk, key) =>
-        chunk.split(/((?<![\w@.])@[\w]+(?:\.[\w]+)*)/g).map((part, i) =>
-          part.startsWith("@") ? (
-            <span
-              key={`${key}-${i}`}
-              className="cursor-pointer rounded bg-brand/20 px-0.5 font-medium text-brand-text hover:bg-brand/30"
-            >
-              {part}
-            </span>
-          ) : (
-            part
-          ),
-        )
+        chunk
+          .split(/((?<![\w@.])@[\w]+(?:\.[\w]+)*|(?<![\w#/&])#[a-z][\w-]*)/g)
+          .map((part, i) =>
+            part.startsWith("@") || part.startsWith("#") ? (
+              <MentionChip key={`${key}-${i}`} part={part} />
+            ) : (
+              part
+            ),
+          )
       }
     />
   );

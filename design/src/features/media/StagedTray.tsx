@@ -7,19 +7,23 @@ import { formatBytes } from "./format";
 export interface Staged {
   id: string;
   att: Attachment;
+  progress?: number;
+  error?: string;
 }
 
 export function StagedTray({
   items,
   onRemove,
+  onRetry,
 }: {
   items: Staged[];
   onRemove: (id: string) => void;
+  onRetry: (id: string) => void;
 }) {
   if (items.length === 0) return null;
   return (
     <div className="flex gap-2 overflow-x-auto border-b border-border p-2.5 pb-3">
-      {items.map(({ id, att }) => (
+      {items.map(({ id, att, progress, error }) => (
         <div
           key={id}
           className="animate-in fade-in zoom-in-95 group/staged relative w-28 shrink-0 duration-150"
@@ -43,6 +47,30 @@ export function StagedTray({
               </span>
             )}
           </div>
+          {progress !== undefined && progress < 100 && !error && (
+            <div
+              role="progressbar"
+              aria-label={`Uploading ${att.name}`}
+              aria-valuenow={progress}
+              className="mt-1 h-1 overflow-hidden rounded-full bg-surface-4"
+            >
+              <div
+                className="h-full bg-brand transition-[width]"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+          )}
+          {error && (
+            <button
+              type="button"
+              disabled={error.startsWith("Over")}
+              onClick={() => onRetry(id)}
+              className="mt-1 text-[11px] font-medium text-destructive enabled:hover:underline"
+            >
+              {error}
+              {error.startsWith("Over") ? "" : " · Retry"}
+            </button>
+          )}
           <p className="mt-1 truncate text-[11px] text-foreground/80">{att.name}</p>
           {"size" in att && (
             <p className="text-[10px] text-muted-foreground">{formatBytes(att.size)}</p>

@@ -70,9 +70,9 @@ export function LoginScreen() {
           label="Password"
           error={errors.password?.message}
           aside={
-            <button type="button" className="text-xs font-medium text-brand-text hover:underline">
+            <Link to="/forgot" className="text-xs font-medium text-brand-text hover:underline">
               Forgot password?
-            </button>
+            </Link>
           }
         >
           <PasswordInput

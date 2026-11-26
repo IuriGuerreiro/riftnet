@@ -14,14 +14,16 @@ import { type Attachment, ME, type Message, user } from "@/mock/data";
 
 import { getDraft, saveDraft } from "./drafts";
 
+const MAX_LENGTH = 4000;
 const PARTIAL = /(^|\s):([a-z0-9_+-]{2,})$/i;
 const COMPLETE = /(?<!\S):([a-z0-9_+-]+):$/i;
 const MENTION = /(^|\s)@([\w.]*)$/;
+const CHANNEL = /(^|\s)#([\w-]*)$/;
 
-function TypingLine({ name }: { name?: string }) {
+function TypingLine({ names }: { names: string[] }) {
   return (
     <p className="flex h-6 items-center px-1 text-xs text-muted-foreground">
-      {name && (
+      {names.length > 0 && (
         <span className="inline-flex items-center gap-1.5">
           <span className="flex gap-0.5">
             {[0, 1, 2].map((i) => (
@@ -33,7 +35,10 @@ function TypingLine({ name }: { name?: string }) {
             ))}
           </span>
           <span>
-            <b className="font-semibold text-foreground/85">{name}</b> is typing…
+            <b className="font-semibold text-foreground/85">
+              {names.length > 2 ? "Several people" : names.join(" and ")}
+            </b>{" "}
+            {names.length === 1 ? "is" : "are"} typing…
           </span>
         </span>
       )}
@@ -88,26 +93,30 @@ export function Composer({
   staged,
   onAddFiles,
   onRemoveStaged,
+  onRetryStaged,
   onSendGif,
   replyTo,
   onCancelReply,
   onEditLast,
   members,
   isChannel,
+  channels,
 }: {
   draftKey: string;
   placeholder: string;
-  typing?: string;
+  typing: string[];
   onSend: (text: string) => void;
   staged: Staged[];
   onAddFiles: (files: File[]) => void;
   onRemoveStaged: (id: string) => void;
+  onRetryStaged: (id: string) => void;
   onSendGif: (gif: Extract<Attachment, { kind: "gif" }>) => void;
   replyTo?: Message;
   onCancelReply: () => void;
   onEditLast: () => void;
   members: string[];
   isChannel: boolean;
+  channels: string[];
 }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [gifOpen, setGifOpen] = useState(false);
@@ -151,10 +160,16 @@ export function Composer({
   const before = text.slice(0, caret);
   const emojiQuery = PARTIAL.exec(before)?.[2] ?? null;
   const mentionQuery = MENTION.exec(before)?.[2] ?? null;
-  const query = emojiQuery ?? mentionQuery;
-  const trigger = emojiQuery !== null ? ":" : "@";
+  const channelQuery = channels.length > 0 ? (CHANNEL.exec(before)?.[2] ?? null) : null;
+  const query = emojiQuery ?? mentionQuery ?? channelQuery;
+  const trigger = emojiQuery !== null ? ":" : mentionQuery !== null ? "@" : "#";
   const suggestions = useMemo<Suggestion[]>(() => {
     if (query === null || `${trigger}${query}` === dismissed) return [];
+    if (trigger === "#")
+      return channels
+        .filter((x) => x.startsWith(query.toLowerCase()))
+        .slice(0, 8)
+        .map((x) => ({ key: x, insert: `#${x}`, label: `#${x}` }));
     if (trigger === "@") return mentionSuggestions(query, members, isChannel);
     if (!index) return [];
     return searchEmoji(index, query, 8).map((e) => ({
@@ -168,7 +183,7 @@ export function Composer({
       ),
       hint: <span className="capitalize">{e.label}</span>,
     }));
-  }, [index, query, trigger, dismissed, members, isChannel]);
+  }, [index, query, trigger, dismissed, members, isChannel, channels]);
   const selected = Math.min(highlight, Math.max(suggestions.length - 1, 0));
 
   const replaceBeforeCaret = (from: number, insert: string) => {
@@ -211,7 +226,9 @@ export function Composer({
     setHighlight(0);
   };
 
-  const canSend = text.trim().length > 0 || staged.length > 0;
+  const over = text.length - MAX_LENGTH;
+  const uploading = staged.some((x) => x.error !== undefined || (x.progress ?? 100) < 100);
+  const canSend = over <= 0 && !uploading && (text.trim().length > 0 || staged.length > 0);
   const send = () => {
     const t = text.trim();
     if (!canSend) return;
@@ -226,7 +243,11 @@ export function Composer({
       {suggestions.length > 0 && (
         <div className="animate-in fade-in slide-in-from-bottom-1 absolute right-4 bottom-full left-4 z-30 mb-2 overflow-hidden rounded-xl border border-border bg-popover p-1.5 shadow-2xl shadow-black/40 duration-150">
           <p className="px-2 pt-1 pb-1.5 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
-            {trigger === ":" ? "Emoji matching" : "Members matching"}{" "}
+            {trigger === ":"
+              ? "Emoji matching"
+              : trigger === "#"
+                ? "Channels matching"
+                : "Members matching"}{" "}
             <span className="text-foreground normal-case">
               {trigger}
               {query}
@@ -259,7 +280,18 @@ export function Composer({
         </div>
       )}
 
-      <TypingLine name={typing} />
+      {over > -200 && (
+        <p
+          role="status"
+          className={cn(
+            "text-right text-xs",
+            over > 0 ? "text-destructive" : "text-muted-foreground",
+          )}
+        >
+          {over > 0 ? `${over} characters too long` : `${-over} left`}
+        </p>
+      )}
+      <TypingLine names={typing} />
       <div className="overflow-hidden rounded-xl border border-border bg-surface-2 transition-colors focus-within:border-brand/50">
         {replyTo && (
           <div className="animate-in fade-in slide-in-from-bottom-1 flex items-center gap-2 border-b border-border bg-surface-1 px-3 py-2 text-xs duration-150">
@@ -281,7 +313,7 @@ export function Composer({
             </button>
           </div>
         )}
-        <StagedTray items={staged} onRemove={onRemoveStaged} />
+        <StagedTray items={staged} onRemove={onRemoveStaged} onRetry={onRetryStaged} />
         <div className="flex items-end gap-1 p-1.5">
           <input
             ref={fileInput}
@@ -309,9 +341,8 @@ export function Composer({
             value={text}
             placeholder={placeholder}
             aria-label={placeholder}
-            role="combobox"
-            aria-expanded={suggestions.length > 0}
-            aria-controls={listId}
+            aria-autocomplete="list"
+            aria-controls={suggestions.length > 0 ? listId : undefined}
             aria-activedescendant={suggestions.length > 0 ? `${listId}-${selected}` : undefined}
             onChange={(e) => onChange(e.target.value, e.target.selectionStart)}
             onSelect={(e) => setCaret(e.currentTarget.selectionStart)}
@@ -349,6 +380,19 @@ export function Composer({
               if (e.key === "ArrowUp" && text === "") {
                 e.preventDefault();
                 onEditLast();
+                return;
+              }
+              const mark =
+                e.ctrlKey || e.metaKey
+                  ? { b: "**", i: "*", e: "`" }[e.key.toLowerCase()]
+                  : undefined;
+              if (mark) {
+                e.preventDefault();
+                const { selectionStart: a, selectionEnd: b } = e.currentTarget;
+                onChange(
+                  `${text.slice(0, a)}${mark}${text.slice(a, b)}${mark}${text.slice(b)}`,
+                  b + mark.length,
+                );
                 return;
               }
               if (e.key === "Enter" && !e.shiftKey) {

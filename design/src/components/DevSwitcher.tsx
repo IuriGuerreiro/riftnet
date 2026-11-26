@@ -5,6 +5,8 @@ import { useState } from "react";
 import { EMOJI_SETS, setEmojiSet, useEmojiSet } from "@/features/emoji/sets";
 import { cn } from "@/lib/utils";
 import { MOCK_HINTS } from "@/mock/auth";
+import { SERVERS } from "@/mock/data";
+import { change, pushMessage, toast, world } from "@/mock/world";
 
 const SCREENS = [
   { label: "Loading", to: "/loading", search: {} },
@@ -12,15 +14,46 @@ const SCREENS = [
   { label: "Loading · offline", to: "/loading", search: { state: "error" } },
   { label: "Login", to: "/login", search: {} },
   { label: "Register", to: "/register", search: {} },
+  { label: "Forgot password", to: "/forgot", search: {} },
+  { label: "Verify email", to: "/verify", search: {} },
   { label: "Username", to: "/username", search: {} },
   { label: "Adept app", to: "/app", search: {} },
 ] as const;
+
+const SCENARIOS: [string, () => void][] = [
+  ["Someone calls you", () => void (world.ringing = { who: "lea", video: false })],
+  ["Someone wants control", () => void (world.controlRequest = "tom")],
+  ["Weak call connection", () => void (world.callQuality = "poor")],
+  ["Call reconnecting", () => void (world.callQuality = "reconnecting")],
+  ["Call back to normal", () => void (world.callQuality = "good")],
+  ["Microphone blocked", () => void (world.micBlocked = true)],
+  [
+    "New message",
+    () => {
+      const id = "dm-kai";
+      pushMessage(id, { author: "kai", text: "you around?" });
+      toast("Kai: you around?", { who: "kai", open: id });
+    },
+  ],
+  ["Go offline", () => void (world.connection = "offline")],
+  ["Reconnecting", () => void (world.connection = "reconnecting")],
+  ["Session ended", () => void (world.dialog = { kind: "expired" })],
+  ["Update available", () => void (world.update = "available")],
+  [
+    "Removed from a server",
+    () => {
+      const s = SERVERS.find((x) => x.id === "drift");
+      if (s) s.denied = true;
+    },
+  ],
+  ["Brand new account", () => void (world.empty = !world.empty)],
+];
 
 export function DevSwitcher() {
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="fixed top-1/2 right-3 z-50 flex -translate-y-1/2 flex-row-reverse items-center gap-2">
+    <div className="fixed right-0 bottom-0 z-50 flex flex-col-reverse items-end gap-2">
       {open && (
         <div className="animate-in fade-in slide-in-from-bottom-2 max-h-[85vh] w-60 overflow-y-auto rounded-xl border border-border bg-popover p-2 shadow-2xl shadow-black/50 duration-200">
           <p className="px-2 pt-1 pb-2 text-[11px] font-semibold tracking-widest text-muted-foreground uppercase">
@@ -39,6 +72,24 @@ export function DevSwitcher() {
               </Link>
             ))}
           </nav>
+          <div className="mt-2 border-t border-border pt-2">
+            <p className="px-2 pb-1 text-[11px] font-semibold tracking-widest text-muted-foreground uppercase">
+              Make it happen
+            </p>
+            {SCENARIOS.map(([label, run]) => (
+              <button
+                key={label}
+                type="button"
+                onClick={() => {
+                  change(run);
+                  setOpen(false);
+                }}
+                className="block w-full rounded-md px-2 py-1.5 text-left text-sm text-foreground/80 hover:bg-accent hover:text-foreground"
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           <EmojiStylePicker />
           <div className="mt-2 border-t border-border px-2 pt-2 pb-1">
             <p className="pb-1 text-[11px] font-semibold tracking-widest text-muted-foreground uppercase">
@@ -57,9 +108,9 @@ export function DevSwitcher() {
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-label={open ? "Close screen switcher" : "Open screen switcher"}
-        className="grid size-10 place-items-center rounded-full border border-border bg-popover text-muted-foreground shadow-lg transition-colors hover:text-foreground"
+        className="grid size-6 place-items-center rounded-full opacity-60 hover:opacity-100 border border-border bg-popover text-muted-foreground shadow-lg transition-colors hover:text-foreground"
       >
-        {open ? <X className="size-4" /> : <LayoutGrid className="size-4" />}
+        {open ? <X className="size-4" /> : <LayoutGrid className="size-3" />}
       </button>
     </div>
   );

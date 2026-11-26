@@ -1,4 +1,4 @@
-export type Status = "online" | "idle" | "dnd" | "offline";
+export type Status = "online" | "idle" | "dnd" | "offline" | "invisible";
 
 export interface Activity {
   kind: "playing" | "listening" | "streaming" | "voice";
@@ -13,6 +13,12 @@ export interface User {
   handle: string;
   hue: number;
   status: Status;
+  bio?: string;
+  pronouns?: string;
+  customStatus?: string;
+  accent?: string;
+  avatar?: string;
+  banner?: string;
   activity?: Activity;
 }
 
@@ -22,6 +28,7 @@ export interface Channel {
   kind: "text" | "voice";
   category: string;
   topic?: string;
+  readOnly?: boolean;
   unread?: number;
   mentions?: number;
   voice?: string[];
@@ -35,6 +42,34 @@ export interface Server {
   hue: number;
   channels: Channel[];
   members: string[];
+  owner?: string;
+  description?: string;
+  invites?: Invite[];
+  bans?: string[];
+  roles?: Role[];
+  audit?: AuditEntry[];
+  denied?: boolean;
+}
+
+export interface Invite {
+  code: string;
+  uses: number;
+  expires: string;
+}
+
+export interface Role {
+  id: string;
+  name: string;
+  color: string;
+  members: string[];
+  permissions: string[];
+}
+
+export interface AuditEntry {
+  id: string;
+  who: string;
+  text: string;
+  at: string;
 }
 
 export interface Reaction {
@@ -68,6 +103,7 @@ export interface Message {
   edited?: boolean;
   day?: string;
   status?: "sending" | "failed";
+  system?: boolean;
   pinned?: boolean;
   reactions?: Reaction[];
   attachments?: Attachment[];
@@ -87,17 +123,28 @@ export interface Conversation {
   at: string;
   rank: number;
   pinned?: boolean;
+  fresh?: boolean;
 }
 
 export const ME = "me";
 
 const userList: User[] = [
-  { id: ME, name: "Iuri", handle: "iuri", hue: 262, status: "online" },
+  {
+    id: ME,
+    name: "Iuri",
+    handle: "iuri",
+    hue: 262,
+    status: "online",
+    bio: "Building things. Losing ranked games.",
+  },
   {
     id: "maya",
     name: "Maya",
     handle: "maya.r",
     hue: 330,
+    bio: "Support main. I will heal you if you ask nicely.",
+    pronouns: "she/her",
+    customStatus: "one more game",
     status: "online",
     activity: { kind: "playing", label: "Hollow Drift", detail: "Ranked · 2-1", since: "41m" },
   },
@@ -144,6 +191,9 @@ const userList: User[] = [
   { id: "ben", name: "Ben", handle: "benji", hue: 15, status: "offline" },
   { id: "ivy", name: "Ivy", handle: "ivy.codes", hue: 180, status: "idle" },
   { id: "rui", name: "Rui", handle: "rui", hue: 55, status: "offline" },
+  { id: "zoe", name: "Zoe", handle: "zoe.plays", hue: 300, status: "online" },
+  { id: "otto", name: "Otto", handle: "otto", hue: 80, status: "idle" },
+  { id: "nina", name: "Nina", handle: "nina_g", hue: 220, status: "online" },
 ];
 
 export const USERS: Record<string, User> = Object.fromEntries(userList.map((u) => [u.id, u]));
@@ -195,6 +245,7 @@ export const SERVERS: Server[] = [
       {
         id: "forge-announcements",
         name: "announcements",
+        readOnly: true,
         kind: "text",
         category: "Info",
         unread: 1,
@@ -390,7 +441,31 @@ export function conversation(id: string): Conversation {
     preview: "",
     at: "",
     rank: 99,
+    fresh: true,
   };
+}
+
+export function olderMessages(c: Conversation, page: number): Message[] {
+  const people = c.members.filter((m) => m !== ME);
+  const lines = [
+    "did anyone save the replay?",
+    "yeah I have it, sending later",
+    "that last round was painful",
+    "we hold the left side next time",
+    "agreed, their mid was always open",
+    "same time tomorrow?",
+    "works for me",
+    "I'll be ten minutes late",
+    "no worries, we can warm up",
+    "also I changed my mic, sounds better?",
+  ];
+  return lines.map((text, i) => ({
+    id: `old-${c.id}-${page}-${i}`,
+    author: i % 3 === 1 ? ME : (people[i % Math.max(people.length, 1)] ?? ME),
+    text,
+    time: `${18 + Math.floor(i / 4)}:${String((i * 7) % 60).padStart(2, "0")}`,
+    day: page === 0 ? "Yesterday" : "Monday",
+  }));
 }
 
 const SCRIPTS: Record<string, Message[]> = {
@@ -640,6 +715,7 @@ const FALLBACK: Message[] = [
 ];
 
 export function messagesFor(c: Conversation): Message[] {
+  if (c.fresh) return [];
   const script = SCRIPTS[c.id];
   if (script) return script;
   const others = c.members.filter((m) => m !== ME);

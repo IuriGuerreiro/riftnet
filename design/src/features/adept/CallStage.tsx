@@ -1,4 +1,5 @@
 import {
+  Gamepad2,
   HeadphoneOff,
   Headphones,
   Maximize2,
@@ -13,16 +14,28 @@ import {
   Video,
   VideoOff,
   Volume2,
+  VolumeX,
 } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import { Avatar } from "@/components/Avatar";
 import { cn } from "@/lib/utils";
 import { type LiveRoom, ME, server, user } from "@/mock/data";
+import { isSilenced, useWorld, world } from "@/mock/world";
 
+import { CallHint, CallTools } from "./CallTools";
+import { type SelfControls, StreamMenu, UserCallMenu } from "./UserCallMenu";
 import { useSpeaker } from "./useSpeaker";
 
+export interface Control {
+  who: string;
+  role: "host" | "viewer";
+  active: boolean;
+}
+
 export interface CallState {
+  chat: boolean;
+  control: Control | null;
   id: string;
   startedAt: number;
   camera: boolean;
@@ -52,6 +65,7 @@ function PersonTile({
   camera,
   ringing,
   small,
+  self,
   onFocus,
 }: {
   id: string;
@@ -60,48 +74,58 @@ function PersonTile({
   muted: boolean;
   camera: boolean;
   small?: boolean;
+  self: SelfControls;
   onFocus: () => void;
 }) {
   const u = user(id);
   return (
-    <button
-      type="button"
-      onClick={onFocus}
-      className={cn(
-        "group/tile relative aspect-video overflow-hidden rounded-2xl text-left transition-shadow duration-150",
-        small ? "w-40 shrink-0" : "w-full",
-        ringing && "opacity-60",
-        speaking
-          ? "ring-2 ring-success shadow-[0_0_24px_-4px_var(--success)]"
-          : "ring-1 ring-white/5",
-      )}
-      style={{
-        background: `radial-gradient(circle at 50% 45%, hsl(${u.hue} 40% 26%), hsl(${u.hue} 30% 11%) 75%)`,
-      }}
-    >
-      {camera ? (
-        <img src="/media/photo-5.jpg" alt="" className="absolute inset-0 size-full object-cover" />
-      ) : (
-        <span className="absolute inset-0 grid place-items-center">
-          <span
-            className={cn(
-              "rounded-full transition-transform duration-200",
-              speaking && "scale-105",
-              ringing && "animate-pulse",
-            )}
-          >
-            <Avatar id={id} size={small ? 44 : 80} />
+    <UserCallMenu id={id} self={self}>
+      <button
+        type="button"
+        onClick={onFocus}
+        className={cn(
+          "group/tile relative aspect-video overflow-hidden rounded-2xl text-left transition-shadow duration-150",
+          small ? "w-40 shrink-0" : "w-full",
+          ringing && "opacity-60",
+          speaking
+            ? "ring-2 ring-success shadow-[0_0_24px_-4px_var(--success)]"
+            : "ring-1 ring-white/5",
+        )}
+        style={{
+          background: `radial-gradient(circle at 50% 45%, hsl(${u.hue} 40% 26%), hsl(${u.hue} 30% 11%) 75%)`,
+        }}
+      >
+        {camera ? (
+          <img
+            src="/media/photo-5.jpg"
+            alt=""
+            className="absolute inset-0 size-full object-cover"
+          />
+        ) : (
+          <span className="absolute inset-0 grid place-items-center">
+            <span
+              className={cn(
+                "rounded-full transition-transform duration-200",
+                speaking && "scale-105",
+                ringing && "animate-pulse",
+              )}
+            >
+              <Avatar id={id} size={small ? 44 : 80} />
+            </span>
+          </span>
+        )}
+        <span className="absolute bottom-2 left-2 flex max-w-[85%] items-center gap-1.5 rounded-lg bg-black/55 px-2 py-1 text-xs font-medium text-white backdrop-blur">
+          {muted && <MicOff className="size-3 text-destructive" />}
+          {id !== ME && isSilenced(id) && (
+            <VolumeX aria-label="Muted for you" className="size-3 shrink-0 text-destructive" />
+          )}
+          <span className="truncate">
+            {u.name}
+            {id === ME ? " (you)" : ringing ? " · calling…" : ""}
           </span>
         </span>
-      )}
-      <span className="absolute bottom-2 left-2 flex max-w-[85%] items-center gap-1.5 rounded-lg bg-black/55 px-2 py-1 text-xs font-medium text-white backdrop-blur">
-        {muted && <MicOff className="size-3 text-destructive" />}
-        <span className="truncate">
-          {u.name}
-          {id === ME ? " (you)" : ringing ? " · calling…" : ""}
-        </span>
-      </span>
-    </button>
+      </button>
+    </UserCallMenu>
   );
 }
 
@@ -111,8 +135,10 @@ function ScreenTile({
   small,
   onFocus,
   onStop,
+  onControl,
 }: {
   id: string;
+  onControl?: () => void;
   mine: boolean;
   small?: boolean;
   onFocus: () => void;
@@ -120,7 +146,7 @@ function ScreenTile({
 }) {
   const label = mine ? "Your screen" : `${user(id).name}'s screen`;
   const box = useRef<HTMLDivElement>(null);
-  return (
+  const tile = (
     <div
       ref={box}
       className={cn(
@@ -145,7 +171,7 @@ function ScreenTile({
       </span>
       <span className="pointer-events-none absolute bottom-2 left-2 flex items-center gap-1.5 rounded-lg bg-black/60 px-2 py-1 text-xs font-medium text-white backdrop-blur">
         <MonitorUp className="size-3.5" />
-        {label}
+        {label} · {mine ? world.share.quality : "1080p 60fps"}
       </span>
       {!small && (
         <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 transition-opacity group-focus-within/screen:opacity-100 group-hover/screen:opacity-100">
@@ -156,6 +182,15 @@ function ScreenTile({
               className="flex h-8 items-center gap-1.5 rounded-lg bg-danger-fill px-3 text-xs font-semibold text-white hover:bg-danger-fill/85"
             >
               <Square className="size-3 fill-current" /> Stop sharing
+            </button>
+          )}
+          {onControl && (
+            <button
+              type="button"
+              onClick={onControl}
+              className="flex h-8 items-center gap-1.5 rounded-lg bg-black/60 px-3 text-xs font-semibold text-white hover:bg-black/80"
+            >
+              <Gamepad2 className="size-4" /> Ask to control
             </button>
           )}
           <button
@@ -173,6 +208,7 @@ function ScreenTile({
       )}
     </div>
   );
+  return mine ? tile : <StreamMenu id={id}>{tile}</StreamMenu>;
 }
 
 function ControlButton({
@@ -237,9 +273,9 @@ export function CallStage({
   onLeave: () => void;
   onOpenChat: () => void;
 }) {
+  useWorld();
   const elapsed = useElapsed(call.startedAt);
   const { camera, focused, ringing } = call;
-  const setFocused = (key: string) => onCall({ focused: focused === key ? null : key });
   const speaker = useSpeaker(room.people);
 
   const screens: Tile[] = [
@@ -248,7 +284,10 @@ export function CallStage({
   ];
   const people: Tile[] = room.people.map((id) => ({ kind: "person", id }));
   const tiles = [...screens, ...people];
-  const focus = tiles.find((t) => tileKey(t) === focused) ?? screens[0];
+  const focus =
+    focused === "grid" ? undefined : (tiles.find((t) => tileKey(t) === focused) ?? screens[0]);
+  const setFocused = (key: string) =>
+    onCall({ focused: focus && tileKey(focus) === key ? "grid" : key });
   const rest = focus ? tiles.filter((t) => tileKey(t) !== tileKey(focus)) : tiles;
 
   const render = (t: Tile, small?: boolean) =>
@@ -260,12 +299,18 @@ export function CallStage({
         small={small}
         onFocus={() => setFocused(tileKey(t))}
         onStop={onShare}
+        onControl={
+          t.id === ME || call.control
+            ? undefined
+            : () => onCall({ control: { who: t.id, role: "viewer", active: false } })
+        }
       />
     ) : (
       <PersonTile
         key={tileKey(t)}
         id={t.id}
         small={small}
+        self={{ muted, deafened, onMute, onDeafen }}
         camera={t.id === ME && camera}
         ringing={ringing && t.id !== ME}
         muted={t.id === ME && (muted || deafened)}
@@ -297,15 +342,17 @@ export function CallStage({
         <span className="flex items-center gap-1.5 rounded-lg bg-white/5 px-2.5 py-1 text-xs text-muted-foreground">
           <Users className="size-3.5" /> {room.people.length}
         </span>
+        <CallTools />
         <button
           type="button"
           onClick={onOpenChat}
           className="flex h-8 items-center gap-1.5 rounded-lg bg-white/5 px-3 text-xs font-medium text-foreground hover:bg-white/10"
         >
-          <MessageSquare className="size-3.5" /> Open chat
+          <MessageSquare className="size-3.5" /> {call.chat ? "Hide chat" : "Chat"}
         </button>
       </header>
 
+      <CallHint />
       <div className="min-h-0 flex-1 overflow-y-auto p-4 pb-2">
         {focus ? (
           <div className="flex h-full flex-col gap-3">

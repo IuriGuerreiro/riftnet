@@ -13,6 +13,7 @@ import {
   CommandShortcut,
 } from "@/components/ui/command";
 import { CONVERSATIONS, FRIENDS, SERVERS } from "@/mock/data";
+import { openDialog } from "@/mock/world";
 
 import { ConversationAvatar } from "./ConversationRow";
 
@@ -88,13 +89,21 @@ export function JumpPalette({
           <CommandItem disabled={!onCall} onSelect={() => onCall?.()}>
             <Phone /> Start a call
           </CommandItem>
-          <CommandItem disabled>
+          <CommandItem
+            onSelect={() => {
+              onOpenChange(false);
+              openDialog({ kind: "newGroup" });
+            }}
+          >
             <Users /> Create a group
-            <CommandShortcut>Soon</CommandShortcut>
           </CommandItem>
-          <CommandItem disabled>
+          <CommandItem
+            onSelect={() => {
+              onOpenChange(false);
+              openDialog({ kind: "settings" });
+            }}
+          >
             <Settings /> Settings
-            <CommandShortcut>Soon</CommandShortcut>
           </CommandItem>
         </CommandGroup>
       </CommandList>

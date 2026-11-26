@@ -1,5 +1,7 @@
 import { Monitor, Square, Volume2 } from "lucide-react";
 
+import { world } from "@/mock/world";
+
 export function ScreenSharePreview({ onStop }: { onStop: () => void }) {
   return (
     <section
@@ -16,14 +18,16 @@ export function ScreenSharePreview({ onStop }: { onStop: () => void }) {
           YOUR SCREEN · PREVIEW
         </span>
         <span className="absolute right-2 bottom-2 flex items-center gap-1 rounded bg-black/70 px-1.5 py-1 text-[10px] text-white">
-          <Volume2 className="size-3" /> Audio included
+          <Volume2 className="size-3" /> {world.share.audio ? "With sound" : "No sound"}
         </span>
       </div>
       <div className="flex items-center gap-2 p-2.5">
         <Monitor className="size-4 shrink-0 text-brand-text" />
         <span className="min-w-0 flex-1">
           <span className="block text-xs font-semibold">Your screen</span>
-          <span className="block text-[11px] text-muted-foreground">Screen 1 · 1080p / 30 fps</span>
+          <span className="block text-[11px] text-muted-foreground">
+            {world.share.source} · {world.share.quality}
+          </span>
         </span>
         <button
           type="button"
