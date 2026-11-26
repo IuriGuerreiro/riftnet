@@ -94,7 +94,9 @@ replace() { # image, its id, running image id
   fi
 
   echo "FAILED: $SERVICE is not healthy. Restoring the previous image."
-  docker logs --tail 5 "$(container "$SERVICE")" 2>&1 | cut -c1-300 | sed -E 's#://[^@ ]+@#://***@#g' || true
+  # CI output can be public, so app logs stay on this machine.
+  docker logs --tail 200 "$(container "$SERVICE")" > last-failure.log 2>&1 || true
+  echo "App logs are on the machine: $PWD/last-failure.log"
   if bring_up "$saved"; then
     rm -f -- in-progress
     echo "RESTORED: $SERVICE is back on the previous image. Migrations were not undone."
