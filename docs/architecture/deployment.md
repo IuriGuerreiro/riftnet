@@ -130,10 +130,11 @@ The Release app workflow builds a Windows x64 installer. Linux builds are paused
 
 ### Build and publish
 
-1. Bump `version` in `client/src-tauri/tauri.conf.json` for each release. Promote the commit to `prod`.
-2. Run **Release app** from `prod` with `create_draft` selected. Enter the release notes to show in the app. Leave `create_draft` clear to generate signed workflow artifacts only.
-3. Verify the draft includes the installer, its signature, and `latest.json`. Publish it as the latest stable release when verification passes.
-4. v0.1.0 users must uninstall it and install 0.2.0 by hand: the rename changed the app ID and v0.1.0 reads another update feed. Later releases appear in **Check for updates**.
+1. Bump `version` in `client/src-tauri/tauri.conf.json` for each release.
+2. Merge `main` into `prod`. **Release app** runs on every `prod` update. If that version has no published release yet, it builds, signs and publishes it. Installed apps see it right away.
+3. No version bump: no release. A private repository: no release (the run says why).
+4. To retry, or to add release notes shown in the app, run **Release app** from `prod` by hand.
+5. v0.1.0 users must uninstall it and install 0.2.0 by hand: the rename changed the app ID and v0.1.0 reads another update feed. Later releases appear in **Check for updates**.
 
 Use a separate release repository and signing key for an end-to-end test. Install the lower version, then expose the higher version on the test feed. Verify **Later**, the install and restart, settings persistence, and rejection of a mismatched signature. If a published build needs to be reverted, ship the previous working code with a higher version.
 
@@ -141,7 +142,7 @@ Use a separate release repository and signing key for an end-to-end test. Instal
 
 - **API and media**: merge `main` into `prod`. The **Deploy** workflow does the rest.
 - **Web**: not automated. On the server: `up -d --build --no-deps web`.
-- **Desktop app**: see section 5.
+- **Desktop app**: bump the version, then merge into `prod`. See section 5.
 - Changing the domain: rebuild `web` and the desktop app (URLs baked in).
 
 Always pass `--no-deps <service>`. A plain `up -d --build` would replace the
