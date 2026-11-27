@@ -148,11 +148,25 @@ Archive `adept-releases` once no one runs v0.1.0.
 
 For an end-to-end test, run the workflow from a public fork with its own signing key. Install the lower version, then expose the higher version on the test feed. Verify **Later**, the install and restart, settings persistence, and rejection of a mismatched signature. If a published build needs to be reverted, ship the previous working code with a higher version.
 
+## 6. Landing site (riftnet.app)
+
+`site/` is a static page served by Cloudflare Workers. `site/wrangler.jsonc` attaches it to `riftnet.app` and `www.riftnet.app` as custom domains. Wrangler creates their DNS records, so neither hostname may have an existing record.
+
+### Set up (once)
+
+1. In Cloudflare, create an API token from the **Edit Cloudflare Workers** template. Limit its zone resources to `riftnet.app`.
+2. Add repository secrets `CLOUDFLARE_API_TOKEN` (the token) and `CLOUDFLARE_ACCOUNT_ID` (from the dashboard sidebar).
+
+### Deploy
+
+The **Deploy site** workflow runs on pushes to `prod` that change `site/`, or by hand from `prod`. To deploy from a laptop: `pnpm --filter site deploy` after `wrangler login`.
+
 ## Update / redeploy
 
 - **API and media**: merge `main` into `prod`. The **Deploy** workflow does the rest.
 - **Web**: not automated. On the server: `up -d --build --no-deps web`.
 - **Desktop app**: see section 5.
+- **Landing site**: merge `main` into `prod`. The **Deploy site** workflow does the rest.
 - Changing the domain: rebuild `web` and the desktop app (URLs baked in).
 
 Always pass `--no-deps <service>`. A plain `up -d --build` would replace the
