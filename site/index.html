@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Riftnet · Voice, video and 60fps screen share</title>
+    <meta
+      name="description"
+      content="Riftnet is a free, open-source chat app for gamers, coaches and squads: voice and video calls, 60fps screen share, and Share Play remote control."
+    />
+    <meta name="theme-color" content="#0F0A1F" />
+    <link rel="canonical" href="{{SITE_URL}}/" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Riftnet" />
+    <meta
+      property="og:description"
+      content="Play, coach and share your screen at 60fps. Free and open source."
+    />
+    <meta property="og:url" content="{{SITE_URL}}/" />
+    <script type="module" src="/src/main.ts"></script>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+
+    <header class="nav-wrap">
+      <nav class="nav" aria-label="Main">
+        <a class="brand" href="/" aria-label="Riftnet home">
+          <img src="/brand/riftnet-mark.svg" alt="" width="28" height="28" />
+          <span class="wordmark">Riftnet</span>
+        </a>
+        <ul class="nav__links">
+          <li><a href="#features">Features</a></li>
+          <li><a href="#open-source">Open source</a></li>
+          <li><a href="{{GITHUB_URL}}" rel="noopener">GitHub</a></li>
+        </ul>
+        <a class="nav__cta" href="#download">Download</a>
+      </nav>
+    </header>
+
+    <main id="main">
+      <!-- Hero -->
+      <section class="hero" id="download" aria-labelledby="hero-title">
+        <div class="hero__copy">
+          <p class="eyebrow">Free · Open source · Windows and web</p>
+
+          <h1 class="split" id="hero-title" aria-label="Play, coach, and share at 60fps.">
+            <span class="split__half split__top" aria-hidden="true"
+              >Play, coach,<br />and share<br />at 60fps.</span
+            >
+            <span class="split__half split__bottom" aria-hidden="true"
+              >Play, coach,<br />and share<br />at 60fps.</span
+            >
+          </h1>
+
+          <p class="lede">
+            Riftnet is voice, video and screen sharing for gamers, coaches and squads. It stays
+            light on your PC, costs nothing, and the code is public.
+          </p>
+
+          <div class="actions" data-actions>
+            <a class="btn btn--primary" href="{{DOWNLOAD_URL}}" data-download>
+              <span>Download for Windows</span>
+              <span class="btn__icon" aria-hidden="true">
+                <svg viewBox="0 0 16 16">
+                  <path d="M8 2.5v9m0 0L4.5 8M8 11.5 11.5 8M3 13.5h10" />
+                </svg>
+              </span>
+            </a>
+            <a class="btn btn--ghost" href="{{APP_URL}}" data-webapp>
+              <span>Open in browser</span>
+              <span class="btn__icon" aria-hidden="true">
+                <svg viewBox="0 0 16 16"><path d="M5 11 11 5m0 0H6m5 0v5" /></svg>
+              </span>
+            </a>
+          </div>
+          <p class="fineprint mono" data-platform-note>
+            Windows 10 and 11, 64-bit. Linux is coming later.
+          </p>
+        </div>
+
+        <div class="hero__art" aria-hidden="true">
+          <div class="glow"></div>
+          <svg class="loopi" viewBox="0 0 200 200">
+            <defs>
+              <clipPath id="loopi-hole">
+                <path d="M0 0H200V158H0Z" />
+                <ellipse cx="100" cy="160" rx="56" ry="12" />
+              </clipPath>
+            </defs>
+            <g class="loopi__portal">
+              <polygon
+                points="180.2,162.0 195.7,168.7 170.9,172.6 172.7,180.4 145.3,180.7 134.1,187.7 109.6,184.7 88.2,189.8 72.0,183.1 44.6,184.9 40.8,177.0 12.7,175.1 23.4,167.4 11.4,162.0 20.0,156.4 20.8,150.1 38.5,146.4 48.8,140.8 70.8,140.0 89.3,136.8 109.9,138.6 131.3,138.4 146.7,142.7 167.3,145.0 172.8,151.1 186.6,155.9"
+                fill="#7B2FFF"
+                stroke="#2A1650"
+                stroke-width="3"
+                stroke-linejoin="round"
+              />
+              <polygon
+                points="167.3,161.0 176.4,165.8 159.3,169.0 159.6,174.6 138.1,175.2 128.1,180.1 108.2,178.3 90.4,181.2 76.2,177.1 54.4,178.0 50.0,172.4 31.5,170.2 34.1,165.2 26.2,161.0 32.8,156.7 34.8,152.2 48.1,149.2 58.9,145.7 75.6,144.4 91.1,142.2 108.3,143.3 126.2,143.2 139.2,146.4 154.4,148.6 161.0,152.8 171.6,156.5"
+                fill="#FF6BD6"
+              />
+              <ellipse cx="100" cy="160" rx="56" ry="12" fill="#0F0A1F" />
+            </g>
+            <g clip-path="url(#loopi-hole)">
+              <g class="loopi__rise">
+                <g stroke="#2A1650" stroke-width="3.5" stroke-linejoin="round">
+                  <ellipse
+                    cx="48"
+                    cy="120"
+                    rx="26"
+                    ry="15"
+                    transform="rotate(-18 48 120)"
+                    fill="#C9B5FF"
+                  />
+                  <ellipse
+                    cx="152"
+                    cy="118"
+                    rx="26"
+                    ry="15"
+                    transform="rotate(18 152 118)"
+                    fill="#C9B5FF"
+                  />
+                  <circle cx="100" cy="106" r="56" fill="#C9B5FF" />
+                </g>
+                <path
+                  class="loopi__antenna"
+                  d="M99 51 C95 28 114 16 125 25 C134 33 126 46 116 42 C109 39 111 30 118 31"
+                  fill="none"
+                  stroke="#FF6BD6"
+                  stroke-width="9"
+                  stroke-linecap="round"
+                />
+                <ellipse cx="72" cy="117" rx="9" ry="5.5" fill="#FF6BD6" opacity=".85" />
+                <ellipse cx="128" cy="117" rx="9" ry="5.5" fill="#FF6BD6" opacity=".85" />
+                <g class="loopi__eyes">
+                  <circle cx="83" cy="103" r="5.5" fill="#2A1650" />
+                  <circle cx="117" cy="103" r="5.5" fill="#2A1650" />
+                </g>
+                <path
+                  d="M92 114 Q100 122 108 114"
+                  fill="none"
+                  stroke="#2A1650"
+                  stroke-width="3.5"
+                  stroke-linecap="round"
+                />
+              </g>
+            </g>
+          </svg>
+        </div>
+      </section>
+
+      <!-- Spec strip: plain facts, no claims we can't back -->
+      <section class="specs" aria-label="At a glance">
+        <ul class="specs__list mono">
+          <li><span>Screen share</span> up to 1080p, 60 fps</li>
+          <li><span>Calls</span> voice and video</li>
+          <li><span>Share Play</span> remote keyboard and mouse</li>
+          <li><span>License</span> AGPL-3.0</li>
+        </ul>
+      </section>
+
+      <!-- Features -->
+      <section class="features" id="features" aria-labelledby="features-title">
+        <header class="section-head reveal">
+          <p class="eyebrow">What's in it</p>
+          <h2 id="features-title">Everything a squad needs. Nothing it doesn't.</h2>
+        </header>
+
+        <div class="bento">
+          <!-- Screen share -->
+          <article class="shell bento__share reveal">
+            <div class="core">
+              <div class="card-copy">
+                <h3>Screen share that keeps up</h3>
+                <p>
+                  Share your game at up to 1080p and 60 frames a second, so your coach sees every
+                  frame, not a smeared replay.
+                </p>
+              </div>
+              <div class="stream" aria-hidden="true">
+                <div class="stream__bar">
+                  <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+                  <span class="stream__title">Kai's screen</span>
+                </div>
+                <div class="stream__view">
+                  <div class="stream__scene"></div>
+                  <span class="live">LIVE</span>
+                  <span class="crosshair"></span>
+                  <span class="stream__meta mono">1920×1080 · 60 fps · 16.7 ms</span>
+                </div>
+                <div class="stream__viewers">
+                  <span class="av av--a">M</span><span class="av av--b">J</span
+                  ><span class="av av--c">R</span>
+                  <span class="mono">3 watching</span>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <!-- Voice -->
+          <article class="shell bento__voice reveal">
+            <div class="core">
+              <img
+                class="card-loopi"
+                src="/brand/loopi-game.webp"
+                alt=""
+                width="220"
+                height="205"
+                loading="lazy"
+              />
+              <div class="card-copy">
+                <h3>Voice and video, one click in</h3>
+                <p>
+                  Join a voice channel and you're talking. Turn your camera on when you want to.
+                </p>
+              </div>
+              <ul class="voice" aria-hidden="true">
+                <li class="voice__row is-speaking"><span class="av av--a">M</span>Mia</li>
+                <li class="voice__row"><span class="av av--b">Jo</span>Jonah</li>
+                <li class="voice__row is-muted">
+                  <span class="av av--c">R</span>Rui
+                  <svg class="voice__muted" viewBox="0 0 16 16">
+                    <path d="M6 3.5a2 2 0 0 1 4 0V8M4 7.5a4 4 0 0 0 6.6 3M8 12v2M2.5 2.5l11 11" />
+                  </svg>
+                </li>
+              </ul>
+            </div>
+          </article>
+
+          <!-- Share Play -->
+          <article class="shell bento__play reveal">
+            <div class="core">
+              <div class="card-copy">
+                <h3>Share Play: hand over the mouse</h3>
+                <p>
+                  Ask to control a friend's shared screen. They allow it, you drive their keyboard
+                  and mouse. Either of you can stop it at any time.
+                </p>
+              </div>
+              <div class="request" aria-hidden="true">
+                <p><strong>Mia</strong> wants to control your screen</p>
+                <div class="request__btns">
+                  <span class="chip">Deny</span><span class="chip chip--yes">Allow</span>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <!-- Chat -->
+          <article class="shell bento__chat reveal">
+            <div class="core">
+              <div class="card-copy">
+                <h3>Servers, channels and DMs</h3>
+                <p>Text chat, replies, reactions and file sharing. The usual, without the bloat.</p>
+              </div>
+              <div class="chat" aria-hidden="true">
+                <ul class="chat__channels mono">
+                  <li># general</li>
+                  <li class="is-active"># clips</li>
+                  <li># scrims</li>
+                </ul>
+                <div class="chat__msgs">
+                  <p>
+                    <span class="av av--b">Jo</span><span><b>Jonah</b> that clutch was clean</span>
+                  </p>
+                  <p>
+                    <span class="av av--a">M</span
+                    ><span><b>Mia</b> watch it at 60, not 30 <i class="react">🔥 3</i></span>
+                  </p>
+                </div>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <!-- Open source -->
+      <section class="oss" id="open-source" aria-labelledby="oss-title">
+        <div class="oss__copy reveal">
+          <p class="eyebrow">Open source</p>
+          <h2 id="oss-title">Fast, light, and yours.</h2>
+          <p>
+            The whole thing is on GitHub under AGPL-3.0: the desktop app, the servers and the media
+            stack. Read it, fork it, or run your own.
+          </p>
+          <a class="btn btn--ghost" href="{{GITHUB_URL}}" rel="noopener">
+            <span>View on GitHub</span>
+            <span class="btn__icon" aria-hidden="true">
+              <svg viewBox="0 0 16 16"><path d="M5 11 11 5m0 0H6m5 0v5" /></svg>
+            </span>
+          </a>
+        </div>
+        <div class="oss__art reveal">
+          <img src="/brand/loopi-wave.webp" alt="" width="300" height="250" loading="lazy" />
+          <div class="shell">
+            <div class="core term mono">
+              <span class="term__prompt">$</span> git clone {{GITHUB_URL}}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Final call to action -->
+      <section class="final" aria-labelledby="final-title">
+        <div class="final__inner reveal">
+          <h2 id="final-title">Get your squad in.</h2>
+          <p>Free on Windows and in your browser.</p>
+          <div class="actions actions--center" data-actions>
+            <a class="btn btn--ink" href="{{DOWNLOAD_URL}}" data-download>
+              <span>Download for Windows</span>
+              <span class="btn__icon" aria-hidden="true">
+                <svg viewBox="0 0 16 16">
+                  <path d="M8 2.5v9m0 0L4.5 8M8 11.5 11.5 8M3 13.5h10" />
+                </svg>
+              </span>
+            </a>
+            <a class="btn btn--line" href="{{APP_URL}}" data-webapp>
+              <span>Open in browser</span>
+              <span class="btn__icon" aria-hidden="true">
+                <svg viewBox="0 0 16 16"><path d="M5 11 11 5m0 0H6m5 0v5" /></svg>
+              </span>
+            </a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <a class="brand" href="/" aria-label="Riftnet home">
+        <img src="/brand/riftnet-mark.svg" alt="" width="24" height="24" />
+        <span class="wordmark">Riftnet</span>
+      </a>
+      <ul class="footer__links">
+        <li><a href="{{DOWNLOAD_URL}}">Download</a></li>
+        <li><a href="{{APP_URL}}">Web app</a></li>
+        <li><a href="{{GITHUB_URL}}" rel="noopener">GitHub</a></li>
+      </ul>
+      <p class="mono footer__note">AGPL-3.0 · Riftnet contributors</p>
+    </footer>
+  </body>
+</html>
