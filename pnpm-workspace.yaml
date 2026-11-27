@@ -1,8 +1,10 @@
 packages:
   - client
+  - site
   - tools/mock
   - tools/loadtest
 
 allowBuilds:
   esbuild: true
   "@bufbuild/buf": true
+  workerd: true
