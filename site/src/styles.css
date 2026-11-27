@@ -278,19 +278,6 @@ svg {
   background: rgb(201 181 255 / 0.14);
 }
 
-.btn--line {
-  border: 1px solid rgb(15 10 31 / 0.3);
-  color: var(--ink);
-}
-
-.btn--line:hover {
-  border-color: var(--ink);
-}
-
-.btn--line .btn__icon {
-  background: rgb(15 10 31 / 0.08);
-}
-
 /* ---------- Hero ---------- */
 
 .hero {
@@ -757,6 +744,50 @@ h3 {
   border: 1px solid var(--hair);
   font-style: normal;
   font-size: 0.78rem;
+}
+
+/* ---------- Coming soon ---------- */
+
+.soon {
+  max-width: var(--max);
+  margin: 0 auto;
+  padding: 0 var(--gutter) clamp(32px, 4vw, 48px);
+}
+
+.soon .section-head {
+  margin-bottom: 32px;
+}
+
+.soon__list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.soon__item {
+  display: grid;
+  align-content: start;
+  justify-items: start;
+  gap: 8px;
+  padding: 24px;
+  border: 1px dashed rgb(201 181 255 / 0.22);
+  border-radius: 22px;
+}
+
+.soon__item p {
+  color: var(--muted);
+  font-size: 0.98rem;
+}
+
+.soon__tag {
+  margin-bottom: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgb(255 107 214 / 0.12);
+  color: var(--pink);
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
 /* ---------- Open source ---------- */
@@ -1307,6 +1338,10 @@ h3 {
   }
 
   .oss {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .soon__list {
     grid-template-columns: minmax(0, 1fr);
   }
 }
