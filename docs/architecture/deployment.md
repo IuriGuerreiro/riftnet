@@ -150,23 +150,33 @@ For an end-to-end test, run the workflow from a public fork with its own signing
 
 ## 6. Landing site (riftnet.app)
 
-`site/` is a static page served by Cloudflare Workers. `site/wrangler.jsonc` attaches it to `riftnet.app` and `www.riftnet.app` as custom domains. Wrangler creates their DNS records, so neither hostname may have an existing record.
+`site/` is a static page on Cloudflare Workers. Cloudflare's Git integration (Workers Builds) builds and deploys it; there is no GitHub Action. `site/wrangler.jsonc` attaches it to `riftnet.app` and `www.riftnet.app` as custom domains, so neither hostname may have an existing DNS record.
 
 ### Set up (once)
 
-1. In Cloudflare, create an API token from the **Edit Cloudflare Workers** template. Limit its zone resources to `riftnet.app`.
-2. Add repository secrets `CLOUDFLARE_API_TOKEN` (the token) and `CLOUDFLARE_ACCOUNT_ID` (from the dashboard sidebar).
+In Cloudflare: **Workers & Pages → Create → Import a repository**, pick `IuriGuerreiro/riftnet`, then set:
+
+| Setting | Value |
+|---|---|
+| Project name | `riftnet-site` (must match `name` in `wrangler.jsonc`) |
+| Production branch | `prod` |
+| Root directory | `site` |
+| Build command | `pnpm install --frozen-lockfile && pnpm build` |
+| Deploy command | `npx wrangler deploy` |
+| Build watch paths | include `site/*` and `pnpm-lock.yaml` |
+
+Turn off non-production branch builds, or keep them for preview URLs.
 
 ### Deploy
 
-The **Deploy site** workflow runs on pushes to `prod` that change `site/`, or by hand from `prod`. To deploy from a laptop: `pnpm --filter site deploy` after `wrangler login`.
+Merge `main` into `prod`. Cloudflare builds and deploys when `site/` changes. To deploy from a laptop: `pnpm --filter site deploy` after `wrangler login`.
 
 ## Update / redeploy
 
 - **API and media**: merge `main` into `prod`. The **Deploy** workflow does the rest.
 - **Web**: not automated. On the server: `up -d --build --no-deps web`.
 - **Desktop app**: see section 5.
-- **Landing site**: merge `main` into `prod`. The **Deploy site** workflow does the rest.
+- **Landing site**: merge `main` into `prod`. Cloudflare Workers Builds does the rest.
 - Changing the domain: rebuild `web` and the desktop app (URLs baked in).
 
 Always pass `--no-deps <service>`. A plain `up -d --build` would replace the
