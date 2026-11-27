@@ -4,7 +4,6 @@ const config = JSON.parse(
   readFileSync(new URL("../../client/src-tauri/tauri.conf.json", import.meta.url), "utf8"),
 );
 const { version } = config;
-// Releases are published to the repository the workflow runs in.
 const { GITHUB_REPOSITORY: repo, TAURI_UPDATER_PUBLIC_KEY: pubkey, RELEASE_NOTES } = process.env;
 const assetNames = {
   "windows-x86_64": "adept-windows-x64-setup.exe",
