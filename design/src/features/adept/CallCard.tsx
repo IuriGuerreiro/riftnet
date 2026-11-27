@@ -1,45 +1,12 @@
-import { HeadphoneOff, Headphones, Mic, MicOff, MonitorUp, PhoneOff } from "lucide-react";
+import { Loader2, MonitorUp, PhoneOff, PhoneOutgoing, Signal, SignalLow } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { type LiveRoom, ME, server } from "@/mock/data";
+import { useWorld, world } from "@/mock/world";
 
 import { SpeakingAvatar } from "./SpeakingAvatar";
 import { UserCallMenu } from "./UserCallMenu";
 import { useSpeaker } from "./useSpeaker";
-
-function CallButton({
-  label,
-  on,
-  danger,
-  onClick,
-  children,
-}: {
-  label: string;
-  on?: boolean;
-  danger?: boolean;
-  onClick?: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      aria-pressed={on}
-      onClick={onClick}
-      className={cn(
-        "grid h-8 flex-1 place-items-center rounded-lg transition-colors",
-        danger
-          ? "bg-danger-fill/90 text-white hover:bg-danger-fill"
-          : on
-            ? "bg-foreground text-background"
-            : "bg-surface-3 text-foreground hover:bg-surface-4",
-      )}
-    >
-      {children}
-    </button>
-  );
-}
 
 export function CallCard({
   room,
@@ -68,88 +35,135 @@ export function CallCard({
   ringing: boolean;
   onShowPreview?: () => void;
 }) {
+  useWorld();
   const speaker = useSpeaker(room.people);
+  const quality = world.callQuality;
+  const tone = ringing
+    ? { bar: "bg-brand", text: "text-foreground", label: "Calling…", ping: "", Icon: PhoneOutgoing }
+    : quality === "reconnecting"
+      ? { bar: "bg-warning", text: "text-warning", label: "Reconnecting…", ping: "", Icon: Loader2 }
+      : quality === "poor"
+        ? {
+            bar: "bg-warning",
+            text: "text-warning",
+            label: "Weak connection",
+            ping: "240 ms",
+            Icon: SignalLow,
+          }
+        : {
+            bar: "bg-success",
+            text: "text-success",
+            label: "Connected",
+            ping: "18 ms",
+            Icon: Signal,
+          };
+  const max = room.people.length > 6 ? 5 : 6;
+  const shown = room.people.slice(0, max);
+  const extra = room.people.length - shown.length;
 
   return (
-    <div className="animate-in slide-in-from-bottom-2 fade-in mx-2 mb-2 rounded-xl border border-success/25 bg-success/[0.05] p-2.5 duration-200">
-      <button type="button" onClick={onOpen} className="flex w-full items-center gap-2 text-left">
-        <span className="relative flex size-2">
-          <span className="absolute inline-flex size-full animate-ping rounded-full bg-success opacity-60 motion-reduce:animate-none" />
-          <span className="relative inline-flex size-2 rounded-full bg-success" />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13px] font-semibold text-success">
-            {ringing ? "Calling…" : "Voice connected"}
-          </span>
-          <span className="block truncate text-[11px] text-muted-foreground">
-            {room.name} · {server(room.serverId)?.name ?? "Direct call"}
-          </span>
-        </span>
-        <span className="flex -space-x-1.5">
-          {room.people.slice(0, 4).map((id) => (
-            <UserCallMenu key={id} id={id} self={{ muted, deafened, onMute, onDeafen }}>
-              <span className="inline-flex">
-                <SpeakingAvatar
-                  id={id}
-                  size={20}
-                  speaking={!ringing && speaker === id && !(id === ME && (muted || deafened))}
-                  ringBg="var(--adept-ink)"
-                />
-              </span>
-            </UserCallMenu>
-          ))}
-        </span>
-      </button>
+    <div className="animate-in fade-in relative border-b border-border p-2.5 duration-200">
+      <span className={cn("absolute inset-x-0 top-0 h-0.5", tone.bar)} />
       <button
         type="button"
         onClick={onOpen}
-        className="mt-2 block w-full rounded-md px-1 py-1 text-left text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
+        className="block w-full rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-brand"
       >
-        {ringing ? "Waiting for an answer" : `${room.people.length} in call`} ·{" "}
-        {inStage ? "Back to chat" : "Open call"}
+        <span className="flex items-center gap-1.5">
+          <tone.Icon
+            className={cn(
+              "size-3.5 shrink-0",
+              tone.text,
+              tone.Icon === Loader2 && "animate-spin motion-reduce:animate-none",
+            )}
+          />
+          <span className={cn("truncate text-xs font-semibold", tone.text)}>{tone.label}</span>
+          {tone.ping && (
+            <span
+              className={cn(
+                "ml-auto shrink-0 text-[11px] tabular-nums",
+                quality === "poor" ? "text-warning" : "text-muted-foreground",
+              )}
+            >
+              {tone.ping}
+            </span>
+          )}
+        </span>
+        <span className="mt-0.5 flex items-center gap-1 text-xs">
+          <span className="truncate font-medium text-foreground">{room.name}</span>
+          <span className="shrink-0 text-muted-foreground">·</span>
+          <span className="truncate text-muted-foreground">
+            {ringing ? "Ringing" : (server(room.serverId)?.name ?? "Direct call")}
+          </span>
+        </span>
       </button>
-      {onShowPreview && (
+      <div className="mt-2.5 flex items-center gap-1.5">
+        {shown.map((id) => (
+          <UserCallMenu key={id} id={id} self={{ muted, deafened, onMute, onDeafen }}>
+            <span className="inline-flex">
+              <SpeakingAvatar
+                id={id}
+                size={22}
+                ringBg="var(--surface-1)"
+                speaking={!ringing && speaker === id && !(id === ME && (muted || deafened))}
+              />
+            </span>
+          </UserCallMenu>
+        ))}
+        {extra > 0 && (
+          <span className="grid size-[22px] place-items-center rounded-full bg-surface-2 text-[10px] font-semibold text-muted-foreground tabular-nums">
+            +{extra}
+          </span>
+        )}
         <button
           type="button"
-          onClick={onShowPreview}
-          className="block w-full rounded-md px-1 py-1 text-left text-[11px] font-medium text-brand-text hover:bg-accent"
+          onClick={onOpen}
+          className="ml-auto h-6 shrink-0 rounded-md px-1.5 text-[11px] font-medium text-muted-foreground hover:bg-surface-2 hover:text-foreground"
         >
-          Show stream preview
+          {inStage ? "Chat" : "Open"}
         </button>
-      )}
-      {sharing && (
-        <div className="mt-2 flex items-center gap-2 rounded-lg bg-brand/10 px-2 py-1.5 text-[11px]">
-          <span className="relative flex size-1.5">
-            <span className="absolute inline-flex size-full animate-ping rounded-full bg-brand opacity-70 motion-reduce:animate-none" />
-            <span className="relative inline-flex size-1.5 rounded-full bg-brand" />
+      </div>
+      {(sharing || onShowPreview) && (
+        <div className="mt-2 flex h-7 items-center gap-1.5 rounded-lg border border-brand/20 bg-brand/10 px-2 text-[11px]">
+          <MonitorUp className="size-3 shrink-0 text-brand-text" />
+          <span className="min-w-0 flex-1 truncate font-medium text-brand-text">
+            {sharing ? `Sharing · ${world.share.quality}` : "Stream hidden"}
           </span>
-          <span className="flex-1 font-medium text-brand-text">You're sharing your screen</span>
-          <button
-            type="button"
-            onClick={onShare}
-            className="font-semibold text-destructive hover:underline"
-          >
-            Stop
-          </button>
+          {onShowPreview && (
+            <button
+              type="button"
+              onClick={onShowPreview}
+              className="shrink-0 font-medium text-foreground/80 hover:text-foreground"
+            >
+              Show
+            </button>
+          )}
         </div>
       )}
-      <div className="mt-2.5 flex gap-1.5">
-        <CallButton label={muted ? "Unmute" : "Mute"} on={muted} onClick={onMute}>
-          {muted ? <MicOff className="size-4" /> : <Mic className="size-4" />}
-        </CallButton>
-        <CallButton label={deafened ? "Undeafen" : "Deafen"} on={deafened} onClick={onDeafen}>
-          {deafened ? <HeadphoneOff className="size-4" /> : <Headphones className="size-4" />}
-        </CallButton>
-        <CallButton
-          label={sharing ? "Stop sharing" : "Share screen"}
-          on={sharing}
+      <div className="mt-2 flex items-center gap-1.5">
+        <button
+          type="button"
+          aria-pressed={sharing}
           onClick={onShare}
+          className={cn(
+            "flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg text-xs font-medium transition-colors",
+            sharing
+              ? "bg-brand/15 text-brand-text ring-1 ring-brand/30 ring-inset hover:bg-brand/25"
+              : "bg-surface-2 text-foreground hover:bg-surface-3",
+          )}
         >
-          <MonitorUp className="size-4" />
-        </CallButton>
-        <CallButton label="Leave" danger onClick={onLeave}>
+          <MonitorUp className="size-3.5" />
+          {sharing ? "Stop sharing" : "Share screen"}
+        </button>
+        <button
+          type="button"
+          aria-label={ringing ? "Cancel call" : "Leave call"}
+          title={ringing ? "Cancel call" : "Leave call"}
+          onClick={onLeave}
+          className="grid size-8 shrink-0 place-items-center rounded-lg bg-danger-fill/15 text-destructive transition-colors hover:bg-danger-fill hover:text-white"
+        >
           <PhoneOff className="size-4" />
-        </CallButton>
+        </button>
       </div>
     </div>
   );

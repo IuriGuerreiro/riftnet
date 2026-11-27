@@ -13,7 +13,7 @@ export const MOCK_HINTS = [
 
 export async function mockLogin(email: string, password: string) {
   await wait(900);
-  if (password === "wrong") throw new Error("That email and password don't match.");
+  if (password === "wrong") throw new Error("Wrong email or password.");
   return { email };
 }
 

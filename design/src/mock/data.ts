@@ -18,6 +18,7 @@ export interface User {
   customStatus?: string;
   accent?: string;
   avatar?: string;
+  avatarPos?: string;
   banner?: string;
   activity?: Activity;
 }
@@ -42,6 +43,8 @@ export interface Server {
   hue: number;
   channels: Channel[];
   members: string[];
+  icon?: string;
+  emblem?: "owls" | "forge";
   owner?: string;
   description?: string;
   invites?: Invite[];
@@ -139,46 +142,52 @@ const userList: User[] = [
   },
   {
     id: "maya",
-    name: "Maya",
-    handle: "maya.r",
+    avatar: "/media/photo-2.jpg",
+    avatarPos: "50% 30%",
+    name: "Mariana",
+    handle: "mari.ana",
     hue: 330,
     bio: "Support main. I will heal you if you ask nicely.",
     pronouns: "she/her",
     customStatus: "one more game",
     status: "online",
-    activity: { kind: "playing", label: "Hollow Drift", detail: "Ranked · 2-1", since: "41m" },
+    activity: { kind: "playing", label: "Ridgeline", detail: "Ranked · 2-1", since: "41m" },
   },
   {
     id: "tom",
-    name: "Tom",
+    name: "Tomás",
     handle: "tomz",
     hue: 200,
     status: "online",
-    activity: { kind: "voice", label: "Squad room", detail: "Night Owls" },
+    activity: { kind: "voice", label: "Squad room", detail: "Late Shift" },
   },
   {
     id: "lea",
+    avatar: "/media/photo-4.jpg",
+    avatarPos: "54% 40%",
     name: "Léa",
     handle: "lea",
     hue: 150,
     status: "online",
-    activity: { kind: "streaming", label: "Starline Racers", detail: "Screen share" },
+    activity: { kind: "streaming", label: "Trackmania", detail: "Screen share" },
   },
   {
     id: "kai",
-    name: "Kai",
-    handle: "kai_dev",
+    name: "Kestrel",
+    handle: "kestrel",
     hue: 30,
     status: "idle",
-    activity: { kind: "listening", label: "Lo-fi beats", detail: "Spotify" },
+    activity: { kind: "listening", label: "Tame Impala", detail: "The Less I Know the Better" },
   },
   {
     id: "sam",
+    avatar: "/media/photo-5.jpg",
+    avatarPos: "70% 40%",
     name: "Sam",
     handle: "sammy",
     hue: 100,
     status: "dnd",
-    activity: { kind: "playing", label: "Pixel Forge", since: "2h" },
+    activity: { kind: "playing", label: "Satisfactory", since: "2h" },
   },
   {
     id: "noor",
@@ -186,12 +195,12 @@ const userList: User[] = [
     handle: "noor",
     hue: 280,
     status: "online",
-    activity: { kind: "voice", label: "Squad room", detail: "Night Owls" },
+    activity: { kind: "voice", label: "Squad room", detail: "Late Shift" },
   },
-  { id: "ben", name: "Ben", handle: "benji", hue: 15, status: "offline" },
-  { id: "ivy", name: "Ivy", handle: "ivy.codes", hue: 180, status: "idle" },
+  { id: "ben", name: "Bram", handle: "bramble", hue: 15, status: "offline" },
+  { id: "ivy", name: "Ivo", handle: "ivo_", hue: 180, status: "idle" },
   { id: "rui", name: "Rui", handle: "rui", hue: 55, status: "offline" },
-  { id: "zoe", name: "Zoe", handle: "zoe.plays", hue: 300, status: "online" },
+  { id: "zoe", name: "Zé", handle: "zepedro", hue: 300, status: "online" },
   { id: "otto", name: "Otto", handle: "otto", hue: 80, status: "idle" },
   { id: "nina", name: "Nina", handle: "nina_g", hue: 220, status: "online" },
 ];
@@ -206,8 +215,9 @@ export function user(id: string): User {
 export const SERVERS: Server[] = [
   {
     id: "owls",
-    name: "Night Owls",
-    short: "NO",
+    name: "Late Shift",
+    short: "LS",
+    emblem: "owls",
     hue: 262,
     members: [ME, "maya", "tom", "lea", "kai", "sam", "noor", "ben", "ivy"],
     channels: [
@@ -237,8 +247,9 @@ export const SERVERS: Server[] = [
   },
   {
     id: "forge",
-    name: "Pixel Forge",
-    short: "PF",
+    name: "Forge Co-op",
+    short: "FC",
+    emblem: "forge",
     hue: 30,
     members: [ME, "sam", "kai", "ivy", "rui"],
     channels: [
@@ -263,8 +274,9 @@ export const SERVERS: Server[] = [
   },
   {
     id: "drift",
-    name: "Hollow Drift League",
-    short: "HD",
+    name: "Ridgeline Scrims",
+    short: "RS",
+    icon: "/media/photo-1.jpg",
     hue: 200,
     members: [ME, "maya", "tom", "ben"],
     channels: [
@@ -298,7 +310,7 @@ export const CONVERSATIONS: Conversation[] = [
   {
     id: "dm-maya",
     kind: "dm",
-    title: "Maya",
+    title: "Mariana",
     members: ["maya"],
     unread: 2,
     mentions: 2,
@@ -351,7 +363,7 @@ export const CONVERSATIONS: Conversation[] = [
   {
     id: "dm-kai",
     kind: "dm",
-    title: "Kai",
+    title: "Kestrel",
     members: ["kai"],
     unread: 0,
     mentions: 0,
@@ -399,7 +411,7 @@ export const CONVERSATIONS: Conversation[] = [
   {
     id: "dm-ivy",
     kind: "dm",
-    title: "Ivy",
+    title: "Ivo",
     members: ["ivy"],
     unread: 0,
     mentions: 0,
@@ -471,7 +483,7 @@ export function olderMessages(c: Conversation, page: number): Message[] {
 const SCRIPTS: Record<string, Message[]> = {
   "dm-maya": [
     { id: "m1", author: "maya", text: "you coming to the scrim later?", time: "21:02" },
-    { id: "m2", author: ME, text: "yeah if Tom stops lagging 😂", time: "21:03" },
+    { id: "m2", author: ME, text: "yeah if Tomás stops lagging 😂", time: "21:03" },
     {
       id: "m3",
       author: ME,
@@ -554,26 +566,26 @@ const SCRIPTS: Record<string, Message[]> = {
     {
       id: "m6d",
       author: "maya",
-      text: "this guide explains the new dash tech https://www.youtube.com/watch?v=adept-dash",
+      text: "this guy broke down the new dash tech https://www.youtube.com/watch?v=adept-dash",
       time: "21:08",
     },
     { id: "m7", author: "maya", text: "ok one more game then I'm out 😅", time: "21:08" },
   ],
   "owls-general": [
     { id: "g0", author: "ivy", text: "night all 🌙", time: "23:48", day: "Yesterday" },
-    { id: "g1", author: "kai", text: "morning owls 🦉", time: "09:14" },
+    { id: "g1", author: "kai", text: "morning 🦉 just woke up", time: "20:58" },
     {
       id: "g2",
       author: "lea",
-      text: "it's literally 9pm kai",
+      text: "it's 9pm kestrel",
       time: "21:01",
       reactions: [{ emoji: "😂", count: 4, mine: true }],
     },
     { id: "g3", author: "kai", text: "time is a construct", time: "21:01" },
     {
       id: "g4",
-      author: "noor",
-      text: "streaming Starline in Squad room if anyone wants to watch",
+      author: "lea",
+      text: "streaming Trackmania in Squad room if anyone wants to watch",
       time: "21:04",
     },
     {
@@ -687,7 +699,7 @@ const SCRIPTS: Record<string, Message[]> = {
       id: "g6g",
       pinned: true,
       author: "noor",
-      text: "plan for tonight:\n- warmup in *Hollow Drift*\n- 2 ranked games\n- then Starline on stream\nrules here https://adept.example/night-owls",
+      text: "plan for tonight:\n- warmup in *Ridgeline*\n- 2 ranked games\n- then Trackmania on stream\nrules here https://adept.example/night-owls",
       time: "21:09",
     },
     {

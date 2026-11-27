@@ -1,6 +1,6 @@
 import { Hash } from "lucide-react";
 
-import { Avatar } from "@/components/Avatar";
+import { Avatar, Face } from "@/components/Avatar";
 import { ServerIcon } from "@/components/ServerIcon";
 import { EmojiText } from "@/features/emoji/EmojiText";
 import { cn } from "@/lib/utils";
@@ -19,18 +19,20 @@ export function ConversationAvatar({ c, size = 40 }: { c: Conversation; size?: n
     );
   }
   if (c.kind === "group") {
-    const a = Math.round(size * 0.68);
-    const center = size - a / 2;
-    const cut = a / 2 + 2;
-    const mask = `radial-gradient(circle at ${center}px ${center}px, transparent ${cut}px, #000 ${cut + 0.5}px)`;
+    const picks = c.members.slice(0, 3);
     return (
-      <span className="relative shrink-0" style={{ width: size, height: size }}>
-        <span className="absolute top-0 left-0" style={{ maskImage: mask, WebkitMaskImage: mask }}>
-          <Avatar id={c.members[0] ?? ""} size={a} />
-        </span>
-        <span className="absolute right-0 bottom-0">
-          <Avatar id={c.members[1] ?? ""} size={a} />
-        </span>
+      <span
+        className="grid shrink-0 grid-cols-2 grid-rows-2 gap-[1.5px] overflow-hidden rounded-[30%] bg-ink ring-1 ring-white/[0.09] ring-inset"
+        style={{ width: size, height: size }}
+      >
+        {picks.map((m, i) => (
+          <span
+            key={m}
+            className={cn("overflow-hidden", (i === 0 || picks.length === 2) && "row-span-2")}
+          >
+            <Face id={m} size={size / 2} />
+          </span>
+        ))}
       </span>
     );
   }

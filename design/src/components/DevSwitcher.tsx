@@ -32,7 +32,7 @@ const SCENARIOS: [string, () => void][] = [
     () => {
       const id = "dm-kai";
       pushMessage(id, { author: "kai", text: "you around?" });
-      toast("Kai: you around?", { who: "kai", open: id });
+      toast("Kestrel: you around?", { who: "kai", open: id });
     },
   ],
   ["Go offline", () => void (world.connection = "offline")],

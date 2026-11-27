@@ -4,10 +4,10 @@ import { AdeptMorph } from "@/components/brand/AdeptMorph";
 import { cn } from "@/lib/utils";
 
 const CAPTIONS = [
-  { tag: "Adept", line: "One place for the people you play with." },
-  { tag: "Voice", line: "Talk like you're in the same room." },
-  { tag: "Screen", line: "Share your screen in one click." },
-  { tag: "Play", line: "Squad up and play together." },
+  { tag: "Adept", line: "Voice, chat and 60fps screen share." },
+  { tag: "Voice", line: "Clear voice that stays out of your way." },
+  { tag: "Screen", line: "Share your screen at 60fps." },
+  { tag: "Play", line: "Hand over the controls with Share Play." },
 ] as const;
 
 export function BrandPanel({ className }: { className?: string }) {

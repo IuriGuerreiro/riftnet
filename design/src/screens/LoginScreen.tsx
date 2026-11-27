@@ -32,7 +32,7 @@ export function LoginScreen() {
   return (
     <AuthShell
       title="Welcome back"
-      subtitle="Log in to pick up where you left off."
+      subtitle="Log in to your Adept account."
       footer={
         <>
           New to Adept?{" "}

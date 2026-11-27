@@ -274,7 +274,7 @@ export function ChatView({
         await navigator.clipboard.writeText(text);
         toast("Copied");
       } catch {
-        setNotice(`Copy this: ${text}`);
+        setNotice(`Couldn't copy. Select it here: ${text}`);
       }
     })();
   };
@@ -354,11 +354,11 @@ export function ChatView({
     connection !== "online"
       ? []
       : c.id === "dm-maya"
-        ? ["Maya"]
+        ? ["Mariana"]
         : c.id === "owls-general"
-          ? ["Tom", "Noor"]
+          ? ["Tomás", "Noor"]
           : c.id === "group-trip"
-            ? ["Léa", "Tom", "Maya"]
+            ? ["Léa", "Tomás", "Mariana"]
             : [];
   const placeholder = c.kind === "channel" ? `Message #${c.title}` : `Message ${c.title}`;
   const post = (text: string, attachments?: Attachment[]) =>
@@ -610,9 +610,7 @@ export function ChatView({
                   <div className="px-4 pt-8 pb-2">
                     <ConversationIcon c={c} size={56} />
                     <h3 className="mt-3 text-xl font-semibold">{c.title}</h3>
-                    <p className="text-sm text-muted-foreground">
-                      This is the start of your messages here.
-                    </p>
+                    <p className="text-sm text-muted-foreground">The start of your chat.</p>
                   </div>
                 )}
                 <MessageList
@@ -640,7 +638,7 @@ export function ChatView({
                     : "bottom-3 left-1/2 -translate-x-1/2",
                 )}
               >
-                Jump to present
+                Jump to latest
               </button>
             )}
           </div>
@@ -705,10 +703,10 @@ export function ChatView({
             {panel === "search" && (
               <input
                 autoFocus
-                aria-label="Search this conversation"
+                aria-label={everywhere ? "Search all chats" : "Search this chat"}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search this conversation"
+                placeholder={everywhere ? "Search all chats" : "Search this chat"}
                 className="mx-3 mb-3 rounded border border-border bg-background p-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-brand"
               />
             )}
@@ -742,7 +740,11 @@ export function ChatView({
                 <p className="p-2 text-sm text-muted-foreground">
                   {panel === "search" && !query.trim()
                     ? "Type to search messages."
-                    : "No messages found."}
+                    : panel === "pins"
+                      ? "No pinned messages yet."
+                      : panel === "mentions"
+                        ? "No mentions yet."
+                        : "No matching messages."}
                 </p>
               )}
               {panel === "search" && results.length > 0 && (

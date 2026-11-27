@@ -13,7 +13,7 @@ export function Banners() {
         <div className={`${bar} bg-warning text-ink`}>
           <WifiOff className="size-4" />
           {world.connection === "offline"
-            ? "You're offline. New messages wait here until you're back."
+            ? "You're offline. Messages send when you reconnect."
             : "Connection lost. Reconnecting…"}
           <button
             type="button"
@@ -24,7 +24,7 @@ export function Banners() {
               })
             }
           >
-            Try now
+            Reconnect
           </button>
         </div>
       )}
@@ -32,7 +32,7 @@ export function Banners() {
         <div className={`${bar} bg-brand-fill text-white`}>
           <Download className="size-4" />
           {world.update === "available"
-            ? "Adept 0.2.0 is ready to download."
+            ? "Adept 0.2.0 is available."
             : world.update === "downloading"
               ? "Downloading the update…"
               : "Update ready."}

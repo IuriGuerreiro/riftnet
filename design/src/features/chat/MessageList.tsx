@@ -141,7 +141,7 @@ function ReplyQuote({ target, onJump }: { target?: Message; onJump: (id: string)
     return (
       <div className="mb-0.5 flex items-center gap-1.5 pl-[50px] text-xs text-muted-foreground italic">
         <CornerUpLeft className="size-3 -scale-x-100" />
-        Original message was deleted
+        Message deleted
       </div>
     );
   }
@@ -154,7 +154,7 @@ function ReplyQuote({ target, onJump }: { target?: Message; onJump: (id: string)
       <Avatar id={target.author} size={16} />
       <span className="font-semibold text-foreground/85">{user(target.author).name}</span>
       <span className="truncate">
-        {target.text ? <EmojiText text={target.text} size={14} /> : <i>Click to see attachment</i>}
+        {target.text ? <EmojiText text={target.text} size={14} /> : <i>Attachment</i>}
       </span>
     </button>
   );

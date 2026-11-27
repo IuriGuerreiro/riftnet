@@ -16,7 +16,7 @@ function stopRinging(missed: boolean) {
     world.ringing = null;
   });
   const id = ensureDm(who);
-  systemMessage(id, missed ? `Missed call from ${user(who).name}.` : "You declined a call.");
+  systemMessage(id, missed ? `Missed call from ${user(who).name}.` : "Declined call.");
   if (missed) toast(`Missed call from ${user(who).name}`, { who, open: id });
 }
 
@@ -90,8 +90,8 @@ export function SharePlayBanner({
           screen
         </p>
         <Toggle
-          label="I trust this person"
-          hint="They can use your mouse and keyboard until you stop them."
+          label={`I trust ${user(request).name}`}
+          hint="They can use your mouse and keyboard until you stop."
           on={ok}
           onChange={setOk}
         />
@@ -118,16 +118,16 @@ export function SharePlayBanner({
       <p className="flex-1">
         {control.role === "host" ? (
           <>
-            <b>{user(control.who).name}</b> controls your screen
+            <b>{user(control.who).name}</b> is controlling your screen
           </>
         ) : control.active ? (
           <>
-            You control <b>{user(control.who).name}&apos;s</b> screen
+            You're controlling <b>{user(control.who).name}&apos;s</b> screen
           </>
         ) : (
           <>Waiting for {user(control.who).name} to allow control…</>
         )}
-        <span className="block text-xs text-muted-foreground">Ctrl Shift F12 stops it</span>
+        <span className="block text-xs text-muted-foreground">Press Ctrl+Shift+F12 to stop</span>
       </p>
       <Button size="sm" variant="destructive" onClick={onStop}>
         {control.active ? "Stop" : "Cancel"}

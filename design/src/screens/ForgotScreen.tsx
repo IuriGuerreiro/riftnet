@@ -28,7 +28,7 @@ export function ForgotScreen() {
       subtitle={subtitle}
       footer={
         <Link to="/login" className="font-medium text-brand-text hover:underline">
-          Back to log in
+          Back to login
         </Link>
       }
     >

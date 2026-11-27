@@ -29,8 +29,8 @@ export function CallTools() {
   useWorld();
   const poor = world.callQuality !== "good";
   const stats = [
-    ["Delay", poor ? "240 ms" : "18 ms"],
-    ["Lost packets", poor ? "9%" : "0%"],
+    ["Ping", poor ? "240 ms" : "18 ms"],
+    ["Packet loss", poor ? "9%" : "0%"],
     ["Jitter", poor ? "45 ms" : "2 ms"],
     ["Stream", poor ? "720p 31fps" : world.share.quality],
     ["Route", "Adept relay"],
@@ -45,7 +45,7 @@ export function CallTools() {
           {poor ? "Your connection is struggling" : "Connection looks good"}
         </p>
         <p className="mb-2 text-xs text-muted-foreground">
-          {poor ? "Try a cable, or lower your stream quality." : "Nothing to fix."}
+          {poor ? "Use a wired connection or lower stream quality." : "Nothing to fix."}
         </p>
         {stats.map(([k, v]) => (
           <p key={k} className="flex justify-between py-1 text-xs">

@@ -37,7 +37,7 @@ export function JumpPalette({
       open={open}
       onOpenChange={onOpenChange}
       title="Jump to"
-      description="Find a conversation, channel or person"
+      description="Find a chat, channel, person or action"
     >
       <CommandInput placeholder="Jump to a chat, channel or person…" />
       <CommandList>

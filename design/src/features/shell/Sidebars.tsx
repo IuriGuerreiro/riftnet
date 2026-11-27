@@ -7,7 +7,6 @@ import {
   Megaphone,
   Pin,
   Plus,
-  Radio,
   Settings,
   UserPlus,
   Volume2,
@@ -30,6 +29,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ActivityLine } from "@/features/adept/ActivityLine";
 import { UserCallMenu } from "@/features/adept/UserCallMenu";
+import { useSpeaker } from "@/features/adept/useSpeaker";
 import { getDraft } from "@/features/chat/drafts";
 import { searchPeople } from "@/features/dialogs/HomeDialogs";
 import { EmojiText } from "@/features/emoji/EmojiText";
@@ -110,10 +110,7 @@ export function RailTile({
   children: ReactNode;
 }) {
   return (
-    <div className="relative flex w-full justify-center">
-      {unread && !active && (
-        <span className="absolute top-1/2 left-0 size-1.5 -translate-y-1/2 rounded-full bg-brand" />
-      )}
+    <div className="group/tile relative flex w-full justify-center">
       <button
         type="button"
         aria-label={label}
@@ -121,21 +118,31 @@ export function RailTile({
         aria-current={active ? "page" : undefined}
         onClick={onClick}
         className={cn(
-          "relative rounded-xl transition-all duration-150",
-          active
-            ? "ring-2 ring-brand ring-offset-2 ring-offset-ink"
-            : "opacity-80 hover:-translate-y-px hover:opacity-100",
+          "relative rounded-[28%] outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-ink",
+          active && "ring-[1.5px] ring-brand ring-offset-2 ring-offset-ink",
         )}
       >
-        {children}
+        <span
+          className={cn(
+            "block transition-[opacity,filter] duration-150",
+            active
+              ? ""
+              : "opacity-75 saturate-[.8] group-hover/tile:opacity-100 group-hover/tile:saturate-100",
+          )}
+        >
+          {children}
+        </span>
+        {unread && !active && !mentions && (
+          <span className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full bg-foreground ring-[2.5px] ring-ink" />
+        )}
         {mentions ? (
-          <span className="absolute -top-1.5 -right-1.5 grid h-[18px] min-w-[18px] place-items-center rounded-full border-2 border-ink bg-danger-fill px-1 text-[10px] font-bold text-white">
+          <span className="absolute -top-1 -right-1 grid h-[17px] min-w-[17px] place-items-center rounded-full bg-danger-fill px-1 text-[10px] leading-none font-bold text-white tabular-nums ring-2 ring-ink">
             {mentions}
           </span>
         ) : null}
         {voice && (
-          <span className="absolute -right-1 -bottom-1 grid size-4 place-items-center rounded-full border-2 border-ink bg-success">
-            <Volume2 className="size-2 text-ink" strokeWidth={3} />
+          <span className="absolute -right-1 -bottom-1 grid size-4 place-items-center rounded-full bg-surface-2 text-success ring-2 ring-ink">
+            <Volume2 className="size-2.5" strokeWidth={2.5} />
           </span>
         )}
       </button>
@@ -159,41 +166,49 @@ function LiveRow({
   return (
     <div
       className={cn(
-        "flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors",
-        previewing ? "bg-accent" : "hover:bg-accent/60",
+        "rounded-lg px-2 py-1.5 transition-colors",
+        previewing ? "bg-surface-2 ring-1 ring-white/[0.06] ring-inset" : "hover:bg-white/[0.04]",
       )}
     >
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onPreview}
+          className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+        >
+          <Volume2 className="size-3.5 shrink-0 text-success" />
+          <span className="truncate text-[13px] font-medium">{room.name}</span>
+        </button>
+        {joined ? (
+          <span className="grid h-6 w-12 shrink-0 place-items-center rounded-md bg-success/15 text-[11px] font-semibold text-success">
+            Joined
+          </span>
+        ) : (
+          <button
+            type="button"
+            onClick={onJoin}
+            className="grid h-6 w-12 shrink-0 place-items-center rounded-md bg-surface-2 text-[11px] font-semibold text-foreground/85 transition-colors hover:bg-success hover:text-ink"
+          >
+            Join
+          </button>
+        )}
+      </div>
       <button
         type="button"
         onClick={onPreview}
-        className="flex min-w-0 flex-1 items-center gap-2 text-left"
+        tabIndex={-1}
+        className="mt-1 flex w-full items-center gap-1.5 pl-5 text-left"
       >
-        <Volume2 className="size-4 shrink-0 text-success" />
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13px] font-semibold">{room.name}</span>
-          <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-            {room.live && (
-              <span className="flex shrink-0 items-center gap-0.5 rounded bg-danger-fill px-1 text-[9px] font-bold text-white">
-                <Radio className="size-2.5" />
-                LIVE
-              </span>
-            )}
-            <span className="truncate">{findServer(room.serverId)?.name}</span>
+        {room.live && (
+          <span className="shrink-0 rounded bg-danger-fill px-1 py-px text-[9px] leading-tight font-bold tracking-wide text-white">
+            LIVE
           </span>
+        )}
+        <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
+          {findServer(room.serverId)?.name}
         </span>
-        <AvatarStack ids={room.people} size={18} max={3} ringBg="var(--adept-ink)" />
+        <AvatarStack ids={room.people} size={18} max={3} />
       </button>
-      {joined ? (
-        <span className="text-[11px] font-semibold text-success">In</span>
-      ) : (
-        <button
-          type="button"
-          onClick={onJoin}
-          className="h-6 shrink-0 rounded-md bg-success/15 px-2 text-[11px] font-semibold text-success transition-colors hover:bg-success hover:text-ink"
-        >
-          Join
-        </button>
-      )}
     </div>
   );
 }
@@ -223,23 +238,26 @@ function DmRow({
           aria-current={active ? "page" : undefined}
           onClick={onClick}
           className={cn(
-            "flex h-12 w-full items-center gap-2.5 rounded-lg px-2 text-left transition-colors",
-            active ? "bg-accent" : "hover:bg-accent/60",
-            muted && "opacity-60",
+            "group/row flex min-h-[42px] w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors",
+            active ? "bg-surface-2 ring-1 ring-white/[0.06] ring-inset" : "hover:bg-white/[0.04]",
           )}
         >
           {c.kind === "group" ? (
             <ConversationAvatar c={c} size={32} />
           ) : (
-            <Avatar id={u.id} size={32} status ringBg="var(--adept-ink)" />
+            <span className={cn(u.status === "offline" && "opacity-60 group-hover/row:opacity-90")}>
+              <Avatar id={u.id} size={32} status />
+            </span>
           )}
           <span className="min-w-0 flex-1">
             <span
               className={cn(
-                "block truncate text-sm",
-                unread || active
+                "block truncate text-[13.5px] leading-snug",
+                active || (unread && !muted)
                   ? "font-semibold text-foreground"
-                  : "font-medium text-foreground/75",
+                  : muted
+                    ? "text-muted-foreground/60"
+                    : "text-foreground/70 group-hover/row:text-foreground/90",
               )}
             >
               <EmojiText text={c.title} size={16} />
@@ -259,7 +277,9 @@ function DmRow({
           ) : unread && !muted ? (
             <UnreadDot />
           ) : null}
-          {muted && <BellOff aria-label="Muted" className="size-3.5 text-muted-foreground" />}
+          {muted && (
+            <BellOff aria-label="Muted" className="size-3.5 shrink-0 text-muted-foreground/50" />
+          )}
         </button>
       </ContextMenuTrigger>
       <ContextMenuContent className="w-48">
@@ -334,7 +354,7 @@ export function HomeSidebar({
         <div
           role="tablist"
           aria-label="Home"
-          className="grid grid-cols-3 rounded-lg bg-surface-1 p-0.5"
+          className="flex items-center gap-0.5 rounded-lg bg-surface-1/80 p-0.5 ring-1 ring-white/[0.05] ring-inset"
         >
           {(["chats", "friends", "requests"] as const).map((t) => (
             <button
@@ -344,15 +364,17 @@ export function HomeSidebar({
               aria-selected={tab === t}
               onClick={() => setTab(t)}
               className={cn(
-                "h-7 rounded-md text-xs font-medium capitalize transition-colors",
+                "flex h-7 flex-auto items-center justify-center gap-1.5 rounded-md px-2 text-xs font-medium capitalize transition-colors",
                 tab === t
-                  ? "bg-surface-3 text-foreground shadow-sm"
+                  ? "bg-surface-2 text-foreground ring-1 ring-white/[0.07] ring-inset"
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
               {t}
               {t === "requests" && world.incoming.length > 0 && (
-                <span className="ml-1 text-brand-text">{world.incoming.length}</span>
+                <span className="grid h-4 min-w-4 place-items-center rounded-full bg-brand/20 px-1 text-[10px] leading-none font-semibold text-brand-text tabular-nums">
+                  {world.incoming.length}
+                </span>
               )}
             </button>
           ))}
@@ -364,7 +386,6 @@ export function HomeSidebar({
             {rooms.length > 0 && (
               <SectionLabel>
                 <span className="relative flex size-1.5">
-                  <span className="absolute inline-flex size-full animate-ping rounded-full bg-success opacity-60 motion-reduce:animate-none" />
                   <span className="relative inline-flex size-1.5 rounded-full bg-success" />
                 </span>
                 Live now
@@ -409,7 +430,7 @@ export function HomeSidebar({
                 </button>
               }
             >
-              Direct messages
+              Messages
             </SectionLabel>
             {rest.map((c) => (
               <DmRow
@@ -423,7 +444,7 @@ export function HomeSidebar({
             ))}
             {dms.length === 0 && (
               <div className="px-2 py-8 text-center text-sm text-muted-foreground">
-                <p>No chats yet. Find a friend to get started.</p>
+                <p>No chats yet. Add a friend to start talking.</p>
                 <button
                   type="button"
                   onClick={() => setTab("friends")}
@@ -442,13 +463,13 @@ export function HomeSidebar({
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                aria-label="Add a friend by username"
-                placeholder="Add a friend by username"
+                aria-label="Find people by name or @username"
+                placeholder="Find people by name or @username"
                 className="h-9 w-full rounded-lg border border-border bg-surface-1 pr-2 pl-8 text-sm outline-none focus-visible:ring-2 focus-visible:ring-brand"
               />
             </div>
             {query.trim().length > 1 && people.length === 0 && (
-              <p className="px-2 py-3 text-xs text-muted-foreground">Nobody has that username.</p>
+              <p className="px-2 py-3 text-xs text-muted-foreground">No matching people.</p>
             )}
             {people.map((p) => {
               const state = friendState(p.id);
@@ -499,13 +520,13 @@ export function HomeSidebar({
                   onOpen(ensureDm(f.id));
                 }}
                 className={cn(
-                  "flex h-12 w-full items-center gap-2.5 rounded-lg px-2 text-left hover:bg-accent/60",
-                  f.status === "offline" && "opacity-70",
+                  "flex min-h-[42px] w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left hover:bg-white/[0.04]",
+                  f.status === "offline" && "text-muted-foreground",
                 )}
               >
-                <Avatar id={f.id} size={32} status ringBg="var(--adept-ink)" />
+                <Avatar id={f.id} size={32} status />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium">{f.name}</span>
+                  <span className="block truncate text-[13.5px] font-medium">{f.name}</span>
                   {f.activity ? (
                     <ActivityLine a={f.activity} />
                   ) : (
@@ -572,6 +593,43 @@ export function HomeSidebar({
         )}
       </div>
     </>
+  );
+}
+
+function VoiceMember({ id, live }: { id: string; live: boolean }) {
+  const speaking = useSpeaker(world.speakingIn) === id && !isSilenced(id);
+  return (
+    <UserCallMenu id={id}>
+      <div className="flex h-7 items-center gap-2 rounded-md pr-2 pl-7 text-[13px] hover:bg-white/[0.04]">
+        <ProfileTrigger
+          id={id}
+          className={cn(
+            "flex min-w-0 flex-1 items-center gap-2 text-left transition-colors",
+            speaking
+              ? "font-medium text-foreground"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          <span
+            className={cn(
+              "inline-flex rounded-full transition-shadow duration-150",
+              speaking && "ring-[1.5px] ring-success ring-offset-[1.5px] ring-offset-ink",
+            )}
+          >
+            <Avatar id={id} size={20} />
+          </span>
+          <span className="truncate">{user(id).name}</span>
+        </ProfileTrigger>
+        {isSilenced(id) && (
+          <VolumeX aria-label="Muted for you" className="size-3.5 shrink-0 text-destructive/80" />
+        )}
+        {live && (
+          <span className="rounded bg-danger-fill px-1 py-px text-[9px] leading-tight font-bold text-white">
+            LIVE
+          </span>
+        )}
+      </div>
+    </UserCallMenu>
   );
 }
 
@@ -648,7 +706,7 @@ export function ServerSidebar({
               })
             }
           >
-            <LogOut /> {owner ? "Owners can't leave" : "Leave server"}
+            <LogOut /> {owner ? "Owners can't leave yet" : "Leave server"}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -733,28 +791,7 @@ export function ServerSidebar({
                         </button>
                       )}
                       {c.voice?.map((id) => (
-                        <UserCallMenu key={id} id={id}>
-                          <div className="flex h-7 items-center gap-2 pr-2 pl-8 text-[13px] text-muted-foreground">
-                            <ProfileTrigger
-                              id={id}
-                              className="flex min-w-0 flex-1 items-center gap-2 text-left hover:text-foreground"
-                            >
-                              <Avatar id={id} size={18} />
-                              <span className="truncate">{user(id).name}</span>
-                            </ProfileTrigger>
-                            {isSilenced(id) && (
-                              <VolumeX
-                                aria-label="Muted for you"
-                                className="size-3.5 shrink-0 text-destructive"
-                              />
-                            )}
-                            {c.live === id && (
-                              <span className="rounded bg-danger-fill px-1 text-[9px] font-bold text-white">
-                                LIVE
-                              </span>
-                            )}
-                          </div>
-                        </UserCallMenu>
+                        <VoiceMember key={id} id={id} live={c.live === id} />
                       ))}
                       {joined === c.id && (
                         <div className="flex h-7 items-center gap-2 pr-2 pl-8 text-[13px] text-foreground">

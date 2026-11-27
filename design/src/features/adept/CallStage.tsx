@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
-import { Avatar } from "@/components/Avatar";
+import { Avatar, toneFor } from "@/components/Avatar";
 import { cn } from "@/lib/utils";
 import { type LiveRoom, ME, server, user } from "@/mock/data";
 import { isSilenced, useWorld, world } from "@/mock/world";
@@ -92,7 +92,7 @@ function PersonTile({
             : "ring-1 ring-white/5",
         )}
         style={{
-          background: `radial-gradient(circle at 50% 45%, hsl(${u.hue} 40% 26%), hsl(${u.hue} 30% 11%) 75%)`,
+          background: `radial-gradient(circle at 50% 42%, color-mix(in srgb, ${toneFor(id).fg} 14%, var(--surface-1)), var(--adept-ink) 78%)`,
         }}
       >
         {camera ? (
@@ -121,7 +121,7 @@ function PersonTile({
           )}
           <span className="truncate">
             {u.name}
-            {id === ME ? " (you)" : ringing ? " · calling…" : ""}
+            {id === ME ? " (you)" : ringing ? " · ringing…" : ""}
           </span>
         </span>
       </button>
@@ -190,7 +190,7 @@ function ScreenTile({
               onClick={onControl}
               className="flex h-8 items-center gap-1.5 rounded-lg bg-black/60 px-3 text-xs font-semibold text-white hover:bg-black/80"
             >
-              <Gamepad2 className="size-4" /> Ask to control
+              <Gamepad2 className="size-4" /> Request control
             </button>
           )}
           <button
@@ -333,7 +333,7 @@ export function CallStage({
               <span role="status">Calling…</span>
             ) : (
               <>
-                <span className="text-success">Voice connected</span> ·{" "}
+                <span className="text-success">Connected</span> ·{" "}
                 <span className="tabular-nums">{elapsed}</span>
               </>
             )}

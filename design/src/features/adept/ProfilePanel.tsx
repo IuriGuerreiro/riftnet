@@ -5,19 +5,19 @@ import { Avatar } from "@/components/Avatar";
 import { ServerIcon } from "@/components/ServerIcon";
 import { openChat } from "@/features/profile/openChat";
 import { bannerStyle, UserMenu } from "@/features/profile/ProfileCard";
+import { cn } from "@/lib/utils";
 import { SERVERS, user } from "@/mock/data";
 
 import { ACTIVITY_ICON } from "./ActivityLine";
 
 const SHARED = [1, 2, 3, 4, 5].map((n) => `/media/photo-${n}.jpg`).concat("/media/flower.gif");
 
-const STATUS_LABEL = {
-  online: "Online",
-  idle: "Idle",
-  dnd: "Do not disturb",
-  invisible: "Offline",
-  offline: "Offline",
-};
+const ACTIVITY_TONE = {
+  playing: "border-brand/20 bg-brand/12 text-brand-text",
+  listening: "border-success/20 bg-success/12 text-success",
+  streaming: "border-destructive/20 bg-destructive/12 text-destructive",
+  voice: "border-success/20 bg-success/12 text-success",
+} as const;
 
 export function ProfilePanel({ id, onCall }: { id: string; onCall: () => void }) {
   const [invited, setInvited] = useState(false);
@@ -28,7 +28,7 @@ export function ProfilePanel({ id, onCall }: { id: string; onCall: () => void })
 
   return (
     <aside className="flex w-[280px] shrink-0 flex-col overflow-y-auto border-l border-border bg-surface-1">
-      <div className="h-24 shrink-0" style={bannerStyle(u)} />
+      <div className="h-20 shrink-0" style={bannerStyle(u, "var(--surface-1)")} />
       <div className="-mt-10 px-4">
         <Avatar
           id={id}
@@ -37,13 +37,21 @@ export function ProfilePanel({ id, onCall }: { id: string; onCall: () => void })
           ringBg="var(--surface-1)"
           className="rounded-full ring-[5px] ring-surface-1"
         />
-        <h3 className="mt-2 text-lg leading-tight font-semibold">{u.name}</h3>
-        <p className="text-sm text-muted-foreground">
-          @{u.handle} · {STATUS_LABEL[u.status]}
+        <h3 className="mt-2.5 text-[17px] leading-tight font-semibold tracking-[-0.01em]">
+          {u.name}
+        </h3>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          @{u.handle}
+          {u.pronouns ? ` · ${u.pronouns}` : ""}
         </p>
-        {u.pronouns && <p className="text-xs text-muted-foreground">{u.pronouns}</p>}
-        {u.customStatus && <p className="mt-2 text-sm">{u.customStatus}</p>}
-        {u.bio && <p className="mt-2 text-sm text-foreground/80">{u.bio}</p>}
+        {u.customStatus && (
+          <p className="mt-2.5 inline-block max-w-full truncate rounded-md border border-white/[0.06] bg-surface-2 px-2 py-1 text-xs text-foreground/90">
+            {u.customStatus}
+          </p>
+        )}
+        {u.bio && (
+          <p className="mt-2.5 text-[13px] leading-[1.45] text-muted-foreground">{u.bio}</p>
+        )}
         <div className="mt-3 grid grid-cols-[1fr_1fr_auto] gap-2">
           <button
             type="button"
@@ -58,7 +66,7 @@ export function ProfilePanel({ id, onCall }: { id: string; onCall: () => void })
             onClick={() => setInvited(true)}
             className="flex h-8 items-center justify-center gap-1.5 rounded-lg bg-surface-3 text-xs font-medium hover:bg-surface-4"
           >
-            <UserPlus className="size-3.5" /> {invited ? "Invited" : "Invite"}
+            <UserPlus className="size-3.5" /> {invited ? "Invite sent" : "Invite"}
           </button>
           <UserMenu id={id}>
             <button
@@ -85,19 +93,21 @@ export function ProfilePanel({ id, onCall }: { id: string; onCall: () => void })
           </p>
           <div className="mt-2 flex items-center gap-3">
             <span
-              className="grid size-12 shrink-0 place-items-center rounded-lg"
-              style={{
-                background: `linear-gradient(135deg, hsl(${u.hue + 120} 40% 35%), hsl(${u.hue + 160} 35% 20%))`,
-              }}
+              className={cn(
+                "grid size-10 shrink-0 place-items-center rounded-lg border",
+                ACTIVITY_TONE[u.activity.kind],
+              )}
             >
-              <Icon className="size-5 text-white/90" />
+              <Icon className="size-4" />
             </span>
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold">{u.activity.label}</p>
               {u.activity.detail && (
                 <p className="truncate text-xs text-muted-foreground">{u.activity.detail}</p>
               )}
-              {u.activity.since && <p className="text-xs text-success">for {u.activity.since}</p>}
+              {u.activity.since && (
+                <p className="text-xs text-muted-foreground">{u.activity.since}</p>
+              )}
             </div>
           </div>
           {u.activity.kind === "playing" && (
@@ -105,7 +115,7 @@ export function ProfilePanel({ id, onCall }: { id: string; onCall: () => void })
               type="button"
               disabled={asked}
               onClick={() => setAsked(true)}
-              className="mt-3 disabled:opacity-60 h-8 w-full rounded-lg bg-brand-fill text-xs font-semibold text-white hover:bg-brand-fill/85"
+              className="mt-2.5 h-7 w-full rounded-md border border-brand/25 bg-brand/12 text-xs font-medium text-brand-text hover:bg-brand/20 disabled:opacity-55"
             >
               {asked ? "Request sent" : "Ask to join"}
             </button>
@@ -115,7 +125,7 @@ export function ProfilePanel({ id, onCall }: { id: string; onCall: () => void })
 
       <section className="mt-5 px-4">
         <p className="pb-2 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
-          Mutual servers — {mutual.length}
+          Mutual servers · {mutual.length}
         </p>
         {mutual.map((s) => (
           <button
@@ -130,7 +140,7 @@ export function ProfilePanel({ id, onCall }: { id: string; onCall: () => void })
         ))}
       </section>
 
-      <section className="mt-5 px-4 pb-5">
+      <section className="mt-5 px-4 pb-8">
         <p className="pb-2 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
           Shared media
         </p>
@@ -141,7 +151,7 @@ export function ProfilePanel({ id, onCall }: { id: string; onCall: () => void })
               src={src}
               alt=""
               loading="lazy"
-              className="aspect-square w-full rounded-md border border-white/5 object-cover transition-opacity hover:opacity-80"
+              className="aspect-square w-full rounded-md border border-white/5 object-cover"
             />
           ))}
         </div>

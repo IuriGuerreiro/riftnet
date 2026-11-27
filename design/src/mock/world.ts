@@ -106,6 +106,7 @@ export const world = {
   closed: new Set<string>(),
   volumes: {} as Record<string, number>,
   silenced: new Set<string>(),
+  speakingIn: ["tom", "noor", "lea"],
   threads: {} as Record<string, Message[]>,
   pending: {} as Record<string, Message[]>,
   dialog: null as Dialog | null,
@@ -236,7 +237,7 @@ export function blockUser(id: string) {
         world.friends.delete(id);
         world.incoming = world.incoming.filter((x) => x !== id);
       });
-      toast(`${user(id).name} is blocked`);
+      toast(`Blocked ${user(id).name}`);
     },
   });
 }

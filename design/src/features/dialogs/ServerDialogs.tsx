@@ -58,10 +58,10 @@ export function AddServer({ code = "" }: { code?: string }) {
         }}
       >
         <Choice
-          label="What do you want to do?"
+          label="Add a server"
           value={mode}
           options={[
-            ["create", "Create new"],
+            ["create", "Create a server"],
             ["join", "Join with invite"],
           ]}
           onChange={(m) => {
@@ -90,9 +90,7 @@ export function AddServer({ code = "" }: { code?: string }) {
           </div>
         )}
         {mode === "join" && !value && (
-          <p className="text-xs text-muted-foreground">
-            Mock invites: cozy, speed. Try “expired” to see an error.
-          </p>
+          <p className="text-xs text-muted-foreground">Paste an invite link or code.</p>
         )}
         <Button disabled={mode === "create" ? !value.trim() : !found}>
           {mode === "create" ? "Create server" : "Join server"}
@@ -158,7 +156,7 @@ export function Invite({ id }: { id: string }) {
           <span className="min-w-0 flex-1 truncate">
             adept.gg/{i.code}
             <span className="block text-xs text-muted-foreground">
-              Expires in {i.expires} · {i.uses} uses
+              Expires in {i.expires} · {i.uses === 1 ? "1 use" : `${i.uses} uses`}
             </span>
           </span>
           <Button
@@ -298,7 +296,7 @@ export function ChannelForm({ id, channel }: { id: string; channel?: string }) {
         <Input
           value={category}
           aria-label="Category"
-          placeholder="Category"
+          placeholder="Category (for example Text)"
           onChange={(e) => setCategory(e.target.value)}
         />
         <div className={cn("flex gap-2", current ? "justify-between" : "justify-end")}>

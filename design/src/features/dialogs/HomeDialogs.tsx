@@ -50,7 +50,7 @@ function Picker({
       </div>
       <div className="mt-2 max-h-64 overflow-y-auto">
         {list.length === 0 && (
-          <p className="py-6 text-center text-sm text-muted-foreground">No friends found.</p>
+          <p className="py-6 text-center text-sm text-muted-foreground">No matching friends.</p>
         )}
         {list.map((id) => (
           <button
@@ -103,7 +103,7 @@ export function GroupMembers({ id }: { id?: string }) {
   return (
     <Modal
       title={group ? "Add people" : "New group"}
-      description={`Groups hold up to ${MAX_GROUP} people, you included.`}
+      description={`Up to ${MAX_GROUP} people, including you.`}
     >
       {!group && (
         <Input
@@ -197,7 +197,7 @@ const REASONS = ["Spam", "Harassment", "Harmful content", "Impersonation", "Some
 export function Report({ what }: { what: string }) {
   const [reason, setReason] = useState("");
   return (
-    <Modal title={`Report ${what}`} description="Tell us what's wrong. They won't be told.">
+    <Modal title={`Report ${what}`} description="Why are you reporting this? They won't know.">
       <div role="radiogroup" aria-label="Reason" className="grid gap-1">
         {REASONS.map((r) => (
           <button

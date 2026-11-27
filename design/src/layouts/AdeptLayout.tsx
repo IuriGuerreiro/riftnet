@@ -162,7 +162,7 @@ export function AdeptLayout() {
       openDialog({
         kind: "confirm",
         title: "Switch calls?",
-        body: "You leave the call you're in now.",
+        body: "You'll leave your current call.",
         action: "Switch",
         run: () => {
           setPreview(id);
@@ -237,7 +237,7 @@ export function AdeptLayout() {
       openDialog({
         kind: "confirm",
         title: "Switch calls?",
-        body: "You leave the call you're in now.",
+        body: "You'll leave your current call.",
         action: "Switch",
         run: take,
       });
@@ -407,7 +407,7 @@ export function AdeptLayout() {
                 setNav(true);
               }}
             >
-              <ServerIcon server={srv} size={40} className="rounded-xl" />
+              <ServerIcon server={srv} size={40} active={place === srv.id} />
             </RailTile>
           ))}
           <div className="mt-auto flex flex-col items-center gap-2 pt-3">
@@ -416,7 +416,7 @@ export function AdeptLayout() {
               aria-label="Add a server"
               onClick={() => openDialog({ kind: "addServer" })}
               title="Add a server"
-              className="grid size-10 place-items-center rounded-xl border border-dashed border-surface-4 text-muted-foreground transition-colors hover:border-brand hover:text-brand-text"
+              className="grid size-10 place-items-center rounded-[35%] bg-surface-1 text-muted-foreground ring-1 ring-white/[0.06] transition-all ring-inset hover:rounded-[28%] hover:bg-surface-2 hover:text-foreground"
             >
               <Plus className="size-4" />
             </button>
@@ -463,35 +463,37 @@ export function AdeptLayout() {
               onRead={(id) => markUnread(id, 0)}
             />
           )}
-          {joinedRoom && (
-            <CallCard
-              room={joinedRoom}
-              onLeave={leave}
-              muted={muted || deafened}
-              deafened={deafened}
-              sharing={sharing}
-              onMute={toggleMute}
-              onDeafen={toggleDeafen}
-              onShare={toggleShare}
-              inStage={inStage}
-              ringing={ringing}
-              onShowPreview={
-                call?.previewHidden && hasStream && !inStage
-                  ? () => patchCall({ previewHidden: false })
-                  : undefined
-              }
-              onOpen={() => setPreview(inStage ? null : joinedRoom.channelId)}
+          <div className="mx-2 mb-2 overflow-hidden rounded-xl bg-surface-1 ring-1 ring-white/[0.06] ring-inset">
+            {joinedRoom && (
+              <CallCard
+                room={joinedRoom}
+                onLeave={leave}
+                muted={muted || deafened}
+                deafened={deafened}
+                sharing={sharing}
+                onMute={toggleMute}
+                onDeafen={toggleDeafen}
+                onShare={toggleShare}
+                inStage={inStage}
+                ringing={ringing}
+                onShowPreview={
+                  call?.previewHidden && hasStream && !inStage
+                    ? () => patchCall({ previewHidden: false })
+                    : undefined
+                }
+                onOpen={() => setPreview(inStage ? null : joinedRoom.channelId)}
+              />
+            )}
+            <UserBar
+              embedded
+              audio={{
+                muted: muted || deafened,
+                deafened,
+                onMute: toggleMute,
+                onDeafen: toggleDeafen,
+              }}
             />
-          )}
-          <UserBar
-            ringBg="var(--adept-ink)"
-            audio={{
-              muted: muted || deafened,
-              deafened,
-              onMute: toggleMute,
-              onDeafen: toggleDeafen,
-            }}
-          />
+          </div>
         </aside>
 
         <main
@@ -560,7 +562,7 @@ export function AdeptLayout() {
             <ChatView
               key={activeId}
               conversationId={activeId}
-              lane="left"
+              lane="full"
               panelInDm
               previewId={previewRoom?.channelId ?? null}
               onCall={startCall}
@@ -626,7 +628,7 @@ export function AdeptLayout() {
         control={call?.control ?? null}
         onStop={() => {
           patchCall({ control: null });
-          toast("Remote control stopped");
+          toast("Share Play stopped");
         }}
         onGrant={(who) => patchCall({ control: { who, role: "host", active: true } })}
       />

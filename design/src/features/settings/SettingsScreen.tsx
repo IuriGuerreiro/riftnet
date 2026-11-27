@@ -41,7 +41,7 @@ const NAV = [
   [
     "You",
     [
-      ["My profile", UserRound],
+      ["Profile", UserRound],
       ["Account", KeyRound],
       ["Privacy", Lock],
     ],
@@ -59,20 +59,20 @@ const NAV = [
 ] as const;
 
 const INDEX: [string, string][] = [
-  ["Display name", "My profile"],
-  ["Pronouns", "My profile"],
-  ["Custom status", "My profile"],
-  ["Bio", "My profile"],
-  ["Avatar", "My profile"],
-  ["Banner", "My profile"],
-  ["Accent color", "My profile"],
+  ["Display name", "Profile"],
+  ["Pronouns", "Profile"],
+  ["Custom status", "Profile"],
+  ["Bio", "Profile"],
+  ["Avatar", "Profile"],
+  ["Banner", "Profile"],
+  ["Accent color", "Profile"],
   ["Email", "Account"],
   ["Password", "Account"],
-  ["Two-step sign in", "Account"],
+  ["Two-step login", "Account"],
   ["This device", "Account"],
   ["Delete account", "Account"],
   ["Who can message you", "Privacy"],
-  ["Show what I'm playing", "Privacy"],
+  ["Activity status", "Privacy"],
   ["Link previews", "Privacy"],
   ["Blocked people", "Privacy"],
   ["Messages", "Notifications"],
@@ -84,7 +84,7 @@ const INDEX: [string, string][] = [
   ["Camera", "Voice and video"],
   ["Microphone volume", "Voice and video"],
   ["Call volume", "Voice and video"],
-  ["When to send your voice", "Voice and video"],
+  ["Input mode", "Voice and video"],
   ["Noise removal", "Voice and video"],
   ["Remove echo", "Voice and video"],
   ["Even out volume", "Voice and video"],
@@ -196,7 +196,7 @@ function Profile() {
             Save
           </Button>
           <Button variant="ghost" onClick={() => setDraft({ ...me })}>
-            Reset
+            Discard
           </Button>
         </div>
       </div>
@@ -217,8 +217,8 @@ function Account() {
   const [next, setNext] = useState("");
   return (
     <>
-      <Group title="Sign in">
-        <Row label="Email" hint="We only use it to sign you in.">
+      <Group title="Login">
+        <Row label="Email" hint="Used to log in and reset your password.">
           <Input
             aria-label="Email"
             className="h-8 w-52"
@@ -264,11 +264,11 @@ function Account() {
         </Row>
         <SwitchRow
           k="twoFactor"
-          label="Two-step sign in"
-          hint="Ask for a code from your phone too."
+          label="Two-step login"
+          hint="Ask for a code from your authenticator app."
         />
       </Group>
-      <Group title="Signed-in devices">
+      <Group title="Active devices">
         <Row label="This device" hint="Active now" />
         {sessions.map((x) => (
           <Row key={x} label={x}>
@@ -308,11 +308,11 @@ function Account() {
 function Privacy() {
   return (
     <>
-      <Group title="Contact">
+      <Group title="Messages and activity">
         <SelectRow
           k="dmFrom"
           label="Who can message you"
-          hint="Friends can always message you."
+          hint="Friends can always message you, whatever you pick."
           options={[
             ["everyone", "Everyone"],
             ["mutual", "Friends of friends"],
@@ -321,13 +321,19 @@ function Privacy() {
         />
         <SwitchRow
           k="showActivity"
-          label="Show what I'm playing"
-          hint="Friends see the game or stream you're in."
+          label="Activity status"
+          hint="Show your current game, stream or music."
         />
-        <SwitchRow k="embeds" label="Link previews" hint="Show a card under links in chat." />
+        <SwitchRow
+          k="embeds"
+          label="Link previews"
+          hint="Load titles and images for links in chat."
+        />
       </Group>
       <Group title="Blocked people">
-        {world.blocked.size === 0 && <Row label="Nobody" hint="People you block show up here." />}
+        {world.blocked.size === 0 && (
+          <Row label="No blocked people" hint="People you block show up here." />
+        )}
         {[...world.blocked].map((id) => (
           <Row key={id} label={user(id).name} hint={`@${user(id).handle}`}>
             <Button size="sm" variant="secondary" onClick={() => unblock(id)}>
@@ -343,7 +349,7 @@ function Privacy() {
 function Notifications() {
   return (
     <>
-      <Group title="Tell me about">
+      <Group title="Alerts">
         <SwitchRow k="notifyMessages" label="Messages" hint="New DMs and mentions." />
         <SwitchRow k="notifyCalls" label="Incoming calls" hint="Ring when a friend calls you." />
         <SwitchRow
@@ -353,10 +359,16 @@ function Notifications() {
         />
       </Group>
       <Group title="Sound">
-        <SwitchRow k="sounds" label="Sounds" hint="Play a sound with each notification." />
+        <SwitchRow
+          k="sounds"
+          label="Notification sounds"
+          hint="Play a sound with each notification."
+        />
       </Group>
       <Group title="Muted chats">
-        {world.muted.size === 0 && <Row label="None" hint="Chats you mute show up here." />}
+        {world.muted.size === 0 && (
+          <Row label="No muted chats" hint="Chats you mute show up here." />
+        )}
         {[...world.muted].map((id) => (
           <Row key={id} label={server(id)?.name ?? conversation(id).title}>
             <Button
@@ -436,7 +448,9 @@ function MicTest() {
           />
         </div>
       </div>
-      {level > 0.9 && <p className="mt-1 text-xs text-warning">Too loud. Lower the volume.</p>}
+      {level > 0.9 && (
+        <p className="mt-1 text-xs text-warning">Too loud. Lower your microphone volume.</p>
+      )}
       {error && (
         <p role="alert" className="mt-1 text-xs text-destructive">
           {error}
@@ -517,7 +531,7 @@ function Voice() {
         <SelectRow
           k="input"
           label="Microphone"
-          hint="What people hear you through."
+          hint="The mic used in calls."
           options={list("Default microphone", "USB headset", "Webcam mic")}
         />
         <SelectRow
@@ -548,11 +562,11 @@ function Voice() {
       <Group title="Your voice">
         <SelectRow
           k="inputMode"
-          label="When to send your voice"
-          hint="Choose how your mic opens in calls."
+          label="Input mode"
+          hint="When your mic sends sound in calls."
           options={[
-            ["open", "Always on"],
-            ["voice", "When I speak"],
+            ["open", "Open mic"],
+            ["voice", "Voice activity"],
             ["push", "Push to talk"],
           ]}
         />
@@ -560,8 +574,8 @@ function Voice() {
           <SliderRow
             k="sensitivity"
             max={100}
-            label="Sensitivity"
-            hint="Lower picks up quieter sounds."
+            label="Voice threshold"
+            hint="Raise it to ignore background noise."
           />
         )}
         {s.inputMode === "push" && (
@@ -579,7 +593,11 @@ function Voice() {
             ["enhanced", "Enhanced"],
           ]}
         />
-        <SwitchRow k="echo" label="Remove echo" hint="Turn on if you use speakers." />
+        <SwitchRow
+          k="echo"
+          label="Remove echo"
+          hint="Stops your speakers from looping into your mic."
+        />
         <SwitchRow k="gain" label="Even out volume" hint="Keeps your voice at a steady level." />
       </Group>
     </>
@@ -589,7 +607,7 @@ function Voice() {
 function Appearance() {
   const set = useEmojiSet();
   return (
-    <Group title="Chat">
+    <Group title="Display">
       <SelectRow
         k="density"
         label="Message spacing"
@@ -625,7 +643,7 @@ export const SHORTCUTS = [
   ["Deafen", "Ctrl Shift D"],
   ["Previous or next chat", "Alt ↑ / ↓"],
   ["Next unread chat", "Alt Shift ↓"],
-  ["Stop remote control", "Ctrl Shift F12"],
+  ["Stop Share Play", "Ctrl Shift F12"],
   ["Move between messages", "↑ / ↓"],
   ["Edit last message", "↑ in an empty box"],
 ] as const;
@@ -648,7 +666,7 @@ export function ShortcutList() {
 function About() {
   return (
     <Group>
-      <Row label="Updates" hint="You have Adept 0.1.0.">
+      <Row label="Updates" hint="Version 0.1.0">
         <Button
           size="sm"
           variant="secondary"
@@ -658,7 +676,7 @@ function About() {
             })
           }
         >
-          Check now
+          Check for updates
         </Button>
       </Row>
     </Group>
@@ -666,9 +684,7 @@ function About() {
 }
 
 function tabFor(tab?: string) {
-  return INDEX.some(([, t]) => t === tab) || tab === "Shortcuts"
-    ? (tab ?? "My profile")
-    : "My profile";
+  return INDEX.some(([, t]) => t === tab) || tab === "Shortcuts" ? (tab ?? "Profile") : "Profile";
 }
 
 export function SettingsScreen({ tab }: { tab?: string }) {
@@ -791,7 +807,7 @@ export function SettingsScreen({ tab }: { tab?: string }) {
             <div className="flex items-center gap-2 pt-2">
               <button
                 type="button"
-                onClick={() => open("My profile")}
+                onClick={() => open("Profile")}
                 className={cn(item, "h-10 min-w-0 flex-1 hover:bg-surface-1")}
               >
                 <Avatar id={ME} size={26} />
@@ -827,7 +843,7 @@ export function SettingsScreen({ tab }: { tab?: string }) {
                 type="button"
                 onClick={() => {
                   resetSettings();
-                  toast("Settings are back to default");
+                  toast("Settings reset to defaults");
                 }}
                 className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium hover:bg-surface-2"
               >
@@ -843,7 +859,7 @@ export function SettingsScreen({ tab }: { tab?: string }) {
             </header>
             <div ref={body} className="min-h-0 flex-1 overflow-y-auto px-4 py-6 md:px-8">
               <div className="mx-auto max-w-3xl">
-                {current === "My profile" && <Profile />}
+                {current === "Profile" && <Profile />}
                 {current === "Account" && <Account />}
                 {current === "Privacy" && <Privacy />}
                 {current === "Notifications" && <Notifications />}

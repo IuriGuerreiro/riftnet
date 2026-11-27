@@ -46,11 +46,11 @@ export function MessageEditor({
         className="max-h-64 w-full resize-none rounded-lg border border-brand/50 bg-surface-2 px-3 py-2 text-[15px] leading-relaxed outline-none focus:ring-2 focus:ring-brand/30"
       />
       <p className="mt-1 text-xs text-muted-foreground">
-        escape to{" "}
+        Esc to{" "}
         <button type="button" onClick={onCancel} className="text-brand-text hover:underline">
           cancel
         </button>{" "}
-        · enter to{" "}
+        · Enter to{" "}
         <button
           type="button"
           onClick={() => onSave(text.trim())}

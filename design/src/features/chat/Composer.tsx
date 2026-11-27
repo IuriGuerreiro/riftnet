@@ -36,7 +36,7 @@ function TypingLine({ names }: { names: string[] }) {
           </span>
           <span>
             <b className="font-semibold text-foreground/85">
-              {names.length > 2 ? "Several people" : names.join(" and ")}
+              {names.length > 2 ? `${names.length} people` : names.join(" and ")}
             </b>{" "}
             {names.length === 1 ? "is" : "are"} typing…
           </span>
@@ -288,7 +288,7 @@ export function Composer({
             over > 0 ? "text-destructive" : "text-muted-foreground",
           )}
         >
-          {over > 0 ? `${over} characters too long` : `${-over} left`}
+          {over > 0 ? `${over} over the limit` : `${-over} left`}
         </p>
       )}
       <TypingLine names={typing} />
@@ -328,8 +328,8 @@ export function Composer({
           />
           <button
             type="button"
-            aria-label="Upload a file"
-            title="Upload images, videos, GIFs or files"
+            aria-label="Attach files"
+            title="Attach files"
             onClick={() => fileInput.current?.click()}
             className="grid size-9 shrink-0 place-items-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground"
           >

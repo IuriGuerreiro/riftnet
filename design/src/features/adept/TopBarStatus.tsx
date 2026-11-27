@@ -23,7 +23,7 @@ const NOTES: Note[] = [
     id: "n1",
     kind: "mention",
     who: "tom",
-    where: "#general · Night Owls",
+    where: "#general · Late Shift",
     text: "@iuri you in?",
     at: "2m",
     open: "owls-general",
@@ -41,7 +41,7 @@ const NOTES: Note[] = [
     id: "n3",
     kind: "mention",
     who: "ben",
-    where: "#scrims · Hollow Drift League",
+    where: "#scrims · Ridgeline Scrims",
     text: "@iuri can you sub in at 9?",
     at: "31m",
     open: "drift-scrims",
@@ -185,9 +185,7 @@ export function TopBarStatus({
               ))}
             </div>
             {shown.length === 0 && (
-              <p className="py-8 text-center text-sm text-muted-foreground">
-                You&apos;re all caught up.
-              </p>
+              <p className="py-8 text-center text-sm text-muted-foreground">No notifications.</p>
             )}
             {shown.map((n) => {
               const isUnread = !read.has(n.id);

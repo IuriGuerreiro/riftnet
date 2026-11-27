@@ -84,11 +84,11 @@ export function UsernameScreen() {
           error={error}
           hint={
             status === "free" ? (
-              <span className="text-success">Nice, it's yours.</span>
+              <span className="text-success">Available</span>
             ) : status === "checking" ? (
               "Checking availability…"
             ) : (
-              "3 to 32 characters: letters, numbers, _ and ."
+              "3 to 32 characters: letters, numbers, underscores or dots."
             )
           }
         >

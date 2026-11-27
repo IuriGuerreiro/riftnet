@@ -173,7 +173,11 @@ function Roles({ s }: { s: Server }) {
           Create role
         </Button>
       </div>
-      {!role && <p className="text-sm text-muted-foreground">Roles give people permissions.</p>}
+      {!role && (
+        <p className="text-sm text-muted-foreground">
+          No roles yet. Create one to give people permissions.
+        </p>
+      )}
       {role && (
         <div key={role.id}>
           <div className="flex gap-2">
@@ -232,7 +236,9 @@ export function ServerSettings({ id, tab = "Overview" }: { id: string; tab?: str
   if (!isOwner(s))
     return (
       <Modal title={s.name}>
-        <p className="text-sm text-muted-foreground">Only the owner can change this server.</p>
+        <p className="text-sm text-muted-foreground">
+          Only the server owner can change these settings.
+        </p>
       </Modal>
     );
   return (

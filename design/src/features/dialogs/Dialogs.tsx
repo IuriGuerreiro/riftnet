@@ -15,7 +15,7 @@ import { AddServer, ChannelForm, Discover, Invite } from "./ServerDialogs";
 const SOURCES = [
   ["Screen 1", "photo-1.jpg"],
   ["Screen 2", "photo-2.jpg"],
-  ["Hollow Drift", "photo-4.jpg"],
+  ["Ridgeline", "photo-4.jpg"],
   ["Browser", "photo-3.jpg"],
 ] as const;
 
@@ -50,7 +50,7 @@ function SharePicker({ onShare }: { onShare: () => void }) {
       <Toggle label="Share sound" on={o.audio} onChange={(audio) => set({ audio })} />
       <Toggle
         label="Allow Share Play"
-        hint="People can ask to control this screen. You approve each one."
+        hint="Viewers can request control. You approve each request."
         on={o.control}
         onChange={(control) => set({ control })}
       />
@@ -63,7 +63,7 @@ function SharePicker({ onShare }: { onShare: () => void }) {
           onShare();
         }}
       >
-        Go live
+        Start sharing
       </Button>
     </Modal>
   );

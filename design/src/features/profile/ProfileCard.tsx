@@ -27,11 +27,14 @@ import {
 
 import { openChat } from "./openChat";
 
-export function bannerStyle(u: User) {
-  if (u.banner) return { background: `center / cover url(${u.banner})` };
+export function bannerStyle(u: User, fadeTo = "var(--popover)") {
+  if (u.banner)
+    return {
+      background: `linear-gradient(180deg, transparent 55%, ${fadeTo} 100%), center / cover url(${u.banner})`,
+    };
+  const tint = u.accent ?? `hsl(${u.hue} 42% 36%)`;
   return {
-    background:
-      u.accent ?? `linear-gradient(135deg, hsl(${u.hue} 45% 30%), hsl(${u.hue + 40} 40% 18%))`,
+    background: `linear-gradient(180deg, color-mix(in srgb, ${tint} 45%, ${fadeTo}) 0%, ${fadeTo} 100%)`,
   };
 }
 
@@ -77,13 +80,21 @@ export function ProfileBody({ u, onDone }: { u: User; onDone?: () => void }) {
           ringBg="var(--popover)"
           className="rounded-full ring-4 ring-popover"
         />
-        <h3 className="mt-1 text-base font-semibold">{u.name}</h3>
+        <h3 className="mt-1.5 text-base leading-tight font-semibold">{u.name}</h3>
         <p className="text-xs text-muted-foreground">
           @{u.handle}
           {u.pronouns ? ` · ${u.pronouns}` : ""}
         </p>
-        {u.customStatus && <p className="mt-2 text-sm">{u.customStatus}</p>}
-        {u.bio && <p className="mt-2 text-sm whitespace-pre-wrap text-foreground/80">{u.bio}</p>}
+        {u.customStatus && (
+          <p className="mt-2.5 inline-block max-w-full truncate rounded-md border border-white/[0.06] bg-surface-2 px-2 py-1 text-xs text-foreground/90">
+            {u.customStatus}
+          </p>
+        )}
+        {u.bio && (
+          <p className="mt-2.5 text-[13px] leading-[1.45] whitespace-pre-wrap text-muted-foreground">
+            {u.bio}
+          </p>
+        )}
         {u.activity && (
           <div className="mt-2">
             <ActivityLine a={u.activity} />
@@ -109,7 +120,11 @@ export function ProfileBody({ u, onDone }: { u: User; onDone?: () => void }) {
                 onClick={() => (state === "outgoing" ? cancelRequest(u.id) : addFriend(u.id))}
               >
                 <UserPlus />
-                {state === "outgoing" ? "Cancel" : state === "incoming" ? "Accept" : "Add"}
+                {state === "outgoing"
+                  ? "Cancel request"
+                  : state === "incoming"
+                    ? "Accept"
+                    : "Add friend"}
               </Button>
             )}
             <UserMenu id={u.id}>
@@ -126,10 +141,12 @@ export function ProfileBody({ u, onDone }: { u: User; onDone?: () => void }) {
 
 export function ProfileTrigger({
   id,
+  side = "right",
   className,
   children,
 }: {
   id: string;
+  side?: "left" | "right" | "top" | "bottom";
   className?: string;
   children: ReactNode;
 }) {
@@ -140,7 +157,12 @@ export function ProfileTrigger({
           {children}
         </button>
       </PopoverTrigger>
-      <PopoverContent side="right" align="start" className="w-72 overflow-hidden rounded-xl p-0">
+      <PopoverContent
+        side={side}
+        align="start"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        className="w-72 overflow-hidden rounded-xl p-0"
+      >
         <ProfileBody u={user(id)} />
       </PopoverContent>
     </Popover>

@@ -40,7 +40,7 @@ export function RegisterScreen() {
   return (
     <AuthShell
       title="Create your account"
-      subtitle="It takes less than a minute."
+      subtitle="Start with your email and a password."
       footer={
         <>
           Already have an account?{" "}

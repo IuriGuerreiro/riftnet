@@ -1,7 +1,10 @@
 import { z } from "zod";
 
 const email = z.email("Enter a valid email address").trim();
-const password = z.string().min(8, "Must be at least 8 characters").max(128);
+const password = z
+  .string()
+  .min(8, "Must be at least 8 characters")
+  .max(128, "Use 128 characters or fewer");
 
 export const loginSchema = z.object({ email, password: z.string().min(1, "Enter your password") });
 export type LoginForm = z.infer<typeof loginSchema>;
