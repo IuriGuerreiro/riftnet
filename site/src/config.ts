@@ -1,5 +1,5 @@
 // Every public URL the site links to. Change them here only.
-const GITHUB_URL = "https://github.com/IuriGuerreiro/adept";
+const GITHUB_URL = "https://github.com/IuriGuerreiro/riftnet";
 
 export const site = {
   SITE_URL: "https://riftnet.app",
