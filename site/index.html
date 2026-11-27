@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Riftnet · Voice, video and 60fps screen share</title>
+    <title>Riftnet · Voice calls and 60fps screen share</title>
     <meta
       name="description"
-      content="Riftnet is a free, open-source chat app for gamers, coaches and squads: voice and video calls, 60fps screen share, and Share Play remote control."
+      content="Riftnet is a free, open-source chat app for gamers and their squads: voice calls, 60fps screen share, Share Play remote control, servers and DMs."
     />
     <meta name="theme-color" content="#0F0A1F" />
     <link rel="canonical" href="{{SITE_URL}}/" />
@@ -16,7 +16,7 @@
     <meta property="og:title" content="Riftnet" />
     <meta
       property="og:description"
-      content="Play, coach and share your screen at 60fps. Free and open source."
+      content="Talk, play and share your screen at 60fps. Free and open source."
     />
     <meta property="og:url" content="{{SITE_URL}}/" />
     <script type="module" src="/src/main.ts"></script>
@@ -32,50 +32,40 @@
         </a>
         <ul class="nav__links">
           <li><a href="#features">Features</a></li>
+          <li><a href="#coming-soon">Coming soon</a></li>
           <li><a href="#open-source">Open source</a></li>
-          <li><a href="{{GITHUB_URL}}" rel="noopener">GitHub</a></li>
         </ul>
-        <a class="nav__cta" href="#download">Download</a>
+        <a class="nav__cta" href="{{GITHUB_URL}}" rel="noopener">GitHub</a>
       </nav>
     </header>
 
     <main id="main">
       <!-- Hero -->
-      <section class="hero" id="download" aria-labelledby="hero-title">
+      <section class="hero" aria-labelledby="hero-title">
         <div class="hero__copy">
-          <h1 class="split" id="hero-title" aria-label="Play, coach, and share at 60fps.">
+          <h1 class="split" id="hero-title" aria-label="Talk, play, and share at 60fps.">
             <span class="split__half split__top" aria-hidden="true"
-              >Play, coach,<br />and share<br />at 60fps.</span
+              >Talk, play,<br />and share<br />at 60fps.</span
             >
             <span class="split__half split__bottom" aria-hidden="true"
-              >Play, coach,<br />and share<br />at 60fps.</span
+              >Talk, play,<br />and share<br />at 60fps.</span
             >
           </h1>
 
           <p class="lede">
-            Riftnet is voice, video and screen sharing for gamers, coaches and squads. It stays
-            light on your PC, costs nothing, and the code is public.
+            Riftnet is voice calls, chat and 60fps screen sharing for gamers and their squads. It's
+            free, and the code is public.
           </p>
 
-          <div class="actions" data-actions>
-            <a class="btn btn--primary" href="{{DOWNLOAD_URL}}" data-download>
-              <span>Download for Windows</span>
-              <span class="btn__icon" aria-hidden="true">
-                <svg viewBox="0 0 16 16">
-                  <path d="M8 2.5v9m0 0L4.5 8M8 11.5 11.5 8M3 13.5h10" />
-                </svg>
-              </span>
-            </a>
-            <a class="btn btn--ghost" href="{{APP_URL}}" data-webapp>
-              <span>Open in browser</span>
+          <div class="actions">
+            <a class="btn btn--primary" href="{{GITHUB_URL}}" rel="noopener">
+              <span>View on GitHub</span>
               <span class="btn__icon" aria-hidden="true">
                 <svg viewBox="0 0 16 16"><path d="M5 11 11 5m0 0H6m5 0v5" /></svg>
               </span>
             </a>
           </div>
-          <p class="fineprint mono" data-platform-note>
-            Windows 10 and 11, 64-bit. Linux is coming later.
-          </p>
+          <p class="fineprint mono">Riftnet is in beta. Downloads open at launch.</p>
         </div>
 
         <div class="hero__art" aria-hidden="true">
@@ -234,7 +224,7 @@
       <!-- Features -->
       <section class="features" id="features" aria-labelledby="features-title">
         <header class="section-head reveal">
-          <h2 id="features-title">Everything a squad needs. Nothing it doesn't.</h2>
+          <h2 id="features-title">Here's what works today.</h2>
         </header>
 
         <div class="bento">
@@ -244,8 +234,8 @@
               <div class="card-copy">
                 <h3>Screen share that keeps up</h3>
                 <p>
-                  Share your game at up to 1080p and 60 frames a second, so your coach sees every
-                  frame, not a smeared replay.
+                  Share your game at up to 1080p and 60 frames a second, so whoever's watching sees
+                  every frame, not a smeared replay.
                 </p>
               </div>
               <div class="stream" aria-hidden="true">
@@ -280,10 +270,8 @@
                 loading="lazy"
               />
               <div class="card-copy">
-                <h3>Voice and video, one click in</h3>
-                <p>
-                  Join a voice channel and you're talking. Turn your camera on when you want to.
-                </p>
+                <h3>Voice calls in DMs and groups</h3>
+                <p>Call a friend or a whole group DM and keep talking while you play.</p>
               </div>
               <ul class="voice" aria-hidden="true">
                 <li class="voice__row is-speaking"><span class="av av--a">M</span>Mia</li>
@@ -305,7 +293,8 @@
                 <h3>Share Play: hand over the mouse</h3>
                 <p>
                   Ask to control a friend's shared screen. They allow it, you drive their keyboard
-                  and mouse. Either of you can stop it at any time.
+                  and mouse. Either of you can stop it at any time. The host shares a whole screen
+                  from the desktop app.
                 </p>
               </div>
               <div class="request" aria-hidden="true">
@@ -322,7 +311,7 @@
             <div class="core">
               <div class="card-copy">
                 <h3>Servers, channels and DMs</h3>
-                <p>Text chat, replies, reactions and file sharing. The usual, without the bloat.</p>
+                <p>Text channels, DMs and group DMs, with replies, reactions and file sharing.</p>
               </div>
               <div class="chat" aria-hidden="true">
                 <ul class="chat__channels mono">
@@ -343,6 +332,30 @@
             </div>
           </article>
         </div>
+      </section>
+
+      <!-- Coming soon -->
+      <section class="soon" id="coming-soon" aria-labelledby="soon-title">
+        <header class="section-head reveal">
+          <h2 id="soon-title">Coming soon</h2>
+        </header>
+        <ul class="soon__list">
+          <li class="soon__item reveal">
+            <span class="soon__tag mono">Soon</span>
+            <h3>Coaching</h3>
+            <p>Tools for coaches and the players they train.</p>
+          </li>
+          <li class="soon__item reveal">
+            <span class="soon__tag mono">Soon</span>
+            <h3>Camera video</h3>
+            <p>Turn your camera on in calls.</p>
+          </li>
+          <li class="soon__item reveal">
+            <span class="soon__tag mono">Soon</span>
+            <h3>Linux desktop app</h3>
+            <p>A desktop build for Linux, next to the Windows one.</p>
+          </li>
+        </ul>
       </section>
 
       <!-- Open source -->
@@ -370,22 +383,14 @@
         </div>
       </section>
 
-      <!-- Final call to action -->
+      <!-- Closing -->
       <section class="final" aria-labelledby="final-title">
         <div class="final__inner reveal">
-          <h2 id="final-title">Get your squad in.</h2>
-          <p>Free on Windows and in your browser.</p>
-          <div class="actions actions--center" data-actions>
-            <a class="btn btn--ink" href="{{DOWNLOAD_URL}}" data-download>
-              <span>Download for Windows</span>
-              <span class="btn__icon" aria-hidden="true">
-                <svg viewBox="0 0 16 16">
-                  <path d="M8 2.5v9m0 0L4.5 8M8 11.5 11.5 8M3 13.5h10" />
-                </svg>
-              </span>
-            </a>
-            <a class="btn btn--line" href="{{APP_URL}}" data-webapp>
-              <span>Open in browser</span>
+          <h2 id="final-title">Launching soon.</h2>
+          <p>Riftnet is in beta. Follow along on GitHub.</p>
+          <div class="actions actions--center">
+            <a class="btn btn--ink" href="{{GITHUB_URL}}" rel="noopener">
+              <span>View on GitHub</span>
               <span class="btn__icon" aria-hidden="true">
                 <svg viewBox="0 0 16 16"><path d="M5 11 11 5m0 0H6m5 0v5" /></svg>
               </span>
@@ -401,8 +406,8 @@
         <span class="wordmark">Riftnet</span>
       </a>
       <ul class="footer__links">
-        <li><a href="{{DOWNLOAD_URL}}">Download</a></li>
-        <li><a href="{{APP_URL}}">Web app</a></li>
+        <li><a href="#features">Features</a></li>
+        <li><a href="#coming-soon">Coming soon</a></li>
         <li><a href="{{GITHUB_URL}}" rel="noopener">GitHub</a></li>
       </ul>
       <p class="mono footer__note">AGPL-3.0 · Riftnet contributors</p>

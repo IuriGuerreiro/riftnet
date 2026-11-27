@@ -5,26 +5,6 @@ import "./styles.css";
 
 document.documentElement.classList.add("js");
 
-function isWindows(): boolean {
-  const uaData = (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData;
-  return /win/i.test(uaData?.platform ?? "") || /Windows/i.test(navigator.userAgent);
-}
-
-if (!isWindows()) {
-  for (const group of document.querySelectorAll<HTMLElement>("[data-actions]")) {
-    const web = group.querySelector<HTMLElement>("[data-webapp]");
-    const download = group.querySelector<HTMLElement>("[data-download]");
-    if (!web || !download) continue;
-    const webClass = web.className;
-    web.className = download.className;
-    download.className = webClass;
-    group.prepend(web);
-  }
-  const note = document.querySelector("[data-platform-note]");
-  if (note)
-    note.textContent = "The desktop app is Windows only for now. The web app runs anywhere.";
-}
-
 const loopi = document.querySelector<SVGSVGElement>("[data-loopi]");
 const look = loopi?.querySelector<SVGGElement>("[data-loopi-look]");
 const motionOk = matchMedia("(prefers-reduced-motion: no-preference)").matches;
