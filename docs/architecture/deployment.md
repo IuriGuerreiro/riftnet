@@ -157,13 +157,15 @@ For an end-to-end test, run the workflow from a public fork with its own signing
 In Cloudflare: **Workers & Pages → Create → Import a repository**, pick `IuriGuerreiro/riftnet`, then set:
 
 | Setting | Value |
-|---|---|
+| --- | --- |
 | Project name | `riftnet-site` (must match `name` in `wrangler.jsonc`) |
 | Production branch | `prod` |
-| Root directory | `site` |
-| Build command | `pnpm install --frozen-lockfile && pnpm build` |
-| Deploy command | `npx wrangler deploy` |
+| Root directory | leave empty (repository root) |
+| Build command | `pnpm install --frozen-lockfile --filter site && pnpm --filter site build` |
+| Deploy command | `pnpm --filter site exec wrangler deploy` |
 | Build watch paths | include `site/*` and `pnpm-lock.yaml` |
+
+Run everything from the repository root with `--filter site`. Running `pnpm build` at the root builds every package, and `wrangler deploy` refuses to run in a workspace root.
 
 Turn off non-production branch builds, or keep them for preview URLs.
 
