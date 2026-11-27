@@ -18,7 +18,6 @@ concurrency:
   group: desktop-release
 
 env:
-  DESKTOP_RELEASE_REPO: ${{ vars.DESKTOP_RELEASE_REPO }}
   RELEASE_NOTES: ${{ inputs.notes }}
 
 jobs:
@@ -104,6 +103,8 @@ jobs:
     needs: build
     environment: desktop-release
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write # create the draft release in this repository
     steps:
       - uses: actions/checkout@v4
         with:
@@ -129,16 +130,16 @@ jobs:
         if: inputs.create_draft
         working-directory: release-assets
         env:
-          GH_TOKEN: ${{ secrets.DESKTOP_RELEASE_TOKEN }}
-          GH_REPO: ${{ vars.DESKTOP_RELEASE_REPO }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           if [[ "$GITHUB_REF" != refs/heads/prod ]]; then
             echo "Dispatch draft releases from the prod branch." >&2
             exit 1
           fi
-          if [[ "${GH_REPO,,}" == "${GITHUB_REPOSITORY,,}" ]] ||
-             [[ "$(gh repo view --json visibility --jq .visibility)" != PUBLIC ]]; then
-            echo "DESKTOP_RELEASE_REPO must be a separate public repository." >&2
+          # Installed apps download updates anonymously, so the repository must be public.
+          if [[ "$(gh repo view --json visibility --jq .visibility)" != PUBLIC ]]; then
+            echo "Make this repository public before publishing desktop releases." >&2
             exit 1
           fi
 

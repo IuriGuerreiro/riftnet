@@ -38,6 +38,7 @@ export default tseslint.config(
           "./client/tsconfig.app.json",
           "./client/tsconfig.node.json",
           "./tools/mock/tsconfig.json",
+          "./site/tsconfig.json",
         ],
         tsconfigRootDir: import.meta.dirname,
       },
