@@ -4,7 +4,7 @@ const config = JSON.parse(
   readFileSync(new URL("../../client/src-tauri/tauri.conf.json", import.meta.url), "utf8"),
 );
 const { version } = config;
-const { DESKTOP_RELEASE_REPO: repo, TAURI_UPDATER_PUBLIC_KEY: pubkey, RELEASE_NOTES } = process.env;
+const { GITHUB_REPOSITORY: repo, TAURI_UPDATER_PUBLIC_KEY: pubkey, RELEASE_NOTES } = process.env;
 const assetNames = {
   "windows-x86_64": "adept-windows-x64-setup.exe",
 };
@@ -13,7 +13,7 @@ if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version)) {
   throw new Error("The Tauri version must be a stable major.minor.patch version.");
 }
 if (!/^[\w.-]+\/[\w.-]+$/.test(repo ?? "")) {
-  throw new Error("Set DESKTOP_RELEASE_REPO to the distribution repository (owner/name).");
+  throw new Error("Set GITHUB_REPOSITORY to the release repository (owner/name).");
 }
 
 const releases = `https://github.com/${repo}/releases`;

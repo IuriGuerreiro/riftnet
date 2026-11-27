@@ -119,14 +119,13 @@ Media `.env`: `MEDIA_IP` = VPS public IP, `MEDIA_PORT` = the UDP port,
 
 ## 5. Release the desktop app
 
-The Release app workflow builds a Windows x64 installer. Linux builds are paused. The installed app checks GitHub Releases and asks the user before it installs a new version.
+The Release app workflow builds a Windows x64 installer and publishes it to this repository's GitHub Releases. Linux builds are paused. The installed app checks GitHub Releases and asks the user before it installs a new version. Installed apps download anonymously, so the repository must be public before you publish.
 
 ### Set up release signing
 
-1. Create a public distribution repository if anyone with the app may download the builds. Give a fine-grained GitHub token `Contents: Read and write` access to that repository.
-2. Run `pnpm --filter client tauri signer generate --write-keys /secure/path/adept.key`. Back up the private key and password. Installed apps use the matching public key to verify future updates.
-3. In the source repository, set Actions variables `DESKTOP_RELEASE_REPO` to the distribution repository's `owner/name` and `TAURI_UPDATER_PUBLIC_KEY` to the contents of `adept.key.pub`. The workflow also uses `PROD_API_HTTP` and `PROD_API_WS`.
-4. Set `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, and `DESKTOP_RELEASE_TOKEN` as secrets in the `desktop-release` Actions environment. Set the environment's deployment branches to the refs authorized to sign builds.
+1. Run `pnpm --filter client tauri signer generate --write-keys /secure/path/adept.key`. Back up the private key and password. Installed apps use the matching public key to verify future updates.
+2. Set the Actions variable `TAURI_UPDATER_PUBLIC_KEY` to the contents of `adept.key.pub`. The workflow also uses `PROD_API_HTTP` and `PROD_API_WS`.
+3. Set `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` as secrets in the `desktop-release` Actions environment. Set the environment's deployment branches to the refs authorized to sign builds.
 
 ### Build and publish
 
@@ -135,7 +134,19 @@ The Release app workflow builds a Windows x64 installer. Linux builds are paused
 3. Verify the draft includes the installer, its signature, and `latest.json`. Publish it as the latest stable release when verification passes.
 4. For the first rollout, share the installer with existing users for a manual upgrade. Later releases appear in **Check for updates**.
 
-Use a separate release repository and signing key for an end-to-end test. Install the lower version, then expose the higher version on the test feed. Verify **Later**, the install and restart, settings persistence, and rejection of a mismatched signature. If a published build needs to be reverted, ship the previous working code with a higher version.
+### Old update feed (`adept-releases`)
+
+v0.1.0 was published to the separate repository `IuriGuerreiro/adept-releases`, and that version checks it for updates. After each release here, copy its `latest.json` there so those installs still find the update. The download URLs inside it point to this repository:
+
+```sh
+gh release download "v$VERSION" -R IuriGuerreiro/riftnet -p latest.json -D /tmp/feed
+gh release create "v$VERSION" /tmp/feed/latest.json -R IuriGuerreiro/adept-releases \
+  --title "Riftnet v$VERSION" --notes "Moved to https://github.com/IuriGuerreiro/riftnet/releases"
+```
+
+Archive `adept-releases` once no one runs v0.1.0.
+
+For an end-to-end test, run the workflow from a public fork with its own signing key. Install the lower version, then expose the higher version on the test feed. Verify **Later**, the install and restart, settings persistence, and rejection of a mismatched signature. If a published build needs to be reverted, ship the previous working code with a higher version.
 
 ## Update / redeploy
 
@@ -205,8 +216,8 @@ A changed Compose file or `.env` is not deployed by CI. Run the setup script aga
 
 4. **Tailscale → Settings → Trust credentials → OpenID Connect → GitHub**:
    - Scope **Auth Keys: Write**, tag `tag:ci-deploy`.
-   - Subject: `repo:IuriGuerreiro@128285759/adept@1456372594:ref:refs/heads/prod`
-   - Claim `workflow_ref`: `IuriGuerreiro/adept/.github/workflows/deploy.yml@refs/heads/prod`
+   - Subject: `repo:IuriGuerreiro@128285759/riftnet@1456372594:ref:refs/heads/prod`
+   - Claim `workflow_ref`: `IuriGuerreiro/riftnet/.github/workflows/deploy.yml@refs/heads/prod`
 
 5. **GitHub repository variables**:
 
