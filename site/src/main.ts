@@ -5,11 +5,9 @@ import "./styles.css";
 
 document.documentElement.classList.add("js");
 
-// Only Windows gets the installer as the main button. Everyone else gets the web app first.
 function isWindows(): boolean {
   const uaData = (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData;
-  const platform = uaData?.platform ?? navigator.platform ?? "";
-  return /win/i.test(platform) || /Windows/i.test(navigator.userAgent);
+  return /win/i.test(uaData?.platform ?? "") || /Windows/i.test(navigator.userAgent);
 }
 
 if (!isWindows()) {
@@ -17,7 +15,6 @@ if (!isWindows()) {
     const web = group.querySelector<HTMLElement>("[data-webapp]");
     const download = group.querySelector<HTMLElement>("[data-download]");
     if (!web || !download) continue;
-    // Swap the visual weight, then the order.
     const webClass = web.className;
     web.className = download.className;
     download.className = webClass;
@@ -28,7 +25,6 @@ if (!isWindows()) {
     note.textContent = "The desktop app is Windows only for now. The web app runs anywhere.";
 }
 
-// Loopi: the face follows the pointer, and a click makes him hop and wave.
 const loopi = document.querySelector<SVGSVGElement>("[data-loopi]");
 const look = loopi?.querySelector<SVGGElement>("[data-loopi-look]");
 const motionOk = matchMedia("(prefers-reduced-motion: no-preference)").matches;
@@ -45,7 +41,6 @@ if (loopi && look && motionOk) {
         const dy = event.clientY - (box.top + box.height * 0.5);
         const reach = Math.min(1, Math.hypot(dx, dy) / 400);
         const angle = Math.atan2(dy, dx);
-        // Values are in SVG units (the viewBox is 200 wide).
         look.style.transform = `translate(${(Math.cos(angle) * 5 * reach).toFixed(2)}px, ${(Math.sin(angle) * 3.5 * reach).toFixed(2)}px)`;
       });
     });
@@ -56,7 +51,7 @@ if (loopi && look && motionOk) {
 
   const waveParts = loopi.querySelectorAll<SVGGElement>(".lp-wave-front, .lp-wave-back");
   loopi.addEventListener("pointerdown", () => {
-    // Switching an animation off and on again (with a reflow between) restarts it.
+    // WARN: the wave already ran on load, so it only replays if switched off, reflowed, then on.
     for (const el of [loopi, ...waveParts]) el.style.animation = "none";
     loopi.classList.remove("is-poked");
     void loopi.getBoundingClientRect();
@@ -69,7 +64,6 @@ if (loopi && look && motionOk) {
   });
 }
 
-// Fade sections up as they enter the viewport.
 const reveals = document.querySelectorAll(".reveal");
 if ("IntersectionObserver" in window) {
   const io = new IntersectionObserver(
