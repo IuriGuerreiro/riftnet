@@ -198,6 +198,19 @@ A viewer drives the sharer's keyboard and mouse. Windows and X11 hosts only (Way
   - A 2 s lease is renewed by viewer pings every 500 ms. It also ends on transport loss.
   - Strict key allowlist. Delete is always blocked. Linux also blocks Backspace and F-keys regardless of modifiers held locally. Other platforms block those keys while remote Ctrl+Alt are held. Failed native releases revoke control, remain tracked for retry, and prevent rearming until cleanup succeeds. Clicks and wheel only land after the OS confirms the cursor is at their position; if it can't say, they are refused.
 
+### Virtual controllers (setup and self-test only)
+
+Not connected to calls yet: friends cannot drive a pad. `share_play/pad.rs` creates Xbox 360 pads through the ViGEmBus driver; `pad_setup.rs` installs it.
+
+- The host starts setup from the profile panel (Windows x64 desktop only). Only the driver is installed: no installer, updater, service app or download.
+- Adept embeds the Microsoft-signed `.sys`, `.inf` and `.cat`, unmodified, from the official ViGEmBus 1.22.0 release (`drivers/vigembus`; the driver itself is 1.21.442). One admin prompt relaunches Adept as a short-lived helper, which adds the device through Windows' own driver API.
+- To remove it: Device Manager → System devices → Nefarius Virtual Gamepad Emulation Bus → Uninstall device, and tick the box to remove the driver.
+- An existing ViGEmBus install is used as is, including its updater.
+- ViGEmBus is retired and gets no more fixes. `PadState` hides the driver, so it can be replaced.
+- The driver removes a pad when the process that owns it ends.
+- The Guide button is always stripped.
+- **Test controllers** creates two pads, checks XInput isolation and delay, then checks that unplugging removes them.
+
 ## 9. Risks / open questions
 
 1. **libwebrtc in Tauri** is heavy (prebuilt C++ binaries, big app). Must work on Windows, macOS, Linux.
