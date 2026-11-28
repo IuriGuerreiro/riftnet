@@ -19,7 +19,6 @@ export default tseslint.config(
       "client/src/gen",
       "client/src-tauri",
       "target",
-      "spikes",
       "tools/loadtest",
     ],
   },
