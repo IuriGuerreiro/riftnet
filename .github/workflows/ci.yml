@@ -65,10 +65,24 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm gen
       - run: pnpm format:check
-      - run: pnpm lint
-      - run: pnpm typecheck
+      - run: pnpm exec eslint . --ignore-pattern "design/**"
+      - run: pnpm --filter '!design' -r typecheck
       - run: pnpm test
-      - run: pnpm build
+      - run: pnpm --filter '!design' -r build
+
+  design:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter design exec tsc --noEmit -p .
+      - run: pnpm exec eslint design
+      - run: pnpm --filter design run build
 
   proto:
     runs-on: ubuntu-24.04

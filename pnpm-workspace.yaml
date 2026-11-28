@@ -8,4 +8,4 @@ packages:
 allowBuilds:
   esbuild: true
   "@bufbuild/buf": true
-  workerd: true
+  workerd: false
