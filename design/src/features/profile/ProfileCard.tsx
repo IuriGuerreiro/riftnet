@@ -157,12 +157,7 @@ export function ProfileTrigger({
           {children}
         </button>
       </PopoverTrigger>
-      <PopoverContent
-        side={side}
-        align="start"
-        onOpenAutoFocus={(e) => e.preventDefault()}
-        className="w-72 overflow-hidden rounded-xl p-0"
-      >
+      <PopoverContent side={side} align="start" className="w-72 overflow-hidden rounded-xl p-0">
         <ProfileBody u={user(id)} />
       </PopoverContent>
     </Popover>

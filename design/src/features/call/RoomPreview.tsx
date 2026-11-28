@@ -43,7 +43,10 @@ export function RoomPreview({
 }) {
   const speaker = useSpeaker(room.people);
   return (
-    <aside className="flex w-[280px] shrink-0 flex-col overflow-y-auto border-l border-border bg-surface-1">
+    <aside
+      aria-label="Voice room preview"
+      className="flex w-[280px] shrink-0 flex-col overflow-y-auto border-l border-border bg-surface-1"
+    >
       <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
         <Volume2 className="size-4 text-success" />
         <div className="min-w-0 flex-1">
@@ -82,7 +85,11 @@ export function RoomPreview({
           const u = user(id);
           return (
             <UserCallMenu key={id} id={id}>
-              <div className="flex items-center gap-2.5 rounded-lg px-2 py-1.5">
+              <button
+                type="button"
+                aria-label={`${u.name} call menu`}
+                className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left"
+              >
                 <SpeakingAvatar
                   id={id}
                   size={30}
@@ -111,7 +118,7 @@ export function RoomPreview({
                 ) : (
                   <Mic aria-label="Microphone on" className="size-3.5 text-muted-foreground" />
                 )}
-              </div>
+              </button>
             </UserCallMenu>
           );
         })}

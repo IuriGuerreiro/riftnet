@@ -56,8 +56,13 @@ export function PeoplePanel({ ids: all, server }: { ids: string[]; server?: Serv
   const online = ids.filter((id) => user(id).status !== "offline" && !inVoice.has(id));
   const offline = ids.filter((id) => user(id).status === "offline");
 
+  const offlineExpanded = Boolean(q.trim()) || showOffline;
+
   return (
-    <aside className="w-[260px] shrink-0 overflow-y-auto border-l border-border bg-surface-1 px-2 pb-4">
+    <aside
+      aria-label="Members"
+      className="w-[260px] shrink-0 overflow-y-auto border-l border-border bg-surface-1 px-2 pb-4"
+    >
       <div className="sticky top-0 z-10 -mx-2 bg-surface-1 px-2 pt-2.5 pb-1">
         <input
           value={q}
@@ -88,15 +93,16 @@ export function PeoplePanel({ ids: all, server }: { ids: string[]; server?: Serv
         <>
           <button
             type="button"
+            aria-expanded={offlineExpanded}
             onClick={() => setShowOffline((v) => !v)}
             className="flex w-full items-center gap-1 px-2 pt-4 pb-1 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase hover:text-foreground"
           >
             <ChevronRight
-              className={cn("size-3 transition-transform", showOffline && "rotate-90")}
+              className={cn("size-3 transition-transform", offlineExpanded && "rotate-90")}
             />
             Offline · {offline.length}
           </button>
-          {showOffline && offline.map((id) => <Row key={id} id={id} owner={id === owner} />)}
+          {offlineExpanded && offline.map((id) => <Row key={id} id={id} owner={id === owner} />)}
         </>
       )}
     </aside>

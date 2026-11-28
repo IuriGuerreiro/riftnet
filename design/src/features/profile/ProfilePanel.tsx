@@ -28,7 +28,10 @@ export function ProfilePanel({ id, onCall }: { id: string; onCall: () => void })
   const Icon = u.activity ? ACTIVITY_ICON[u.activity.kind] : null;
 
   return (
-    <aside className="flex w-[280px] shrink-0 flex-col overflow-y-auto border-l border-border bg-surface-1">
+    <aside
+      aria-label="Profile"
+      className="flex w-[280px] shrink-0 flex-col overflow-y-auto border-l border-border bg-surface-1"
+    >
       <div className="h-20 shrink-0" style={bannerStyle(u, "var(--surface-1)")} />
       <div className="-mt-10 px-4">
         <Avatar

@@ -79,12 +79,7 @@ export function UserBar({
             </span>
           </button>
         </PopoverTrigger>
-        <PopoverContent
-          side="top"
-          align="start"
-          onOpenAutoFocus={(e) => e.preventDefault()}
-          className="w-72 overflow-hidden rounded-xl p-0"
-        >
+        <PopoverContent side="top" align="start" className="w-72 overflow-hidden rounded-xl p-0">
           <ProfileBody u={me} />
           <div className="border-t border-border p-2">
             {Object.entries(STATUSES)

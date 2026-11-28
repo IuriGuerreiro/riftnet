@@ -1,7 +1,7 @@
 import { Loader2, MonitorUp, PhoneOff, PhoneOutgoing, Signal, SignalLow } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { type LiveRoom, ME, server } from "@/mock/data";
+import { type LiveRoom, ME, server, user } from "@/mock/data";
 import { useWorld, world } from "@/mock/world";
 
 import { SpeakingAvatar } from "./SpeakingAvatar";
@@ -100,14 +100,18 @@ export function CallCard({
       <div className="mt-2.5 flex items-center gap-1.5">
         {shown.map((id) => (
           <UserCallMenu key={id} id={id} self={{ muted, deafened, onMute, onDeafen }}>
-            <span className="inline-flex">
+            <button
+              type="button"
+              aria-label={`${user(id).name} call menu`}
+              className="inline-flex rounded-full"
+            >
               <SpeakingAvatar
                 id={id}
                 size={22}
                 ringBg="var(--surface-1)"
                 speaking={!ringing && speaker === id && !(id === ME && (muted || deafened))}
               />
-            </span>
+            </button>
           </UserCallMenu>
         ))}
         {extra > 0 && (
