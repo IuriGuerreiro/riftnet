@@ -19,8 +19,15 @@ libs/             code that gets imported
 client/
   src/            React UI (Tailwind)
   src-tauri/      desktop shell, thin glue to client-core
+site/             Riftnet marketing website (Cloudflare Worker)
+design/           mock UI reference for the client migration
 tools/
   mock/           fake API for UI work
+  loadtest/       service load tests
+  lint/           repository lint rules
+  release/        desktop release manifests and signing config
+scripts/          smoke checks and deployment helpers
+.agents/skills/   verification instructions and auth smoke helper
 infra/            docker-compose for local dependencies
 docs/             architecture and product docs
 ```
@@ -93,6 +100,35 @@ tailscale serve --bg --https=7099 http://127.0.0.1:7100   # api
 Then run the stack, `cargo run -p api` and `pnpm dev`, and open
 **https://server.tailcbbc1b.ts.net:7103** from any device on the tailnet.
 The UI picks the Tailscale api URL automatically when opened via `*.ts.net`.
+
+## Website and design preview
+
+The three frontend workspaces have separate roles:
+
+| Folder | Purpose | Local command |
+| --- | --- | --- |
+| `client/` | Main web and desktop app, connected to the API | `pnpm dev` |
+| `site/` | Public marketing website | `pnpm --filter site dev` |
+| `design/` | UI reference with mock data and no API connection | `pnpm design` |
+
+Run these commands from the repository root. The client uses port 7104; the design preview uses port 7106.
+See [deployment](docs/architecture/deployment.md#6-landing-site-riftnetapp) for the website's Cloudflare build settings and `pnpm --filter site deploy`.
+The design preview has a separate `adept-design` Worker; see [design preview deployment](docs/architecture/deployment.md#design-preview).
+
+### Move the design into the app
+
+Keep `design/` as the reference until the corresponding client screens work with real data.
+Move screens into `client/` feature by feature and verify them with the [feature map](docs/features/README.md).
+The client and brand docs still contain Adept assets, while the website and mock use Riftnet branding. Update client branding as part of that migration.
+
+After the client covers the approved design:
+
+- Remove `design/`, its workspace entry, and the root `design` script.
+- Remove its ESLint project paths, file patterns, and UI override.
+- Remove the CI `design` job and the design exclusions in the main client job.
+- Remove the emoji subset entry from `.prettierignore` and regenerate the lockfile.
+- Move any media needed by the app before deleting the mock assets.
+- Retire the `adept-design` Worker separately after checking whether its preview is still needed.
 
 ## Changing the API
 

@@ -173,6 +173,19 @@ Turn off non-production branch builds, or keep them for preview URLs.
 
 Merge `main` into `prod`. Cloudflare builds and deploys when `site/` changes. To deploy from a laptop: `pnpm --filter site deploy` after `wrangler login`.
 
+### Design preview
+
+`design/` is a separate mock app with no API connection. Its Wrangler config names the Worker `adept-design`; it has no custom domains configured in the repository.
+Build and deploy manually from the repository root after `wrangler login`:
+
+```sh
+pnpm --filter design build
+pnpm --filter design exec wrangler deploy
+```
+
+No workflow in this repository deploys this Worker. Any external build integration must be checked in Cloudflare before changing its paths or retiring it.
+Keep its name during cleanup. Once the client migration is complete, decide whether to retire the Worker before removing its config.
+
 ## Update / redeploy
 
 - **API and media**: merge `main` into `prod`. The **Deploy** workflow does the rest.
