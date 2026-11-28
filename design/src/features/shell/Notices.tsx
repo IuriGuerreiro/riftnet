@@ -1,4 +1,5 @@
 import { Download, RotateCw, WifiOff, X } from "lucide-react";
+import { useEffect } from "react";
 
 import { Avatar } from "@/components/Avatar";
 import { openChat } from "@/features/profile/openChat";
@@ -6,6 +7,17 @@ import { change, dismissToast, useWorld, world } from "@/mock/world";
 
 export function Banners() {
   useWorld();
+  const update = world.update;
+  useEffect(() => {
+    if (update !== "downloading") return;
+    const timer = setTimeout(() => {
+      if (world.update === "downloading")
+        change(() => {
+          world.update = "ready";
+        });
+    }, 2500);
+    return () => clearTimeout(timer);
+  }, [update]);
   const bar = "flex h-9 shrink-0 items-center justify-center gap-3 px-4 text-xs font-medium";
   return (
     <div role="status">
@@ -50,13 +62,6 @@ export function Banners() {
                 change(() => {
                   world.update = "downloading";
                 });
-                setTimeout(
-                  () =>
-                    change(() => {
-                      world.update = "ready";
-                    }),
-                  2500,
-                );
               }}
             >
               {world.update === "ready" && <RotateCw className="size-3" />}

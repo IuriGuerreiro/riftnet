@@ -98,7 +98,27 @@ const INDEX: [string, string][] = [
 function Profile() {
   const me = user(ME);
   const [draft, setDraft] = useState(() => ({ ...me }));
-  const set = (patch: Partial<typeof draft>) => setDraft((d) => ({ ...d, ...patch }));
+  const blobs = useRef(new Set<string>());
+  useEffect(
+    () => () => {
+      for (const url of blobs.current) {
+        if (url !== user(ME).avatar && url !== user(ME).banner) URL.revokeObjectURL(url);
+      }
+    },
+    [],
+  );
+  const set = (patch: Partial<typeof draft>) => {
+    for (const key of ["avatar", "banner"] as const) {
+      if (key in patch && draft[key] !== patch[key]) {
+        const old = draft[key];
+        if (old?.startsWith("blob:") && old !== me.avatar && old !== me.banner) {
+          URL.revokeObjectURL(old);
+          blobs.current.delete(old);
+        }
+      }
+    }
+    setDraft((d) => ({ ...d, ...patch }));
+  };
   const bad = !draft.name.trim();
   const image = (key: "avatar" | "banner") => (
     <div className="flex items-center gap-2 py-2">
@@ -111,11 +131,16 @@ function Profile() {
           className="sr-only"
           onChange={(e) => {
             const file = e.target.files?.[0];
+            e.target.value = "";
             if (!file) return;
             if (!/^image\/(png|jpeg|webp|gif)$/.test(file.type))
               toast("Use a PNG, JPEG, WebP or GIF");
             else if (file.size > 8 * 1024 * 1024) toast("That image is over 8 MB");
-            else set({ [key]: URL.createObjectURL(file) });
+            else {
+              const url = URL.createObjectURL(file);
+              blobs.current.add(url);
+              set({ [key]: url });
+            }
           }}
         />
       </label>
@@ -189,6 +214,10 @@ function Profile() {
           <Button
             disabled={bad}
             onClick={() => {
+              for (const key of ["avatar", "banner"] as const) {
+                if (me[key]?.startsWith("blob:") && me[key] !== draft[key])
+                  URL.revokeObjectURL(me[key]);
+              }
               updateMe({ ...draft, name: draft.name.trim(), status: me.status });
               toast("Profile saved");
             }}
@@ -507,6 +536,7 @@ function KeyCapture() {
       <Button
         size="sm"
         variant="secondary"
+        data-key-capture={waiting || undefined}
         onClick={() => setWaiting(true)}
         onBlur={() => setWaiting(false)}
         onKeyDown={(e) => {
@@ -727,6 +757,13 @@ export function SettingsScreen({ tab }: { tab?: string }) {
         <Dialog.Overlay className="animate-in fade-in fixed inset-0 z-50 bg-black/55 backdrop-blur-md duration-150" />
         <Dialog.Content
           aria-describedby={undefined}
+          onEscapeKeyDown={(e) => {
+            if (document.activeElement?.hasAttribute("data-key-capture")) e.preventDefault();
+            else if (query) {
+              e.preventDefault();
+              setQuery("");
+            }
+          }}
           onOpenAutoFocus={(e) => {
             e.preventDefault();
             (e.currentTarget as HTMLElement).focus();
@@ -752,12 +789,6 @@ export function SettingsScreen({ tab }: { tab?: string }) {
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && found[0]) open(found[0][1], found[0][0]);
-                  if (e.key === "Escape" && query) {
-                    e.stopPropagation();
-                    e.nativeEvent.stopImmediatePropagation();
-                    e.preventDefault();
-                    setQuery("");
-                  }
                 }}
                 aria-label="Search settings"
                 placeholder="Search"

@@ -65,6 +65,7 @@ function PersonTile({
   camera,
   ringing,
   small,
+  focused,
   self,
   onFocus,
 }: {
@@ -74,6 +75,7 @@ function PersonTile({
   muted: boolean;
   camera: boolean;
   small?: boolean;
+  focused?: boolean;
   self: SelfControls;
   onFocus: () => void;
 }) {
@@ -86,6 +88,7 @@ function PersonTile({
         className={cn(
           "group/tile relative aspect-video overflow-hidden rounded-2xl text-left transition-shadow duration-150",
           small ? "w-40 shrink-0" : "w-full",
+          focused && "h-full max-h-full",
           ringing && "opacity-60",
           speaking
             ? "ring-2 ring-success shadow-[0_0_24px_-4px_var(--success)]"
@@ -310,6 +313,7 @@ export function CallStage({
         key={tileKey(t)}
         id={t.id}
         small={small}
+        focused={focus === t && !small}
         self={{ muted, deafened, onMute, onDeafen }}
         camera={t.id === ME && camera}
         ringing={ringing && t.id !== ME}
@@ -356,7 +360,9 @@ export function CallStage({
       <div className="min-h-0 flex-1 overflow-y-auto p-4 pb-2">
         {focus ? (
           <div className="flex h-full flex-col gap-3">
-            <div className="min-h-0 flex-1">{render(focus)}</div>
+            <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden">
+              {render(focus)}
+            </div>
             {rest.length > 0 && (
               <div className="shrink-0 overflow-x-auto p-1">
                 <div className="mx-auto flex w-max gap-3">{rest.map((t) => render(t, true))}</div>

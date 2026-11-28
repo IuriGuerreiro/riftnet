@@ -54,7 +54,7 @@ export function JumpPalette({
                 <ConversationAvatar c={x} size={22} />
                 <span>{x.kind === "channel" ? `#${x.title}` : x.title}</span>
                 {(unreadOf?.(x.id, x.unread) ?? x.unread) > 0 && (
-                  <CommandShortcut>{x.unread} new</CommandShortcut>
+                  <CommandShortcut>{unreadOf?.(x.id, x.unread) ?? x.unread} new</CommandShortcut>
                 )}
               </CommandItem>
             ))}

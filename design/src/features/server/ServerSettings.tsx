@@ -159,7 +159,7 @@ function Roles({ s }: { s: Server }) {
           size="sm"
           variant="secondary"
           onClick={() => {
-            const id = `role-${roles.length + 1}`;
+            const id = `role-${crypto.randomUUID()}`;
             change(() => {
               s.roles = [
                 ...roles,

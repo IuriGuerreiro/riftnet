@@ -143,7 +143,7 @@ export function Invite({ id }: { id: string }) {
           change(() => {
             s.invites = [
               ...invites,
-              { code: `${s.id}-${invites.length + 1}`, uses: 0, expires: "7 days" },
+              { code: `${s.id}-${crypto.randomUUID()}`, uses: 0, expires: "7 days" },
             ];
             audit(s, "created an invite");
           })
@@ -304,7 +304,9 @@ export function ChannelForm({ id, channel }: { id: string; channel?: string }) {
             <Button
               type="button"
               variant="destructive"
-              disabled={s.channels.filter((c) => c.kind === "text").length < 2}
+              disabled={
+                current.kind === "text" && s.channels.filter((c) => c.kind === "text").length < 2
+              }
               onClick={() =>
                 openDialog({
                   kind: "confirm",

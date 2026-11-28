@@ -99,11 +99,11 @@ export function Dialogs({ onShare }: { onShare: () => void }) {
     case "newDm":
       return <NewDm />;
     case "newGroup":
-      return <GroupMembers />;
+      return <GroupMembers key="new" />;
     case "addMembers":
-      return <GroupMembers id={d.id} />;
+      return <GroupMembers key={d.id} id={d.id} />;
     case "renameGroup":
-      return <RenameGroup id={d.id} />;
+      return <RenameGroup key={d.id} id={d.id} />;
     case "addServer":
       return <AddServer key={d.code} code={d.code} />;
     case "discover":
@@ -111,9 +111,11 @@ export function Dialogs({ onShare }: { onShare: () => void }) {
     case "invite":
       return <Invite id={d.server} />;
     case "channel":
-      return <ChannelForm id={d.server} channel={d.channel} />;
+      return (
+        <ChannelForm key={`${d.server}-${d.channel ?? "new"}`} id={d.server} channel={d.channel} />
+      );
     case "serverSettings":
-      return <ServerSettings id={d.server} tab={d.tab} />;
+      return <ServerSettings key={`${d.server}-${d.tab ?? "default"}`} id={d.server} tab={d.tab} />;
     case "forward":
       return <Forward text={d.text} />;
     case "report":
@@ -131,7 +133,7 @@ export function Dialogs({ onShare }: { onShare: () => void }) {
     case "settings":
       return (
         <Suspense fallback={<p role="status">Loading settings…</p>}>
-          <SettingsScreen tab={d.tab} />
+          <SettingsScreen key={d.tab ?? "default"} tab={d.tab} />
         </Suspense>
       );
     case "expired":

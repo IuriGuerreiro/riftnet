@@ -34,7 +34,7 @@ export function IncomingCall({ onAnswer }: { onAnswer: (video: boolean) => void 
     <div
       role="alertdialog"
       aria-label={`${user(ringing.who).name} is calling`}
-      className="animate-in fade-in slide-in-from-top-4 fixed top-14 left-1/2 z-50 w-80 max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-2xl border border-border bg-popover p-4 shadow-2xl"
+      className="animate-in fade-in slide-in-from-top-4 w-80 max-w-full rounded-2xl border border-border bg-popover p-4 shadow-2xl"
     >
       <div className="flex items-center gap-3">
         <span className="animate-pulse">
@@ -74,8 +74,7 @@ export function SharePlayBanner({
   useWorld();
   const [ok, setOk] = useState(false);
   const request = world.controlRequest;
-  const box =
-    "fixed top-14 left-1/2 z-50 w-96 max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-2xl border-2 border-warning bg-popover p-4 text-sm shadow-2xl";
+  const box = "w-full rounded-2xl border-2 border-warning bg-popover p-4 text-sm shadow-2xl";
   const clear = () => {
     setOk(false);
     change(() => {

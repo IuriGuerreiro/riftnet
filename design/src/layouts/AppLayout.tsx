@@ -1,5 +1,5 @@
 import { Compass, Menu, Plus, Search, Volume2 } from "lucide-react";
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 
 import { RiftnetMark } from "@/components/brand/RiftnetMark";
 import { ServerIcon } from "@/components/ServerIcon";
@@ -117,7 +117,21 @@ export function AppLayout() {
         live: channel.live,
       })),
   );
-  const callTarget = joined ? conversation(joined) : undefined;
+  const callExists =
+    !joined ||
+    rooms.some((r) => r.channelId === joined) ||
+    CONVERSATIONS.some((c) => c.id === joined && c.kind !== "channel");
+  if (!callExists && call) {
+    setCall(null);
+    setSharing(false);
+    setPreview(null);
+  }
+  const reduceMotion = world.settings.reduceMotion;
+  useEffect(() => {
+    document.documentElement.classList.toggle("reduce-motion", reduceMotion);
+    return () => document.documentElement.classList.remove("reduce-motion");
+  }, [reduceMotion]);
+  const callTarget = joined && callExists ? conversation(joined) : undefined;
   const callConversation = callTarget?.kind === "channel" ? undefined : callTarget;
   const joinedBase: LiveRoom | undefined = callConversation
     ? {
@@ -271,6 +285,18 @@ export function AppLayout() {
     }
   };
   const shortcuts = (e: KeyboardEvent) => {
+    if (
+      e.altKey &&
+      (e.key === "ArrowUp" || e.key === "ArrowDown") &&
+      (world.dialog ||
+        palette ||
+        document.querySelector('[role="dialog"], [role="alertdialog"]') ||
+        (e.target instanceof HTMLElement &&
+          e.target.closest(
+            'input, textarea, select, [contenteditable]:not([contenteditable="false"])',
+          )))
+    )
+      return;
     const mod = e.ctrlKey || e.metaKey;
     const key = e.key.toLowerCase();
     const run =
@@ -293,17 +319,25 @@ export function AppLayout() {
     e.preventDefault();
     run();
   };
+  const handlers = useRef({ shortcuts, openConversation });
   useEffect(() => {
-    onOpenChat(openConversation);
-    window.addEventListener("keydown", shortcuts);
-    return () => window.removeEventListener("keydown", shortcuts);
+    handlers.current = { shortcuts, openConversation };
   });
+  useEffect(() => {
+    onOpenChat((id) => handlers.current.openConversation(id));
+    const onKeyDown = (e: KeyboardEvent) => handlers.current.shortcuts(e);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      onOpenChat(() => {});
+    };
+  }, []);
 
   return (
     <div
       className={cn(
         "flex h-full flex-col bg-ink",
-        world.settings.reduceMotion && "reduce-motion",
+
         world.settings.density === "compact" && "compact",
       )}
       style={{ zoom: world.settings.scale / 100, height: `${10000 / world.settings.scale}%` }}
@@ -635,15 +669,18 @@ export function AppLayout() {
 
       <Dialogs onShare={goLive} />
       <Toasts />
-      <IncomingCall onAnswer={answer} />
-      <SharePlayBanner
-        control={call?.control ?? null}
-        onStop={() => {
-          patchCall({ control: null });
-          toast("Share Play stopped");
-        }}
-        onGrant={(who) => patchCall({ control: { who, role: "host", active: true } })}
-      />
+      <div className="fixed top-14 left-1/2 z-50 flex w-96 max-w-[calc(100vw-2rem)] -translate-x-1/2 flex-col items-center gap-3">
+        <IncomingCall onAnswer={answer} />
+        <SharePlayBanner
+          key={world.controlRequest ?? "none"}
+          control={call?.control ?? null}
+          onStop={() => {
+            patchCall({ control: null });
+            toast("Share Play stopped");
+          }}
+          onGrant={(who) => patchCall({ control: { who, role: "host", active: true } })}
+        />
+      </div>
       <JumpPalette
         open={palette}
         onOpenChange={setPalette}
