@@ -25,10 +25,21 @@ function Line({ m }: { m: Message }) {
   );
 }
 
-export function Thread({ root, onClose }: { root: Message; onClose: () => void }) {
+export function Thread({
+  root,
+  conversationId,
+  blockedReason,
+  onClose,
+}: {
+  root: Message;
+  conversationId: string;
+  blockedReason: string | null;
+  onClose: () => void;
+}) {
   useWorld();
   const [text, setText] = useState("");
-  const replies = world.threads[root.id] ?? [];
+  const key = `${conversationId}:${root.id}`;
+  const replies = world.threads[key] ?? [];
   return (
     <aside
       aria-label="Thread"
@@ -53,10 +64,10 @@ export function Thread({ root, onClose }: { root: Message; onClose: () => void }
         className="p-3"
         onSubmit={(e) => {
           e.preventDefault();
-          if (!text.trim()) return;
+          if (blockedReason || !text.trim()) return;
           const reply = { id: `t-${root.id}-${replies.length}`, author: ME, text, time: clock() };
           change(() => {
-            world.threads = { ...world.threads, [root.id]: [...replies, reply] };
+            world.threads = { ...world.threads, [key]: [...replies, reply] };
           });
           setText("");
         }}
@@ -66,7 +77,8 @@ export function Thread({ root, onClose }: { root: Message; onClose: () => void }
           value={text}
           maxLength={4000}
           aria-label="Reply in thread"
-          placeholder="Reply in thread"
+          disabled={Boolean(blockedReason)}
+          placeholder={blockedReason ?? "Reply in thread"}
           onChange={(e) => setText(e.target.value)}
           className="h-10 w-full rounded-xl border border-border bg-surface-2 px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-brand"
         />

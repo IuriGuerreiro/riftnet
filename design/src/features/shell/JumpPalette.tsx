@@ -12,7 +12,7 @@ import {
   CommandSeparator,
   CommandShortcut,
 } from "@/components/ui/command";
-import { CONVERSATIONS, FRIENDS, SERVERS } from "@/mock/data";
+import { conversation, CONVERSATIONS, FRIENDS, SERVERS } from "@/mock/data";
 import { openDialog } from "@/mock/world";
 
 import { ConversationAvatar } from "./ConversationRow";
@@ -43,15 +43,21 @@ export function JumpPalette({
       <CommandList>
         <CommandEmpty>Nothing found.</CommandEmpty>
         <CommandGroup heading="Recent">
-          {CONVERSATIONS.slice(0, 5).map((x) => (
-            <CommandItem key={x.id} value={`${x.title} ${x.id}`} onSelect={() => onOpen(x.id)}>
-              <ConversationAvatar c={x} size={22} />
-              <span>{x.kind === "channel" ? `#${x.title}` : x.title}</span>
-              {(unreadOf?.(x.id, x.unread) ?? x.unread) > 0 && (
-                <CommandShortcut>{x.unread} new</CommandShortcut>
-              )}
-            </CommandItem>
-          ))}
+          {CONVERSATIONS.filter(
+            (c) =>
+              c.kind !== "channel" || SERVERS.some((s) => s.channels.some((ch) => ch.id === c.id)),
+          )
+            .slice(0, 5)
+            .map((c) => conversation(c.id))
+            .map((x) => (
+              <CommandItem key={x.id} value={`${x.title} ${x.id}`} onSelect={() => onOpen(x.id)}>
+                <ConversationAvatar c={x} size={22} />
+                <span>{x.kind === "channel" ? `#${x.title}` : x.title}</span>
+                {(unreadOf?.(x.id, x.unread) ?? x.unread) > 0 && (
+                  <CommandShortcut>{x.unread} new</CommandShortcut>
+                )}
+              </CommandItem>
+            ))}
         </CommandGroup>
         <CommandSeparator />
         <CommandGroup heading="Channels">

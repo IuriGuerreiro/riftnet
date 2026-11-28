@@ -197,6 +197,7 @@ export function VideoPlayer({
       onMouseMove={poke}
       onMouseLeave={() => setIdle(true)}
       onKeyDown={(e) => {
+        if (e.target !== e.currentTarget) return;
         const v = video.current;
         if (!v) return;
         if (e.key === " " || e.key === "k") {

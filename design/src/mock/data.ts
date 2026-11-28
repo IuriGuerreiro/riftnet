@@ -424,7 +424,7 @@ export const CONVERSATIONS: Conversation[] = [
 
 export function conversation(id: string): Conversation {
   const found = CONVERSATIONS.find((c) => c.id === id);
-  if (found) return found;
+  if (found && found.kind !== "channel") return found;
   for (const s of SERVERS) {
     const ch = s.channels.find((c) => c.id === id);
     if (ch) {
@@ -437,9 +437,9 @@ export function conversation(id: string): Conversation {
         topic: ch.topic,
         unread: ch.unread ?? 0,
         mentions: ch.mentions ?? 0,
-        preview: "",
-        at: "",
-        rank: 99,
+        preview: found?.preview ?? "",
+        at: found?.at ?? "",
+        rank: found?.rank ?? 99,
       };
     }
   }

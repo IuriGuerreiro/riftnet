@@ -1,6 +1,6 @@
 /* eslint-disable react-x/no-array-index-key -- The tree is rebuilt whenever the message text changes. */
 import { Check, Copy } from "lucide-react";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { createContext, type ReactNode, useContext, useEffect, useMemo, useState } from "react";
 
 import { EmojiText } from "@/features/emoji/EmojiText";
 import { openChat } from "@/features/profile/openChat";
@@ -9,10 +9,15 @@ import { type Block, type Inline, parseMarkdown } from "@/lib/markdown/parse";
 import { cn } from "@/lib/utils";
 import { SERVERS, USERS } from "@/mock/data";
 
+export const MarkdownServer = createContext<string | undefined>(undefined);
+
 function MentionChip({ part }: { part: string }) {
+  const serverId = useContext(MarkdownServer);
   const style = "rounded bg-brand/20 px-0.5 font-medium text-brand-text hover:bg-brand/30";
   if (part.startsWith("#")) {
-    const channel = SERVERS.flatMap((s) => s.channels).find((c) => `#${c.name}` === part);
+    const channel = SERVERS.filter((s) => s.id === serverId)
+      .flatMap((s) => s.channels)
+      .find((c) => `#${c.name}` === part);
     if (!channel) return part;
     return (
       <button type="button" onClick={() => openChat(channel.id)} className={style}>
@@ -199,8 +204,16 @@ function renderBlocks(blocks: Block[]): ReactNode {
   });
 }
 
-export function Markdown({ text, suffix }: { text: string; suffix?: ReactNode }) {
-  const blocks = useMemo(() => parseMarkdown(text), [text]);
+export function Markdown({
+  text,
+  suffix,
+  parsed,
+}: {
+  text: string;
+  suffix?: ReactNode;
+  parsed?: Block[];
+}) {
+  const blocks = useMemo(() => parsed ?? parseMarkdown(text), [text, parsed]);
   const last = blocks.at(-1);
   const inlineSuffix = suffix !== undefined && last?.kind === "paragraph";
   return (

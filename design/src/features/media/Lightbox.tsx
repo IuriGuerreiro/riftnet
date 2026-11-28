@@ -134,9 +134,11 @@ export function Lightbox({
               >
                 {zoom ? <ZoomOut className="size-[18px]" /> : <ZoomIn className="size-[18px]" />}
               </TopButton>
-              <TopButton label="Open original" href={item.url}>
-                <ExternalLink className="size-[18px]" />
-              </TopButton>
+              {!item.url.startsWith("blob:") && (
+                <TopButton label="Open original" href={item.url}>
+                  <ExternalLink className="size-[18px]" />
+                </TopButton>
+              )}
               <TopButton label="Download" href={item.url} download={item.name}>
                 <Download className="size-[18px]" />
               </TopButton>

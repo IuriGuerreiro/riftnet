@@ -1,5 +1,9 @@
 import type { Attachment } from "@/mock/data";
 
+export function releaseAttachment(attachment: Attachment) {
+  if (attachment.url?.startsWith("blob:")) URL.revokeObjectURL(attachment.url);
+}
+
 function imageSize(url: string) {
   return new Promise<{ w: number; h: number }>((resolve) => {
     const img = new Image();

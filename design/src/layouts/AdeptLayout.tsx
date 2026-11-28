@@ -12,6 +12,7 @@ import { RoomPreview } from "@/features/adept/RoomPreview";
 import { StreamPip } from "@/features/adept/StreamPip";
 import { TopBarStatus } from "@/features/adept/TopBarStatus";
 import { ChatView } from "@/features/chat/ChatView";
+import { readMessageLink } from "@/features/chat/messageLink";
 import { Dialogs } from "@/features/dialogs/Dialogs";
 import { EmojiText } from "@/features/emoji/EmojiText";
 import { onOpenChat } from "@/features/profile/openChat";
@@ -41,7 +42,11 @@ const WIDE = "(min-width: 1100px)";
 
 export function AdeptLayout() {
   useWorld();
-  const [placeId, setPlace] = useState("home");
+  const [initialTarget] = useState(readMessageLink);
+  const initialPlace = initialTarget
+    ? (conversation(initialTarget.conversation).serverId ?? "home")
+    : "home";
+  const [placeId, setPlace] = useState(initialPlace);
   const place = SERVERS.some((x) => x.id === placeId) ? placeId : "home";
   const [nav, setNav] = useState(false);
   const [openIn, setOpenIn] = useState<Record<string, string>>({
@@ -50,6 +55,7 @@ export function AdeptLayout() {
     forge: "forge-dev",
     drift: "drift-scrims",
     books: "books-general",
+    ...(initialTarget ? { [initialPlace]: initialTarget.conversation } : {}),
   });
   const [tab, setTab] = useState<HomeTab>("chats");
   const [call, setCall] = useState<CallState | null>(null);

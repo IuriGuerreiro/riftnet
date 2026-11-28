@@ -15,7 +15,7 @@ import {
   SmilePlus,
   Trash2,
 } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 
 import { Avatar } from "@/components/Avatar";
 import {
@@ -39,6 +39,7 @@ import { EmojiPicker } from "@/features/emoji/EmojiPicker";
 import { EmojiText, isOnlyEmoji } from "@/features/emoji/EmojiText";
 import { Attachments } from "@/features/media/Attachments";
 import { ProfileTrigger } from "@/features/profile/ProfileCard";
+import { parseMarkdown } from "@/lib/markdown/parse";
 import { cn } from "@/lib/utils";
 import { FRIENDS, ME, type Message, type Reaction, user } from "@/mock/data";
 import { useWorld, world } from "@/mock/world";
@@ -261,6 +262,7 @@ function MenuRow({ item, kind }: { item: MenuItem; kind: "context" | "dropdown" 
 
 function MessageRow({
   m,
+  conversationId,
   head,
   all,
   editing,
@@ -269,6 +271,7 @@ function MessageRow({
   actions,
 }: {
   m: Message;
+  conversationId: string;
   head: boolean;
   all: Message[];
   editing: boolean;
@@ -282,7 +285,8 @@ function MessageRow({
   const [picker, setPicker] = useState<"toolbar" | "row" | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const jumbo = isOnlyEmoji(m.text);
-  const embeds = m.text && world.settings.embeds ? embedsIn(m.text) : [];
+  const parsed = useMemo(() => parseMarkdown(m.text), [m.text]);
+  const embeds = world.settings.embeds ? embedsIn(parsed) : [];
   const menu = menuFor(m, actions, () => requestAnimationFrame(() => setPicker("toolbar")));
 
   const toggle = (emoji: string) => actions.react(m.id, emoji);
@@ -293,7 +297,7 @@ function MessageRow({
 
   useWorld();
   const [shown, setShown] = useState(false);
-  const replies = world.threads[m.id]?.length ?? 0;
+  const replies = world.threads[`${conversationId}:${m.id}`]?.length ?? 0;
   if (m.system)
     return (
       <p
@@ -408,6 +412,7 @@ function MessageRow({
                       </>
                     ) : (
                       <Markdown
+                        parsed={parsed}
                         text={m.text}
                         suffix={
                           m.edited ? (
@@ -580,12 +585,14 @@ function Divider({ children, tone = "muted" }: { children: ReactNode; tone?: "mu
 }
 
 export function MessageList({
+  conversationId,
   rows,
   messages,
   editingId,
   flashId,
   actions,
 }: {
+  conversationId: string;
   rows: Row[];
   messages: Message[];
   editingId: string | null;
@@ -604,12 +611,15 @@ export function MessageList({
         ) : (
           <MessageRow
             key={row.key}
+            conversationId={conversationId}
             m={row.m}
             head={row.head}
             all={messages}
             editing={editingId === row.m.id}
             flash={flashId === row.m.id}
-            last={row.m.id === messages.at(-1)?.id}
+            last={
+              row.m.id === messages.findLast((m) => !m.system && !world.blocked.has(m.author))?.id
+            }
             actions={actions}
           />
         ),

@@ -2,10 +2,10 @@ import { Play } from "lucide-react";
 import { useState } from "react";
 
 import { VideoPlayer } from "@/features/media/VideoPlayer";
-import { type Block, type Inline, parseMarkdown } from "@/lib/markdown/parse";
+import { type Block, type Inline } from "@/lib/markdown/parse";
 import { type Embed as EmbedData, embedFor } from "@/mock/embeds";
 
-export function embedsIn(text: string): EmbedData[] {
+export function embedsIn(parsed: Block[]): EmbedData[] {
   const urls = new Set<string>();
   const inline = (nodes: Inline[]) => {
     for (const node of nodes) {
@@ -23,7 +23,7 @@ export function embedsIn(text: string): EmbedData[] {
       }
     }
   };
-  blocks(parseMarkdown(text));
+  blocks(parsed);
   return Array.from(urls)
     .map(embedFor)
     .filter((e): e is EmbedData => e !== undefined);

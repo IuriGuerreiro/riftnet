@@ -117,5 +117,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 }
 
 export function lastOwnMessage(state: ChatState) {
-  return state.messages.findLast((m) => m.author === ME && m.text && m.status !== "failed");
+  return state.messages.findLast(
+    (m) => !m.system && m.author === ME && m.text && m.status !== "failed",
+  );
 }
