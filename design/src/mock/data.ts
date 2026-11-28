@@ -566,7 +566,7 @@ const SCRIPTS: Record<string, Message[]> = {
     {
       id: "m6d",
       author: "maya",
-      text: "this guy broke down the new dash tech https://www.youtube.com/watch?v=adept-dash",
+      text: "this guy broke down the new dash tech https://www.youtube.com/watch?v=rift-dash",
       time: "21:08",
     },
     { id: "m7", author: "maya", text: "ok one more game then I'm out 😅", time: "21:08" },
@@ -699,7 +699,7 @@ const SCRIPTS: Record<string, Message[]> = {
       id: "g6g",
       pinned: true,
       author: "noor",
-      text: "plan for tonight:\n- warmup in *Ridgeline*\n- 2 ranked games\n- then Trackmania on stream\nrules here https://adept.example/night-owls",
+      text: "plan for tonight:\n- warmup in *Ridgeline*\n- 2 ranked games\n- then Trackmania on stream\nrules here https://riftnet.example/night-owls",
       time: "21:09",
     },
     {

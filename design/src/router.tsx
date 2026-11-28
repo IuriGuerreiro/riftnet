@@ -8,7 +8,7 @@ import {
 
 import { DevSwitcher } from "@/components/DevSwitcher";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { AdeptLayout } from "@/layouts/AdeptLayout";
+import { AppLayout } from "@/layouts/AppLayout";
 import { ForgotScreen } from "@/screens/ForgotScreen";
 import { LoadingScreen } from "@/screens/LoadingScreen";
 import { readLoadingSearch } from "@/screens/loadingSearch";
@@ -61,7 +61,7 @@ const routeTree = rootRoute.addChildren([
   createRoute({
     getParentRoute: () => rootRoute,
     path: "/app",
-    component: AdeptLayout,
+    component: AppLayout,
   }),
   createRoute({
     getParentRoute: () => rootRoute,

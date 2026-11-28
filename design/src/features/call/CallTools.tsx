@@ -33,7 +33,7 @@ export function CallTools() {
     ["Packet loss", poor ? "9%" : "0%"],
     ["Jitter", poor ? "45 ms" : "2 ms"],
     ["Stream", poor ? "720p 31fps" : world.share.quality],
-    ["Route", "Adept relay"],
+    ["Route", "Riftnet relay"],
   ];
   return (
     <div className="flex gap-1.5">

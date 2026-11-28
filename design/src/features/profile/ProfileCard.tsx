@@ -10,7 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ActivityLine } from "@/features/adept/ActivityLine";
+import { ActivityLine } from "@/features/profile/ActivityLine";
 import { ME, type User, user } from "@/mock/data";
 import {
   addFriend,

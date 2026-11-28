@@ -92,7 +92,7 @@ function PersonTile({
             : "ring-1 ring-white/5",
         )}
         style={{
-          background: `radial-gradient(circle at 50% 42%, color-mix(in srgb, ${toneFor(id).fg} 14%, var(--surface-1)), var(--adept-ink) 78%)`,
+          background: `radial-gradient(circle at 50% 42%, color-mix(in srgb, ${toneFor(id).fg} 14%, var(--surface-1)), var(--rift-ink) 78%)`,
         }}
       >
         {camera ? (

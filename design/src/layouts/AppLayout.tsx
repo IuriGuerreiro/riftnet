@@ -3,19 +3,18 @@ import { lazy, Suspense, useEffect, useState } from "react";
 
 import { RiftnetMark } from "@/components/brand/RiftnetMark";
 import { ServerIcon } from "@/components/ServerIcon";
-import { CallCard } from "@/features/adept/CallCard";
-import { IncomingCall, SharePlayBanner } from "@/features/adept/CallPrompts";
-import type { CallState } from "@/features/adept/CallStage";
-import { PeoplePanel } from "@/features/adept/PeoplePanel";
-import { ProfilePanel } from "@/features/adept/ProfilePanel";
-import { RoomPreview } from "@/features/adept/RoomPreview";
-import { StreamPip } from "@/features/adept/StreamPip";
-import { TopBarStatus } from "@/features/adept/TopBarStatus";
+import { CallCard } from "@/features/call/CallCard";
+import { IncomingCall, SharePlayBanner } from "@/features/call/CallPrompts";
+import type { CallState } from "@/features/call/CallStage";
+import { RoomPreview } from "@/features/call/RoomPreview";
+import { StreamPip } from "@/features/call/StreamPip";
 import { ChatView } from "@/features/chat/ChatView";
 import { readMessageLink } from "@/features/chat/messageLink";
 import { Dialogs } from "@/features/dialogs/Dialogs";
 import { EmojiText } from "@/features/emoji/EmojiText";
 import { onOpenChat } from "@/features/profile/openChat";
+import { PeoplePanel } from "@/features/profile/PeoplePanel";
+import { ProfilePanel } from "@/features/profile/ProfilePanel";
 import { JumpPalette } from "@/features/shell/JumpPalette";
 import { Banners, Toasts } from "@/features/shell/Notices";
 import {
@@ -26,6 +25,7 @@ import {
   ServerSidebar,
   type UnreadOf,
 } from "@/features/shell/Sidebars";
+import { TopBarStatus } from "@/features/shell/TopBarStatus";
 import { UserBar } from "@/features/shell/UserBar";
 import { cn } from "@/lib/utils";
 import {
@@ -39,12 +39,12 @@ import {
 import { change, ensureDm, openDialog, systemMessage, toast, useWorld, world } from "@/mock/world";
 
 const CallStage = lazy(() =>
-  import("@/features/adept/CallStage").then((m) => ({ default: m.CallStage })),
+  import("@/features/call/CallStage").then((m) => ({ default: m.CallStage })),
 );
 
 const WIDE = "(min-width: 1100px)";
 
-export function AdeptLayout() {
+export function AppLayout() {
   useWorld();
   const [initialTarget] = useState(readMessageLink);
   const initialPlace = initialTarget
@@ -520,7 +520,7 @@ export function AdeptLayout() {
             </div>
           ) : world.empty && place === "home" ? (
             <div className="m-auto max-w-sm p-8 text-center">
-              <h2 className="text-lg font-semibold">Welcome to Adept</h2>
+              <h2 className="text-lg font-semibold">Welcome to Riftnet</h2>
               <p className="mt-2 text-sm text-muted-foreground">
                 Add a friend or make a server to start talking.
               </p>

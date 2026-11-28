@@ -27,12 +27,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ActivityLine } from "@/features/adept/ActivityLine";
-import { UserCallMenu } from "@/features/adept/UserCallMenu";
-import { useSpeaker } from "@/features/adept/useSpeaker";
+import { UserCallMenu } from "@/features/call/UserCallMenu";
+import { useSpeaker } from "@/features/call/useSpeaker";
 import { getDraft } from "@/features/chat/drafts";
 import { searchPeople } from "@/features/dialogs/HomeDialogs";
 import { EmojiText } from "@/features/emoji/EmojiText";
+import { ActivityLine } from "@/features/profile/ActivityLine";
 import { ProfileTrigger } from "@/features/profile/ProfileCard";
 import { ConversationAvatar } from "@/features/shell/ConversationRow";
 import { cn } from "@/lib/utils";

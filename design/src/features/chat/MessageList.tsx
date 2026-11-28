@@ -340,7 +340,7 @@ function MessageRow({
             "group/msg relative px-4 outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset transition-colors duration-700 hover:bg-white/[0.025]",
             head ? "mt-3 pt-1 pb-0.5 [.compact_&]:mt-1" : "py-0.5 [.compact_&]:py-0",
             mentioned &&
-              "bg-brand/[0.07] shadow-[inset_2px_0_0_var(--adept-violet)] hover:bg-brand/10",
+              "bg-brand/[0.07] shadow-[inset_2px_0_0_var(--rift-violet)] hover:bg-brand/10",
             (picker !== null || editing || menuOpen) && "bg-white/[0.025]",
             flash && "bg-brand/15 duration-150",
           )}

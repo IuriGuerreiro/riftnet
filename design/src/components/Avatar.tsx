@@ -57,7 +57,7 @@ export function StatusDot({
       {status === "dnd" && (
         <>
           <circle cx="6" cy="6" r="6" fill="var(--destructive)" />
-          <rect x="2.6" y="4.9" width="6.8" height="2.2" rx="1.1" fill="var(--adept-ink)" />
+          <rect x="2.6" y="4.9" width="6.8" height="2.2" rx="1.1" fill="var(--rift-ink)" />
         </>
       )}
       {(status === "offline" || status === "invisible") && (

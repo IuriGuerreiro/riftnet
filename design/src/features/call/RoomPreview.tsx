@@ -11,10 +11,10 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { ActivityLine } from "@/features/profile/ActivityLine";
 import { type LiveRoom, ME, server, user } from "@/mock/data";
 import { isSilenced } from "@/mock/world";
 
-import { ActivityLine } from "./ActivityLine";
 import { ScreenSharePreview } from "./ScreenSharePreview";
 import { SpeakingAvatar } from "./SpeakingAvatar";
 import { UserCallMenu } from "./UserCallMenu";

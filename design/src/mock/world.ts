@@ -90,7 +90,7 @@ function loadSettings(): Settings {
   try {
     return {
       ...DEFAULT_SETTINGS,
-      ...(JSON.parse(localStorage.getItem("adept-settings") ?? "{}") as Partial<Settings>),
+      ...(JSON.parse(localStorage.getItem("riftnet-settings") ?? "{}") as Partial<Settings>),
     };
   } catch {
     return DEFAULT_SETTINGS;
@@ -169,7 +169,7 @@ export function saveSettings(patch: Partial<Settings>) {
   change(() => {
     world.settings = { ...world.settings, ...patch };
     try {
-      localStorage.setItem("adept-settings", JSON.stringify(world.settings));
+      localStorage.setItem("riftnet-settings", JSON.stringify(world.settings));
     } catch {
       return;
     }

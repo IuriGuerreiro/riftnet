@@ -17,7 +17,7 @@ export function LoadingScreen({ state }: LoadingSearch) {
     <div className="relative isolate flex min-h-full flex-col items-center justify-center bg-ink px-6">
       <div
         aria-hidden
-        className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_50%_44%,color-mix(in_srgb,var(--adept-violet)_16%,transparent),transparent_55%)]"
+        className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_50%_44%,color-mix(in_srgb,var(--rift-violet)_16%,transparent),transparent_55%)]"
       />
       {state === "error" ? <Offline /> : <Booting hold={state === "hold"} />}
       <p className="absolute bottom-6 text-[11px] text-muted-foreground/80">

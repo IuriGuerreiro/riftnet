@@ -1,295 +1,3003 @@
 [
-{"unicode":"😀","hexcode":"1F600","label":"grinning face","group":0,"tags":["cheerful","cheery","face","grin","grinning","happy","laugh","nice","smile","smiling","teeth"],"shortcodes":["grinning"]},
-{"unicode":"😃","hexcode":"1F603","label":"grinning face with big eyes","group":0,"tags":["awesome","big","eyes","face","grin","grinning","happy","mouth","open","smile","smiling","teeth","yay"],"shortcodes":["smiley"]},
-{"unicode":"😄","hexcode":"1F604","label":"grinning face with smiling eyes","group":0,"tags":["eye","eyes","face","grin","grinning","happy","laugh","lol","mouth","open","smile","smiling"],"shortcodes":["smile"]},
-{"unicode":"😁","hexcode":"1F601","label":"beaming face with smiling eyes","group":0,"tags":["beaming","eye","eyes","face","grin","grinning","happy","nice","smile","smiling","teeth"],"shortcodes":["grin"]},
-{"unicode":"😆","hexcode":"1F606","label":"grinning squinting face","group":0,"tags":["closed","eyes","face","grinning","haha","hahaha","happy","laugh","lol","mouth","open","rofl","smile","smiling","squinting"],"shortcodes":["laughing","satisfied"]},
-{"unicode":"😅","hexcode":"1F605","label":"grinning face with sweat","group":0,"tags":["cold","dejected","excited","face","grinning","mouth","nervous","open","smile","smiling","stress","stressed","sweat"],"shortcodes":["sweat_smile"]},
-{"unicode":"🤣","hexcode":"1F923","label":"rolling on the floor laughing","group":0,"tags":["crying","face","floor","funny","haha","happy","hehe","hilarious","joy","laugh","lmao","lol","rofl","roflmao","rolling","tear"],"shortcodes":["rolling_on_the_floor_laughing"]},
-{"unicode":"😂","hexcode":"1F602","label":"face with tears of joy","group":0,"tags":["crying","face","feels","funny","haha","happy","hehe","hilarious","joy","laugh","lmao","lol","rofl","roflmao","tear"],"shortcodes":["joy"]},
-{"unicode":"🙂","hexcode":"1F642","label":"slightly smiling face","group":0,"tags":["face","happy","slightly","smile","smiling"],"shortcodes":["slightly_smiling_face"]},
-{"unicode":"🙃","hexcode":"1F643","label":"upside-down face","group":0,"tags":["face","hehe","smile","upside-down"],"shortcodes":["upside_down_face"]},
-{"unicode":"🫠","hexcode":"1FAE0","label":"melting face","group":0,"tags":["disappear","dissolve","embarrassed","face","haha","heat","hot","liquid","lol","melt","melting","sarcasm","sarcastic"],"shortcodes":["melting_face"]},
-{"unicode":"🫫","hexcode":"1FAEB","label":"cracking face","group":0,"tags":["breaking","crumbling","masking","resilience","reveal","tension","transformation"],"shortcodes":[]},
-{"unicode":"😉","hexcode":"1F609","label":"winking face","group":0,"tags":["face","flirt","heartbreaker","sexy","slide","tease","wink","winking","winks"],"shortcodes":["wink"]},
-{"unicode":"😊","hexcode":"1F60A","label":"smiling face with smiling eyes","group":0,"tags":["blush","eye","eyes","face","glad","satisfied","smile","smiling"],"shortcodes":["blush"]},
-{"unicode":"😇","hexcode":"1F607","label":"smiling face with halo","group":0,"tags":["angel","angelic","angels","blessed","face","fairy","fairytale","fantasy","halo","happy","innocent","peaceful","smile","smiling","spirit","tale"],"shortcodes":["innocent"]},
-{"unicode":"🥰","hexcode":"1F970","label":"smiling face with hearts","group":0,"tags":["3","adore","crush","face","heart","hearts","ily","love","romance","smile","smiling","you"],"shortcodes":["smiling_face_with_3_hearts"]},
-{"unicode":"😍","hexcode":"1F60D","label":"smiling face with heart-eyes","group":0,"tags":["143","bae","eye","face","feels","heart-eyes","hearts","ily","kisses","love","romance","romantic","smile","xoxo"],"shortcodes":["heart_eyes"]},
-{"unicode":"🤩","hexcode":"1F929","label":"star-struck","group":0,"tags":["excited","eyes","face","grinning","smile","star","starry-eyed","wow"],"shortcodes":["star-struck","grinning_face_with_star_eyes"]},
-{"unicode":"😘","hexcode":"1F618","label":"face blowing a kiss","group":0,"tags":["adorbs","bae","blowing","face","flirt","heart","ily","kiss","love","lover","miss","muah","romantic","smooch","xoxo","you"],"shortcodes":["kissing_heart"]},
-{"unicode":"😗","hexcode":"1F617","label":"kissing face","group":0,"tags":["143","date","dating","face","flirt","ily","kiss","love","smooch","smooches","xoxo","you"],"shortcodes":["kissing"]},
-{"unicode":"☺️","hexcode":"263A","label":"smiling face","group":0,"tags":["face","happy","outlined","relaxed","smile","smiling"],"shortcodes":["relaxed"]},
-{"unicode":"😚","hexcode":"1F61A","label":"kissing face with closed eyes","group":0,"tags":["143","bae","blush","closed","date","dating","eye","eyes","face","flirt","ily","kisses","kissing","smooches","xoxo"],"shortcodes":["kissing_closed_eyes"]},
-{"unicode":"😙","hexcode":"1F619","label":"kissing face with smiling eyes","group":0,"tags":["143","closed","date","dating","eye","eyes","face","flirt","ily","kiss","kisses","kissing","love","night","smile","smiling"],"shortcodes":["kissing_smiling_eyes"]},
-{"unicode":"🥲","hexcode":"1F972","label":"smiling face with tear","group":0,"tags":["face","glad","grateful","happy","joy","pain","proud","relieved","smile","smiley","smiling","tear","touched"],"shortcodes":["smiling_face_with_tear"]},
-{"unicode":"😋","hexcode":"1F60B","label":"face savoring food","group":0,"tags":["delicious","eat","face","food","full","hungry","savor","smile","smiling","tasty","um","yum","yummy"],"shortcodes":["yum"]},
-{"unicode":"😛","hexcode":"1F61B","label":"face with tongue","group":0,"tags":["awesome","cool","face","nice","party","stuck-out","sweet","tongue"],"shortcodes":["stuck_out_tongue"]},
-{"unicode":"😜","hexcode":"1F61C","label":"winking face with tongue","group":0,"tags":["crazy","epic","eye","face","funny","joke","loopy","nutty","party","stuck-out","tongue","wacky","weirdo","wink","winking","yolo"],"shortcodes":["stuck_out_tongue_winking_eye"]},
-{"unicode":"🤪","hexcode":"1F92A","label":"zany face","group":0,"tags":["crazy","eye","eyes","face","goofy","large","small","zany"],"shortcodes":["zany_face","grinning_face_with_one_large_and_one_small_eye"]},
-{"unicode":"😝","hexcode":"1F61D","label":"squinting face with tongue","group":0,"tags":["closed","eye","eyes","face","gross","horrible","omg","squinting","stuck-out","taste","tongue","whatever","yolo"],"shortcodes":["stuck_out_tongue_closed_eyes"]},
-{"unicode":"🤑","hexcode":"1F911","label":"money-mouth face","group":0,"tags":["face","money","money-mouth","mouth","paid"],"shortcodes":["money_mouth_face"]},
-{"unicode":"🤗","hexcode":"1F917","label":"smiling face with open hands","group":0,"tags":["face","hands","hug","hugging","open","smiling"],"shortcodes":["hugging_face"]},
-{"unicode":"🤭","hexcode":"1F92D","label":"face with hand over mouth","group":0,"tags":["face","giggle","giggling","hand","mouth","oops","realization","secret","shock","sudden","surprise","whoops"],"shortcodes":["face_with_hand_over_mouth","smiling_face_with_smiling_eyes_and_hand_covering_mouth"]},
-{"unicode":"🫢","hexcode":"1FAE2","label":"face with open eyes and hand over mouth","group":0,"tags":["amazement","awe","disbelief","embarrass","eyes","face","gasp","hand","mouth","omg","open","over","quiet","scared","shock","surprise"],"shortcodes":["face_with_open_eyes_and_hand_over_mouth"]},
-{"unicode":"🫣","hexcode":"1FAE3","label":"face with peeking eye","group":0,"tags":["captivated","embarrass","eye","face","hide","hiding","peek","peeking","peep","scared","shy","stare"],"shortcodes":["face_with_peeking_eye"]},
-{"unicode":"🤫","hexcode":"1F92B","label":"shushing face","group":0,"tags":["face","quiet","shh","shush","shushing"],"shortcodes":["shushing_face","face_with_finger_covering_closed_lips"]},
-{"unicode":"🤔","hexcode":"1F914","label":"thinking face","group":0,"tags":["chin","consider","face","hmm","ponder","pondering","thinking","wondering"],"shortcodes":["thinking_face"]},
-{"unicode":"🫡","hexcode":"1FAE1","label":"saluting face","group":0,"tags":["OK","face","good","luck","ma’am","respect","salute","saluting","sir","troops","yes"],"shortcodes":["saluting_face"]},
-{"unicode":"🤐","hexcode":"1F910","label":"zipper-mouth face","group":0,"tags":["face","keep","mouth","quiet","secret","shut","zip","zipper","zipper-mouth"],"shortcodes":["zipper_mouth_face"]},
-{"unicode":"🤨","hexcode":"1F928","label":"face with raised eyebrow","group":0,"tags":["disapproval","disbelief","distrust","emoji","eyebrow","face","hmm","mild","raised","skeptic","skeptical","skepticism","surprise","what"],"shortcodes":["face_with_raised_eyebrow","face_with_one_eyebrow_raised"]},
-{"unicode":"😐","hexcode":"1F610","label":"neutral face","group":0,"tags":["awkward","blank","deadpan","expressionless","face","fine","jealous","meh","neutral","oh","shade","straight","unamused","unhappy","unimpressed","whatever"],"shortcodes":["neutral_face"]},
-{"unicode":"😭","hexcode":"1F62D","label":"loudly crying face","group":0,"tags":["bawling","cry","crying","face","loudly","sad","sob","tear","tears","unhappy"],"shortcodes":["sob"]},
-{"unicode":"💀","hexcode":"1F480","label":"skull","group":0,"tags":["body","dead","death","face","fairy","fairytale","i’m","lmao","monster","tale","yolo"],"shortcodes":["skull"]},
-{"unicode":"❤️","hexcode":"2764","label":"red heart","group":0,"tags":["emotion","heart","love","red"],"shortcodes":["heart"]},
-{"unicode":"🤞","hexcode":"1F91E","label":"crossed fingers","group":1,"tags":["cross","crossed","finger","fingers","hand","luck"],"shortcodes":["crossed_fingers","hand_with_index_and_middle_fingers_crossed"]},
-{"unicode":"👍","hexcode":"1F44D","label":"thumbs up","group":1,"tags":["+1","good","hand","like","thumb","up","yes"],"shortcodes":["+1","thumbsup"]},
-{"unicode":"🤝","hexcode":"1F91D","label":"handshake","group":1,"tags":["agreement","deal","hand","meeting","shake"],"shortcodes":["handshake"]},
-{"unicode":"🙏","hexcode":"1F64F","label":"folded hands","group":1,"tags":["appreciate","ask","beg","blessed","bow","cmon","five","folded","gesture","hand","high","please","pray","thanks","thx"],"shortcodes":["pray"]},
-{"unicode":"👀","hexcode":"1F440","label":"eyes","group":1,"tags":["body","eye","face","googly","look","looking","omg","peep","see","seeing"],"shortcodes":["eyes"]},
-{"unicode":"🐵","hexcode":"1F435","label":"monkey face","group":3,"tags":["animal","banana","face","monkey"],"shortcodes":["monkey_face"]},
-{"unicode":"🐒","hexcode":"1F412","label":"monkey","group":3,"tags":["animal","banana"],"shortcodes":["monkey"]},
-{"unicode":"🦍","hexcode":"1F98D","label":"gorilla","group":3,"tags":["animal"],"shortcodes":["gorilla"]},
-{"unicode":"🦧","hexcode":"1F9A7","label":"orangutan","group":3,"tags":["animal","ape","monkey"],"shortcodes":["orangutan"]},
-{"unicode":"🐶","hexcode":"1F436","label":"dog face","group":3,"tags":["adorbs","animal","dog","face","pet","puppies","puppy"],"shortcodes":["dog"]},
-{"unicode":"🐕","hexcode":"1F415","label":"dog","group":3,"tags":["animal","animals","dogs","pet"],"shortcodes":["dog2"]},
-{"unicode":"🦮","hexcode":"1F9AE","label":"guide dog","group":3,"tags":["accessibility","animal","blind","dog","guide"],"shortcodes":["guide_dog"]},
-{"unicode":"🐩","hexcode":"1F429","label":"poodle","group":3,"tags":["animal","dog","fluffy"],"shortcodes":["poodle"]},
-{"unicode":"🐺","hexcode":"1F43A","label":"wolf","group":3,"tags":["animal","face"],"shortcodes":["wolf"]},
-{"unicode":"🦊","hexcode":"1F98A","label":"fox","group":3,"tags":["animal","face"],"shortcodes":["fox_face"]},
-{"unicode":"🦝","hexcode":"1F99D","label":"raccoon","group":3,"tags":["animal","curious","sly"],"shortcodes":["raccoon"]},
-{"unicode":"🐱","hexcode":"1F431","label":"cat face","group":3,"tags":["animal","cat","face","kitten","kitty","pet"],"shortcodes":["cat"]},
-{"unicode":"🐈","hexcode":"1F408","label":"cat","group":3,"tags":["animal","animals","cats","kitten","pet"],"shortcodes":["cat2"]},
-{"unicode":"🦁","hexcode":"1F981","label":"lion","group":3,"tags":["Leo","alpha","animal","face","mane","order","rawr","roar","safari","strong","zodiac"],"shortcodes":["lion_face"]},
-{"unicode":"🐯","hexcode":"1F42F","label":"tiger face","group":3,"tags":["animal","big","cat","face","predator","tiger"],"shortcodes":["tiger"]},
-{"unicode":"🐅","hexcode":"1F405","label":"tiger","group":3,"tags":["animal","big","cat","predator","zoo"],"shortcodes":["tiger2"]},
-{"unicode":"🐆","hexcode":"1F406","label":"leopard","group":3,"tags":["animal","big","cat","predator","zoo"],"shortcodes":["leopard"]},
-{"unicode":"🐴","hexcode":"1F434","label":"horse face","group":3,"tags":["animal","dressage","equine","face","farm","horse","horses"],"shortcodes":["horse"]},
-{"unicode":"🫎","hexcode":"1FACE","label":"moose","group":3,"tags":["alces","animal","antlers","elk","mammal"],"shortcodes":["moose"]},
-{"unicode":"🫏","hexcode":"1FACF","label":"donkey","group":3,"tags":["animal","ass","burro","hinny","mammal","mule","stubborn"],"shortcodes":["donkey"]},
-{"unicode":"🐎","hexcode":"1F40E","label":"horse","group":3,"tags":["animal","equestrian","farm","racehorse","racing"],"shortcodes":["racehorse"]},
-{"unicode":"🦄","hexcode":"1F984","label":"unicorn","group":3,"tags":["face"],"shortcodes":["unicorn_face"]},
-{"unicode":"🦓","hexcode":"1F993","label":"zebra","group":3,"tags":["animal","stripe"],"shortcodes":["zebra_face"]},
-{"unicode":"🦌","hexcode":"1F98C","label":"deer","group":3,"tags":["animal"],"shortcodes":["deer"]},
-{"unicode":"🦬","hexcode":"1F9AC","label":"bison","group":3,"tags":["animal","buffalo","herd","wisent"],"shortcodes":["bison"]},
-{"unicode":"🐮","hexcode":"1F42E","label":"cow face","group":3,"tags":["animal","cow","face","farm","milk","moo"],"shortcodes":["cow"]},
-{"unicode":"🐂","hexcode":"1F402","label":"ox","group":3,"tags":["Taurus","animal","animals","bull","farm","zodiac"],"shortcodes":["ox"]},
-{"unicode":"🐃","hexcode":"1F403","label":"water buffalo","group":3,"tags":["animal","buffalo","water","zoo"],"shortcodes":["water_buffalo"]},
-{"unicode":"🐄","hexcode":"1F404","label":"cow","group":3,"tags":["animal","animals","farm","milk","moo"],"shortcodes":["cow2"]},
-{"unicode":"🐷","hexcode":"1F437","label":"pig face","group":3,"tags":["animal","bacon","face","farm","pig","pork"],"shortcodes":["pig"]},
-{"unicode":"🐖","hexcode":"1F416","label":"pig","group":3,"tags":["animal","bacon","farm","pork","sow"],"shortcodes":["pig2"]},
-{"unicode":"🐗","hexcode":"1F417","label":"boar","group":3,"tags":["animal","pig"],"shortcodes":["boar"]},
-{"unicode":"🐽","hexcode":"1F43D","label":"pig nose","group":3,"tags":["animal","face","farm","nose","pig","smell","snout"],"shortcodes":["pig_nose"]},
-{"unicode":"🐏","hexcode":"1F40F","label":"ram","group":3,"tags":["Aries","animal","horns","male","sheep","zodiac","zoo"],"shortcodes":["ram"]},
-{"unicode":"🐑","hexcode":"1F411","label":"ewe","group":3,"tags":["animal","baa","farm","female","fluffy","lamb","sheep","wool"],"shortcodes":["sheep"]},
-{"unicode":"🐐","hexcode":"1F410","label":"goat","group":3,"tags":["Capricorn","animal","farm","milk","zodiac"],"shortcodes":["goat"]},
-{"unicode":"🐪","hexcode":"1F42A","label":"camel","group":3,"tags":["animal","desert","dromedary","hump","one"],"shortcodes":["dromedary_camel"]},
-{"unicode":"🐫","hexcode":"1F42B","label":"two-hump camel","group":3,"tags":["animal","bactrian","camel","desert","hump","two","two-hump"],"shortcodes":["camel"]},
-{"unicode":"🦙","hexcode":"1F999","label":"llama","group":3,"tags":["alpaca","animal","guanaco","vicuña","wool"],"shortcodes":["llama"]},
-{"unicode":"🦒","hexcode":"1F992","label":"giraffe","group":3,"tags":["animal","spots"],"shortcodes":["giraffe_face"]},
-{"unicode":"🦉","hexcode":"1F989","label":"owl","group":3,"tags":["animal","bird","ornithology","wise"],"shortcodes":["owl"]},
-{"unicode":"🍇","hexcode":"1F347","label":"grapes","group":4,"tags":["Dionysus","fruit","grape"],"shortcodes":["grapes"]},
-{"unicode":"🍈","hexcode":"1F348","label":"melon","group":4,"tags":["cantaloupe","fruit"],"shortcodes":["melon"]},
-{"unicode":"🍉","hexcode":"1F349","label":"watermelon","group":4,"tags":["fruit"],"shortcodes":["watermelon"]},
-{"unicode":"🍊","hexcode":"1F34A","label":"tangerine","group":4,"tags":["c","citrus","fruit","nectarine","orange","vitamin"],"shortcodes":["tangerine"]},
-{"unicode":"🍋","hexcode":"1F34B","label":"lemon","group":4,"tags":["citrus","fruit","sour"],"shortcodes":["lemon"]},
-{"unicode":"🍌","hexcode":"1F34C","label":"banana","group":4,"tags":["fruit","potassium"],"shortcodes":["banana"]},
-{"unicode":"🍍","hexcode":"1F34D","label":"pineapple","group":4,"tags":["colada","fruit","pina","tropical"],"shortcodes":["pineapple"]},
-{"unicode":"🥭","hexcode":"1F96D","label":"mango","group":4,"tags":["food","fruit","tropical"],"shortcodes":["mango"]},
-{"unicode":"🍎","hexcode":"1F34E","label":"red apple","group":4,"tags":["apple","diet","food","fruit","health","red","ripe"],"shortcodes":["apple"]},
-{"unicode":"🍏","hexcode":"1F34F","label":"green apple","group":4,"tags":["apple","fruit","green"],"shortcodes":["green_apple"]},
-{"unicode":"🍐","hexcode":"1F350","label":"pear","group":4,"tags":["fruit"],"shortcodes":["pear"]},
-{"unicode":"🍑","hexcode":"1F351","label":"peach","group":4,"tags":["fruit"],"shortcodes":["peach"]},
-{"unicode":"🍒","hexcode":"1F352","label":"cherries","group":4,"tags":["berries","cherry","fruit","red"],"shortcodes":["cherries"]},
-{"unicode":"🍓","hexcode":"1F353","label":"strawberry","group":4,"tags":["berry","fruit"],"shortcodes":["strawberry"]},
-{"unicode":"🫐","hexcode":"1FAD0","label":"blueberries","group":4,"tags":["berries","berry","bilberry","blue","blueberry","food","fruit"],"shortcodes":["blueberries"]},
-{"unicode":"🥝","hexcode":"1F95D","label":"kiwi fruit","group":4,"tags":["food","fruit","kiwi"],"shortcodes":["kiwifruit"]},
-{"unicode":"🍅","hexcode":"1F345","label":"tomato","group":4,"tags":["food","fruit","vegetable"],"shortcodes":["tomato"]},
-{"unicode":"🫒","hexcode":"1FAD2","label":"olive","group":4,"tags":["food"],"shortcodes":["olive"]},
-{"unicode":"🥥","hexcode":"1F965","label":"coconut","group":4,"tags":["colada","palm","piña"],"shortcodes":["coconut"]},
-{"unicode":"🥑","hexcode":"1F951","label":"avocado","group":4,"tags":["food","fruit"],"shortcodes":["avocado"]},
-{"unicode":"🍆","hexcode":"1F346","label":"eggplant","group":4,"tags":["aubergine","vegetable"],"shortcodes":["eggplant"]},
-{"unicode":"🥔","hexcode":"1F954","label":"potato","group":4,"tags":["food","vegetable"],"shortcodes":["potato"]},
-{"unicode":"🥕","hexcode":"1F955","label":"carrot","group":4,"tags":["food","vegetable"],"shortcodes":["carrot"]},
-{"unicode":"🌽","hexcode":"1F33D","label":"ear of corn","group":4,"tags":["corn","crops","ear","farm","maize","maze"],"shortcodes":["corn"]},
-{"unicode":"🌶️","hexcode":"1F336","label":"hot pepper","group":4,"tags":["hot","pepper"],"shortcodes":["hot_pepper"]},
-{"unicode":"🫑","hexcode":"1FAD1","label":"bell pepper","group":4,"tags":["bell","capsicum","food","pepper","vegetable"],"shortcodes":["bell_pepper"]},
-{"unicode":"🥒","hexcode":"1F952","label":"cucumber","group":4,"tags":["food","pickle","vegetable"],"shortcodes":["cucumber"]},
-{"unicode":"🫝","hexcode":"1FADD","label":"pickle","group":4,"tags":["brine","condiment","cucumber","ferment","gherkin","relish","trouble"],"shortcodes":[]},
-{"unicode":"🥬","hexcode":"1F96C","label":"leafy green","group":4,"tags":["bok","burgers","cabbage","choy","green","kale","leafy","lettuce","salad"],"shortcodes":["leafy_green"]},
-{"unicode":"🥦","hexcode":"1F966","label":"broccoli","group":4,"tags":["cabbage","wild"],"shortcodes":["broccoli"]},
-{"unicode":"🧄","hexcode":"1F9C4","label":"garlic","group":4,"tags":["flavoring"],"shortcodes":["garlic"]},
-{"unicode":"🧅","hexcode":"1F9C5","label":"onion","group":4,"tags":["flavoring"],"shortcodes":["onion"]},
-{"unicode":"🥜","hexcode":"1F95C","label":"peanuts","group":4,"tags":["food","nut","peanut","vegetable"],"shortcodes":["peanuts"]},
-{"unicode":"🫘","hexcode":"1FAD8","label":"beans","group":4,"tags":["food","kidney","legume","small"],"shortcodes":["beans"]},
-{"unicode":"🌰","hexcode":"1F330","label":"chestnut","group":4,"tags":["almond","plant"],"shortcodes":["chestnut"]},
-{"unicode":"🫚","hexcode":"1FADA","label":"ginger root","group":4,"tags":["beer","ginger","health","herb","natural","root","spice"],"shortcodes":["ginger_root"]},
-{"unicode":"🫛","hexcode":"1FADB","label":"pea pod","group":4,"tags":["beans","beanstalk","edamame","legume","pea","pod","soybean","vegetable","veggie"],"shortcodes":["pea_pod"]},
-{"unicode":"🫜","hexcode":"1FADC","label":"root vegetable","group":4,"tags":["beet","food","garden","radish","root","salad","turnip","vegetable","vegetarian"],"shortcodes":["root_vegetable"]},
-{"unicode":"🍞","hexcode":"1F35E","label":"bread","group":4,"tags":["carbs","food","grain","loaf","restaurant","toast","wheat"],"shortcodes":["bread"]},
-{"unicode":"🥐","hexcode":"1F950","label":"croissant","group":4,"tags":["bread","breakfast","crescent","food","french","roll"],"shortcodes":["croissant"]},
-{"unicode":"🌍","hexcode":"1F30D","label":"globe showing Europe-Africa","group":5,"tags":["Africa","Europe","Europe-Africa","earth","globe","showing","world"],"shortcodes":["earth_africa"]},
-{"unicode":"🌎","hexcode":"1F30E","label":"globe showing Americas","group":5,"tags":["Americas","earth","globe","showing","world"],"shortcodes":["earth_americas"]},
-{"unicode":"🌏","hexcode":"1F30F","label":"globe showing Asia-Australia","group":5,"tags":["Asia","Asia-Australia","Australia","earth","globe","showing","world"],"shortcodes":["earth_asia"]},
-{"unicode":"🌐","hexcode":"1F310","label":"globe with meridians","group":5,"tags":["earth","globe","internet","meridians","web","world","worldwide"],"shortcodes":["globe_with_meridians"]},
-{"unicode":"🗺️","hexcode":"1F5FA","label":"world map","group":5,"tags":["map","world"],"shortcodes":["world_map"]},
-{"unicode":"🗾","hexcode":"1F5FE","label":"map of Japan","group":5,"tags":["Japan","map"],"shortcodes":["japan"]},
-{"unicode":"🧭","hexcode":"1F9ED","label":"compass","group":5,"tags":["direction","magnetic","navigation","orienteering"],"shortcodes":["compass"]},
-{"unicode":"🏔️","hexcode":"1F3D4","label":"snow-capped mountain","group":5,"tags":["cold","mountain","snow","snow-capped"],"shortcodes":["snow_capped_mountain"]},
-{"unicode":"⛰️","hexcode":"26F0","label":"mountain","group":5,"tags":["mountain"],"shortcodes":["mountain"]},
-{"unicode":"🛘","hexcode":"1F6D8","label":"landslide","group":5,"tags":["avalanche","danger","disaster","earthquake","mountain","mudslide","rocks"],"shortcodes":["landslide"]},
-{"unicode":"🌋","hexcode":"1F30B","label":"volcano","group":5,"tags":["eruption","mountain","nature"],"shortcodes":["volcano"]},
-{"unicode":"🗻","hexcode":"1F5FB","label":"mount fuji","group":5,"tags":["fuji","mount","mountain","nature"],"shortcodes":["mount_fuji"]},
-{"unicode":"🏕️","hexcode":"1F3D5","label":"camping","group":5,"tags":["camping"],"shortcodes":["camping"]},
-{"unicode":"🏖️","hexcode":"1F3D6","label":"beach with umbrella","group":5,"tags":["beach","umbrella"],"shortcodes":["beach_with_umbrella"]},
-{"unicode":"🏜️","hexcode":"1F3DC","label":"desert","group":5,"tags":["desert"],"shortcodes":["desert"]},
-{"unicode":"🏝️","hexcode":"1F3DD","label":"desert island","group":5,"tags":["desert","island"],"shortcodes":["desert_island"]},
-{"unicode":"🏞️","hexcode":"1F3DE","label":"national park","group":5,"tags":["national","park"],"shortcodes":["national_park"]},
-{"unicode":"🏟️","hexcode":"1F3DF","label":"stadium","group":5,"tags":["stadium"],"shortcodes":["stadium"]},
-{"unicode":"🏛️","hexcode":"1F3DB","label":"classical building","group":5,"tags":["building","classical"],"shortcodes":["classical_building"]},
-{"unicode":"🏗️","hexcode":"1F3D7","label":"building construction","group":5,"tags":["building","construction","crane"],"shortcodes":["building_construction"]},
-{"unicode":"🧱","hexcode":"1F9F1","label":"brick","group":5,"tags":["bricks","clay","mortar","wall"],"shortcodes":["bricks"]},
-{"unicode":"🪨","hexcode":"1FAA8","label":"rock","group":5,"tags":["boulder","heavy","solid","stone","tough"],"shortcodes":["rock"]},
-{"unicode":"🪵","hexcode":"1FAB5","label":"wood","group":5,"tags":["log","lumber","timber"],"shortcodes":["wood"]},
-{"unicode":"🛖","hexcode":"1F6D6","label":"hut","group":5,"tags":["home","house","roundhouse","shelter","yurt"],"shortcodes":["hut"]},
-{"unicode":"🏘️","hexcode":"1F3D8","label":"houses","group":5,"tags":["house"],"shortcodes":["house_buildings"]},
-{"unicode":"🏚️","hexcode":"1F3DA","label":"derelict house","group":5,"tags":["derelict","home","house"],"shortcodes":["derelict_house_building"]},
-{"unicode":"🏠","hexcode":"1F3E0","label":"house","group":5,"tags":["building","country","heart","home","ranch","settle","simple","suburban","suburbia","where"],"shortcodes":["house"]},
-{"unicode":"🏡","hexcode":"1F3E1","label":"house with garden","group":5,"tags":["building","country","garden","heart","home","house","ranch","settle","simple","suburban","suburbia","where"],"shortcodes":["house_with_garden"]},
-{"unicode":"🏢","hexcode":"1F3E2","label":"office building","group":5,"tags":["building","city","cubical","job","office"],"shortcodes":["office"]},
-{"unicode":"🏣","hexcode":"1F3E3","label":"Japanese post office","group":5,"tags":["Japanese","building","office","post"],"shortcodes":["post_office"]},
-{"unicode":"🏤","hexcode":"1F3E4","label":"post office","group":5,"tags":["European","building","office","post"],"shortcodes":["european_post_office"]},
-{"unicode":"🏥","hexcode":"1F3E5","label":"hospital","group":5,"tags":["building","doctor","medicine"],"shortcodes":["hospital"]},
-{"unicode":"🏦","hexcode":"1F3E6","label":"bank","group":5,"tags":["building"],"shortcodes":["bank"]},
-{"unicode":"🏨","hexcode":"1F3E8","label":"hotel","group":5,"tags":["building"],"shortcodes":["hotel"]},
-{"unicode":"🏩","hexcode":"1F3E9","label":"love hotel","group":5,"tags":["building","hotel","love"],"shortcodes":["love_hotel"]},
-{"unicode":"🏪","hexcode":"1F3EA","label":"convenience store","group":5,"tags":["24","building","convenience","hours","store"],"shortcodes":["convenience_store"]},
-{"unicode":"🏫","hexcode":"1F3EB","label":"school","group":5,"tags":["building"],"shortcodes":["school"]},
-{"unicode":"🏬","hexcode":"1F3EC","label":"department store","group":5,"tags":["building","department","store"],"shortcodes":["department_store"]},
-{"unicode":"🏭","hexcode":"1F3ED","label":"factory","group":5,"tags":["building"],"shortcodes":["factory"]},
-{"unicode":"🏯","hexcode":"1F3EF","label":"Japanese castle","group":5,"tags":["Japanese","building","castle"],"shortcodes":["japanese_castle"]},
-{"unicode":"🌙","hexcode":"1F319","label":"crescent moon","group":5,"tags":["crescent","moon","ramadan","space"],"shortcodes":["crescent_moon"]},
-{"unicode":"🔥","hexcode":"1F525","label":"fire","group":5,"tags":["af","burn","flame","hot","lit","litaf","tool"],"shortcodes":["fire"]},
-{"unicode":"🌊","hexcode":"1F30A","label":"water wave","group":5,"tags":["nature","ocean","surf","surfer","surfing","water","wave"],"shortcodes":["ocean"]},
-{"unicode":"🎃","hexcode":"1F383","label":"jack-o-lantern","group":6,"tags":["celebration","halloween","jack","lantern","pumpkin"],"shortcodes":["jack_o_lantern"]},
-{"unicode":"🎄","hexcode":"1F384","label":"Christmas tree","group":6,"tags":["Christmas","celebration","tree"],"shortcodes":["christmas_tree"]},
-{"unicode":"🎆","hexcode":"1F386","label":"fireworks","group":6,"tags":["boom","celebration","entertainment","yolo"],"shortcodes":["fireworks"]},
-{"unicode":"🎇","hexcode":"1F387","label":"sparkler","group":6,"tags":["boom","celebration","fireworks","sparkle"],"shortcodes":["sparkler"]},
-{"unicode":"🧨","hexcode":"1F9E8","label":"firecracker","group":6,"tags":["dynamite","explosive","fire","fireworks","light","pop","popping","spark"],"shortcodes":["firecracker"]},
-{"unicode":"✨","hexcode":"2728","label":"sparkles","group":6,"tags":["*","magic","sparkle","star"],"shortcodes":["sparkles"]},
-{"unicode":"🎈","hexcode":"1F388","label":"balloon","group":6,"tags":["birthday","celebrate","celebration"],"shortcodes":["balloon"]},
-{"unicode":"🎉","hexcode":"1F389","label":"party popper","group":6,"tags":["awesome","birthday","celebrate","celebration","excited","hooray","party","popper","tada","woohoo"],"shortcodes":["tada"]},
-{"unicode":"🎊","hexcode":"1F38A","label":"confetti ball","group":6,"tags":["ball","celebrate","celebration","confetti","party","woohoo"],"shortcodes":["confetti_ball"]},
-{"unicode":"🎋","hexcode":"1F38B","label":"tanabata tree","group":6,"tags":["Japanese","banner","celebration","tanabata","tree"],"shortcodes":["tanabata_tree"]},
-{"unicode":"🎍","hexcode":"1F38D","label":"pine decoration","group":6,"tags":["Japanese","bamboo","celebration","decoration","pine","plant"],"shortcodes":["bamboo"]},
-{"unicode":"🎎","hexcode":"1F38E","label":"Japanese dolls","group":6,"tags":["Japanese","celebration","doll","dolls","festival"],"shortcodes":["dolls"]},
-{"unicode":"🎏","hexcode":"1F38F","label":"carp streamer","group":6,"tags":["carp","celebration","streamer"],"shortcodes":["flags"]},
-{"unicode":"🎐","hexcode":"1F390","label":"wind chime","group":6,"tags":["bell","celebration","chime","wind"],"shortcodes":["wind_chime"]},
-{"unicode":"🎑","hexcode":"1F391","label":"moon viewing ceremony","group":6,"tags":["celebration","ceremony","moon","viewing"],"shortcodes":["rice_scene"]},
-{"unicode":"🧧","hexcode":"1F9E7","label":"red envelope","group":6,"tags":["envelope","gift","good","hóngbāo","lai","luck","money","red","see"],"shortcodes":["red_envelope"]},
-{"unicode":"🎀","hexcode":"1F380","label":"ribbon","group":6,"tags":["celebration"],"shortcodes":["ribbon"]},
-{"unicode":"🎁","hexcode":"1F381","label":"wrapped gift","group":6,"tags":["birthday","bow","box","celebration","christmas","gift","present","surprise","wrapped"],"shortcodes":["gift"]},
-{"unicode":"🎗️","hexcode":"1F397","label":"reminder ribbon","group":6,"tags":["celebration","reminder","ribbon"],"shortcodes":["reminder_ribbon"]},
-{"unicode":"🎟️","hexcode":"1F39F","label":"admission tickets","group":6,"tags":["admission","ticket","tickets"],"shortcodes":["admission_tickets"]},
-{"unicode":"🎫","hexcode":"1F3AB","label":"ticket","group":6,"tags":["admission","stub"],"shortcodes":["ticket"]},
-{"unicode":"🎖️","hexcode":"1F396","label":"military medal","group":6,"tags":["award","celebration","medal","military"],"shortcodes":["medal"]},
-{"unicode":"🏆","hexcode":"1F3C6","label":"trophy","group":6,"tags":["champion","champs","prize","slay","sport","victory","win","winning"],"shortcodes":["trophy"]},
-{"unicode":"🏅","hexcode":"1F3C5","label":"sports medal","group":6,"tags":["award","gold","medal","sports","winner"],"shortcodes":["sports_medal"]},
-{"unicode":"🥇","hexcode":"1F947","label":"1st place medal","group":6,"tags":["1st","first","gold","medal","place"],"shortcodes":["first_place_medal"]},
-{"unicode":"🥈","hexcode":"1F948","label":"2nd place medal","group":6,"tags":["2nd","medal","place","second","silver"],"shortcodes":["second_place_medal"]},
-{"unicode":"🥉","hexcode":"1F949","label":"3rd place medal","group":6,"tags":["3rd","bronze","medal","place","third"],"shortcodes":["third_place_medal"]},
-{"unicode":"⚽","hexcode":"26BD","label":"soccer ball","group":6,"tags":["ball","football","futbol","soccer","sport"],"shortcodes":["soccer"]},
-{"unicode":"⚾","hexcode":"26BE","label":"baseball","group":6,"tags":["ball","sport"],"shortcodes":["baseball"]},
-{"unicode":"🥎","hexcode":"1F94E","label":"softball","group":6,"tags":["ball","glove","sports","underarm"],"shortcodes":["softball"]},
-{"unicode":"🏀","hexcode":"1F3C0","label":"basketball","group":6,"tags":["ball","hoop","sport"],"shortcodes":["basketball"]},
-{"unicode":"🏐","hexcode":"1F3D0","label":"volleyball","group":6,"tags":["ball","game"],"shortcodes":["volleyball"]},
-{"unicode":"🏈","hexcode":"1F3C8","label":"american football","group":6,"tags":["american","ball","bowl","football","sport","super"],"shortcodes":["football"]},
-{"unicode":"🏉","hexcode":"1F3C9","label":"rugby football","group":6,"tags":["ball","football","rugby","sport"],"shortcodes":["rugby_football"]},
-{"unicode":"🎾","hexcode":"1F3BE","label":"tennis","group":6,"tags":["ball","racquet","sport"],"shortcodes":["tennis"]},
-{"unicode":"🥏","hexcode":"1F94F","label":"flying disc","group":6,"tags":["disc","flying","ultimate"],"shortcodes":["flying_disc"]},
-{"unicode":"🎳","hexcode":"1F3B3","label":"bowling","group":6,"tags":["ball","game","sport","strike"],"shortcodes":["bowling"]},
-{"unicode":"🏏","hexcode":"1F3CF","label":"cricket game","group":6,"tags":["ball","bat","cricket","game"],"shortcodes":["cricket_bat_and_ball"]},
-{"unicode":"🏑","hexcode":"1F3D1","label":"field hockey","group":6,"tags":["ball","field","game","hockey","stick"],"shortcodes":["field_hockey_stick_and_ball"]},
-{"unicode":"🏒","hexcode":"1F3D2","label":"ice hockey","group":6,"tags":["game","hockey","ice","puck","stick"],"shortcodes":["ice_hockey_stick_and_puck"]},
-{"unicode":"👓","hexcode":"1F453","label":"glasses","group":7,"tags":["clothing","eye","eyeglasses","eyewear"],"shortcodes":["eyeglasses"]},
-{"unicode":"🕶️","hexcode":"1F576","label":"sunglasses","group":7,"tags":["dark","eye","eyewear","glasses"],"shortcodes":["dark_sunglasses"]},
-{"unicode":"🥽","hexcode":"1F97D","label":"goggles","group":7,"tags":["dive","eye","protection","scuba","swimming","welding"],"shortcodes":["goggles"]},
-{"unicode":"🥼","hexcode":"1F97C","label":"lab coat","group":7,"tags":["clothes","coat","doctor","dr","experiment","jacket","lab","scientist","white"],"shortcodes":["lab_coat"]},
-{"unicode":"🦺","hexcode":"1F9BA","label":"safety vest","group":7,"tags":["emergency","safety","vest"],"shortcodes":["safety_vest"]},
-{"unicode":"👔","hexcode":"1F454","label":"necktie","group":7,"tags":["clothing","employed","serious","shirt","tie"],"shortcodes":["necktie"]},
-{"unicode":"👕","hexcode":"1F455","label":"t-shirt","group":7,"tags":["blue","casual","clothes","clothing","collar","dressed","shirt","shopping","tshirt","weekend"],"shortcodes":["shirt","tshirt"]},
-{"unicode":"👖","hexcode":"1F456","label":"jeans","group":7,"tags":["blue","casual","clothes","clothing","denim","dressed","pants","shopping","trousers","weekend"],"shortcodes":["jeans"]},
-{"unicode":"🧣","hexcode":"1F9E3","label":"scarf","group":7,"tags":["bundle","cold","neck","up"],"shortcodes":["scarf"]},
-{"unicode":"🧤","hexcode":"1F9E4","label":"gloves","group":7,"tags":["hand"],"shortcodes":["gloves"]},
-{"unicode":"🧥","hexcode":"1F9E5","label":"coat","group":7,"tags":["brr","bundle","cold","jacket","up"],"shortcodes":["coat"]},
-{"unicode":"🧦","hexcode":"1F9E6","label":"socks","group":7,"tags":["stocking"],"shortcodes":["socks"]},
-{"unicode":"👗","hexcode":"1F457","label":"dress","group":7,"tags":["clothes","clothing","dressed","fancy","shopping"],"shortcodes":["dress"]},
-{"unicode":"👘","hexcode":"1F458","label":"kimono","group":7,"tags":["clothing","comfortable"],"shortcodes":["kimono"]},
-{"unicode":"🥻","hexcode":"1F97B","label":"sari","group":7,"tags":["clothing","dress"],"shortcodes":["sari"]},
-{"unicode":"🩱","hexcode":"1FA71","label":"one-piece swimsuit","group":7,"tags":["bathing","one-piece","suit","swimsuit"],"shortcodes":["one-piece_swimsuit"]},
-{"unicode":"🩲","hexcode":"1FA72","label":"briefs","group":7,"tags":["bathing","one-piece","suit","swimsuit","underwear"],"shortcodes":["briefs"]},
-{"unicode":"🩳","hexcode":"1FA73","label":"shorts","group":7,"tags":["bathing","pants","suit","swimsuit","underwear"],"shortcodes":["shorts"]},
-{"unicode":"👙","hexcode":"1F459","label":"bikini","group":7,"tags":["bathing","beach","clothing","pool","suit","swim"],"shortcodes":["bikini"]},
-{"unicode":"👚","hexcode":"1F45A","label":"woman’s clothes","group":7,"tags":["blouse","clothes","clothing","collar","dress","dressed","lady","shirt","shopping","woman","woman’s"],"shortcodes":["womans_clothes"]},
-{"unicode":"🪭","hexcode":"1FAAD","label":"folding hand fan","group":7,"tags":["clack","clap","cool","cooling","dance","fan","flirt","flutter","folding","hand","hot","shy"],"shortcodes":["folding_hand_fan"]},
-{"unicode":"👛","hexcode":"1F45B","label":"purse","group":7,"tags":["clothes","clothing","coin","dress","fancy","handbag","shopping"],"shortcodes":["purse"]},
-{"unicode":"👜","hexcode":"1F45C","label":"handbag","group":7,"tags":["bag","clothes","clothing","dress","lady","purse","shopping"],"shortcodes":["handbag"]},
-{"unicode":"👝","hexcode":"1F45D","label":"clutch bag","group":7,"tags":["bag","clothes","clothing","clutch","dress","handbag","pouch","purse"],"shortcodes":["pouch"]},
-{"unicode":"🛍️","hexcode":"1F6CD","label":"shopping bags","group":7,"tags":["bag","bags","hotel","shopping"],"shortcodes":["shopping_bags"]},
-{"unicode":"🎒","hexcode":"1F392","label":"backpack","group":7,"tags":["backpacking","bag","bookbag","education","rucksack","satchel","school"],"shortcodes":["school_satchel"]},
-{"unicode":"🩴","hexcode":"1FA74","label":"thong sandal","group":7,"tags":["beach","flip","flop","sandal","sandals","shoe","thong","thongs","zōri"],"shortcodes":["thong_sandal"]},
-{"unicode":"👞","hexcode":"1F45E","label":"man’s shoe","group":7,"tags":["brown","clothes","clothing","feet","foot","kick","man","man’s","shoe","shoes","shopping"],"shortcodes":["mans_shoe","shoe"]},
-{"unicode":"👟","hexcode":"1F45F","label":"running shoe","group":7,"tags":["athletic","clothes","clothing","fast","kick","running","shoe","shoes","shopping","sneaker","tennis"],"shortcodes":["athletic_shoe"]},
-{"unicode":"🥾","hexcode":"1F97E","label":"hiking boot","group":7,"tags":["backpacking","boot","brown","camping","hiking","outdoors","shoe"],"shortcodes":["hiking_boot"]},
-{"unicode":"🥿","hexcode":"1F97F","label":"flat shoe","group":7,"tags":["ballet","comfy","flat","flats","shoe","slip-on","slipper"],"shortcodes":["womans_flat_shoe"]},
-{"unicode":"👠","hexcode":"1F460","label":"high-heeled shoe","group":7,"tags":["clothes","clothing","dress","fashion","heel","heels","high-heeled","shoe","shoes","shopping","stiletto","woman"],"shortcodes":["high_heel"]},
-{"unicode":"👡","hexcode":"1F461","label":"woman’s sandal","group":7,"tags":["clothing","sandal","shoe","woman","woman’s"],"shortcodes":["sandal"]},
-{"unicode":"🩰","hexcode":"1FA70","label":"ballet shoes","group":7,"tags":["ballet","dance","shoes"],"shortcodes":["ballet_shoes"]},
-{"unicode":"👢","hexcode":"1F462","label":"woman’s boot","group":7,"tags":["boot","clothes","clothing","dress","shoe","shoes","shopping","woman","woman’s"],"shortcodes":["boot"]},
-{"unicode":"🪮","hexcode":"1FAAE","label":"hair pick","group":7,"tags":["Afro","comb","groom","hair","pick"],"shortcodes":["hair_pick"]},
-{"unicode":"👑","hexcode":"1F451","label":"crown","group":7,"tags":["clothing","family","king","medieval","queen","royal","royalty","win"],"shortcodes":["crown"]},
-{"unicode":"👒","hexcode":"1F452","label":"woman’s hat","group":7,"tags":["clothes","clothing","garden","hat","hats","party","woman","woman’s"],"shortcodes":["womans_hat"]},
-{"unicode":"🎩","hexcode":"1F3A9","label":"top hat","group":7,"tags":["clothes","clothing","fancy","formal","hat","magic","top","tophat"],"shortcodes":["tophat"]},
-{"unicode":"🎓","hexcode":"1F393","label":"graduation cap","group":7,"tags":["cap","celebration","clothing","education","graduation","hat","scholar"],"shortcodes":["mortar_board"]},
-{"unicode":"🔍","hexcode":"1F50D","label":"magnifying glass tilted left","group":7,"tags":["glass","lab","left","left-pointing","magnifying","science","search","tilted","tool"],"shortcodes":["mag"]},
-{"unicode":"🏧","hexcode":"1F3E7","label":"ATM sign","group":8,"tags":["ATM","automated","bank","cash","money","sign","teller"],"shortcodes":["atm"]},
-{"unicode":"🚮","hexcode":"1F6AE","label":"litter in bin sign","group":8,"tags":["bin","litter","litterbin","sign"],"shortcodes":["put_litter_in_its_place"]},
-{"unicode":"🚰","hexcode":"1F6B0","label":"potable water","group":8,"tags":["drinking","potable","water"],"shortcodes":["potable_water"]},
-{"unicode":"♿","hexcode":"267F","label":"wheelchair symbol","group":8,"tags":["access","handicap","symbol","wheelchair"],"shortcodes":["wheelchair"]},
-{"unicode":"🚹","hexcode":"1F6B9","label":"men’s room","group":8,"tags":["WC","bathroom","lavatory","man","men’s","restroom","room","toilet"],"shortcodes":["mens"]},
-{"unicode":"🚺","hexcode":"1F6BA","label":"women’s room","group":8,"tags":["WC","bathroom","lavatory","restroom","room","toilet","woman","women’s"],"shortcodes":["womens"]},
-{"unicode":"🚻","hexcode":"1F6BB","label":"restroom","group":8,"tags":["WC","bathroom","lavatory","toilet"],"shortcodes":["restroom"]},
-{"unicode":"🚼","hexcode":"1F6BC","label":"baby symbol","group":8,"tags":["baby","changing","symbol"],"shortcodes":["baby_symbol"]},
-{"unicode":"🚾","hexcode":"1F6BE","label":"water closet","group":8,"tags":["WC","bathroom","closet","lavatory","restroom","toilet","water"],"shortcodes":["wc"]},
-{"unicode":"🛂","hexcode":"1F6C2","label":"passport control","group":8,"tags":["control","passport"],"shortcodes":["passport_control"]},
-{"unicode":"🛃","hexcode":"1F6C3","label":"customs","group":8,"tags":["packing"],"shortcodes":["customs"]},
-{"unicode":"🛄","hexcode":"1F6C4","label":"baggage claim","group":8,"tags":["arrived","baggage","bags","case","checked","claim","journey","packing","plane","ready","travel","trip"],"shortcodes":["baggage_claim"]},
-{"unicode":"🛅","hexcode":"1F6C5","label":"left luggage","group":8,"tags":["baggage","case","left","locker","luggage"],"shortcodes":["left_luggage"]},
-{"unicode":"⚠️","hexcode":"26A0","label":"warning","group":8,"tags":["caution"],"shortcodes":["warning"]},
-{"unicode":"🚸","hexcode":"1F6B8","label":"children crossing","group":8,"tags":["child","children","crossing","pedestrian","traffic"],"shortcodes":["children_crossing"]},
-{"unicode":"⛔","hexcode":"26D4","label":"no entry","group":8,"tags":["do","entry","fail","forbidden","no","not","pass","prohibited","traffic"],"shortcodes":["no_entry"]},
-{"unicode":"🚫","hexcode":"1F6AB","label":"prohibited","group":8,"tags":["entry","forbidden","no","not","smoke"],"shortcodes":["no_entry_sign"]},
-{"unicode":"🚳","hexcode":"1F6B3","label":"no bicycles","group":8,"tags":["bicycle","bicycles","bike","forbidden","no","not","prohibited"],"shortcodes":["no_bicycles"]},
-{"unicode":"🚭","hexcode":"1F6AD","label":"no smoking","group":8,"tags":["forbidden","no","not","prohibited","smoke","smoking"],"shortcodes":["no_smoking"]},
-{"unicode":"🚯","hexcode":"1F6AF","label":"no littering","group":8,"tags":["forbidden","litter","littering","no","not","prohibited"],"shortcodes":["do_not_litter"]},
-{"unicode":"🚱","hexcode":"1F6B1","label":"non-potable water","group":8,"tags":["dry","non-drinking","non-potable","prohibited","water"],"shortcodes":["non-potable_water"]},
-{"unicode":"🚷","hexcode":"1F6B7","label":"no pedestrians","group":8,"tags":["forbidden","no","not","pedestrian","pedestrians","prohibited"],"shortcodes":["no_pedestrians"]},
-{"unicode":"📵","hexcode":"1F4F5","label":"no mobile phones","group":8,"tags":["cell","forbidden","mobile","no","not","phone","phones","prohibited","telephone"],"shortcodes":["no_mobile_phones"]},
-{"unicode":"🔞","hexcode":"1F51E","label":"no one under eighteen","group":8,"tags":["18","age","eighteen","forbidden","no","not","one","prohibited","restriction","underage"],"shortcodes":["underage"]},
-{"unicode":"☢️","hexcode":"2622","label":"radioactive","group":8,"tags":["sign"],"shortcodes":["radioactive_sign"]},
-{"unicode":"☣️","hexcode":"2623","label":"biohazard","group":8,"tags":["sign"],"shortcodes":["biohazard_sign"]},
-{"unicode":"⬆️","hexcode":"2B06","label":"up arrow","group":8,"tags":["arrow","cardinal","direction","north","up"],"shortcodes":["arrow_up"]},
-{"unicode":"↗️","hexcode":"2197","label":"up-right arrow","group":8,"tags":["arrow","direction","intercardinal","northeast","up-right"],"shortcodes":["arrow_upper_right"]},
-{"unicode":"➡️","hexcode":"27A1","label":"right arrow","group":8,"tags":["arrow","cardinal","direction","east","right"],"shortcodes":["arrow_right"]},
-{"unicode":"↘️","hexcode":"2198","label":"down-right arrow","group":8,"tags":["arrow","direction","down-right","intercardinal","southeast"],"shortcodes":["arrow_lower_right"]},
-{"unicode":"⬇️","hexcode":"2B07","label":"down arrow","group":8,"tags":["arrow","cardinal","direction","down","south"],"shortcodes":["arrow_down"]},
-{"unicode":"↙️","hexcode":"2199","label":"down-left arrow","group":8,"tags":["arrow","direction","down-left","intercardinal","southwest"],"shortcodes":["arrow_lower_left"]},
-{"unicode":"⬅️","hexcode":"2B05","label":"left arrow","group":8,"tags":["arrow","cardinal","direction","left","west"],"shortcodes":["arrow_left"]},
-{"unicode":"↖️","hexcode":"2196","label":"up-left arrow","group":8,"tags":["arrow","direction","intercardinal","northwest","up-left"],"shortcodes":["arrow_upper_left"]},
-{"unicode":"↕️","hexcode":"2195","label":"up-down arrow","group":8,"tags":["arrow","up-down"],"shortcodes":["arrow_up_down"]},
-{"unicode":"↔️","hexcode":"2194","label":"left-right arrow","group":8,"tags":["arrow","left-right"],"shortcodes":["left_right_arrow"]},
-{"unicode":"↩️","hexcode":"21A9","label":"right arrow curving left","group":8,"tags":["arrow","curving","left","right"],"shortcodes":["leftwards_arrow_with_hook"]},
-{"unicode":"↪️","hexcode":"21AA","label":"left arrow curving right","group":8,"tags":["arrow","curving","left","right"],"shortcodes":["arrow_right_hook"]},
-{"unicode":"⤴️","hexcode":"2934","label":"right arrow curving up","group":8,"tags":["arrow","curving","right","up"],"shortcodes":["arrow_heading_up"]},
-{"unicode":"⤵️","hexcode":"2935","label":"right arrow curving down","group":8,"tags":["arrow","curving","down","right"],"shortcodes":["arrow_heading_down"]}
+  {
+    "unicode": "😀",
+    "hexcode": "1F600",
+    "label": "grinning face",
+    "group": 0,
+    "tags": [
+      "cheerful",
+      "cheery",
+      "face",
+      "grin",
+      "grinning",
+      "happy",
+      "laugh",
+      "nice",
+      "smile",
+      "smiling",
+      "teeth"
+    ],
+    "shortcodes": ["grinning"]
+  },
+  {
+    "unicode": "😃",
+    "hexcode": "1F603",
+    "label": "grinning face with big eyes",
+    "group": 0,
+    "tags": [
+      "awesome",
+      "big",
+      "eyes",
+      "face",
+      "grin",
+      "grinning",
+      "happy",
+      "mouth",
+      "open",
+      "smile",
+      "smiling",
+      "teeth",
+      "yay"
+    ],
+    "shortcodes": ["smiley"]
+  },
+  {
+    "unicode": "😄",
+    "hexcode": "1F604",
+    "label": "grinning face with smiling eyes",
+    "group": 0,
+    "tags": [
+      "eye",
+      "eyes",
+      "face",
+      "grin",
+      "grinning",
+      "happy",
+      "laugh",
+      "lol",
+      "mouth",
+      "open",
+      "smile",
+      "smiling"
+    ],
+    "shortcodes": ["smile"]
+  },
+  {
+    "unicode": "😁",
+    "hexcode": "1F601",
+    "label": "beaming face with smiling eyes",
+    "group": 0,
+    "tags": [
+      "beaming",
+      "eye",
+      "eyes",
+      "face",
+      "grin",
+      "grinning",
+      "happy",
+      "nice",
+      "smile",
+      "smiling",
+      "teeth"
+    ],
+    "shortcodes": ["grin"]
+  },
+  {
+    "unicode": "😆",
+    "hexcode": "1F606",
+    "label": "grinning squinting face",
+    "group": 0,
+    "tags": [
+      "closed",
+      "eyes",
+      "face",
+      "grinning",
+      "haha",
+      "hahaha",
+      "happy",
+      "laugh",
+      "lol",
+      "mouth",
+      "open",
+      "rofl",
+      "smile",
+      "smiling",
+      "squinting"
+    ],
+    "shortcodes": ["laughing", "satisfied"]
+  },
+  {
+    "unicode": "😅",
+    "hexcode": "1F605",
+    "label": "grinning face with sweat",
+    "group": 0,
+    "tags": [
+      "cold",
+      "dejected",
+      "excited",
+      "face",
+      "grinning",
+      "mouth",
+      "nervous",
+      "open",
+      "smile",
+      "smiling",
+      "stress",
+      "stressed",
+      "sweat"
+    ],
+    "shortcodes": ["sweat_smile"]
+  },
+  {
+    "unicode": "🤣",
+    "hexcode": "1F923",
+    "label": "rolling on the floor laughing",
+    "group": 0,
+    "tags": [
+      "crying",
+      "face",
+      "floor",
+      "funny",
+      "haha",
+      "happy",
+      "hehe",
+      "hilarious",
+      "joy",
+      "laugh",
+      "lmao",
+      "lol",
+      "rofl",
+      "roflmao",
+      "rolling",
+      "tear"
+    ],
+    "shortcodes": ["rolling_on_the_floor_laughing"]
+  },
+  {
+    "unicode": "😂",
+    "hexcode": "1F602",
+    "label": "face with tears of joy",
+    "group": 0,
+    "tags": [
+      "crying",
+      "face",
+      "feels",
+      "funny",
+      "haha",
+      "happy",
+      "hehe",
+      "hilarious",
+      "joy",
+      "laugh",
+      "lmao",
+      "lol",
+      "rofl",
+      "roflmao",
+      "tear"
+    ],
+    "shortcodes": ["joy"]
+  },
+  {
+    "unicode": "🙂",
+    "hexcode": "1F642",
+    "label": "slightly smiling face",
+    "group": 0,
+    "tags": ["face", "happy", "slightly", "smile", "smiling"],
+    "shortcodes": ["slightly_smiling_face"]
+  },
+  {
+    "unicode": "🙃",
+    "hexcode": "1F643",
+    "label": "upside-down face",
+    "group": 0,
+    "tags": ["face", "hehe", "smile", "upside-down"],
+    "shortcodes": ["upside_down_face"]
+  },
+  {
+    "unicode": "🫠",
+    "hexcode": "1FAE0",
+    "label": "melting face",
+    "group": 0,
+    "tags": [
+      "disappear",
+      "dissolve",
+      "embarrassed",
+      "face",
+      "haha",
+      "heat",
+      "hot",
+      "liquid",
+      "lol",
+      "melt",
+      "melting",
+      "sarcasm",
+      "sarcastic"
+    ],
+    "shortcodes": ["melting_face"]
+  },
+  {
+    "unicode": "🫫",
+    "hexcode": "1FAEB",
+    "label": "cracking face",
+    "group": 0,
+    "tags": [
+      "breaking",
+      "crumbling",
+      "masking",
+      "resilience",
+      "reveal",
+      "tension",
+      "transformation"
+    ],
+    "shortcodes": []
+  },
+  {
+    "unicode": "😉",
+    "hexcode": "1F609",
+    "label": "winking face",
+    "group": 0,
+    "tags": ["face", "flirt", "heartbreaker", "sexy", "slide", "tease", "wink", "winking", "winks"],
+    "shortcodes": ["wink"]
+  },
+  {
+    "unicode": "😊",
+    "hexcode": "1F60A",
+    "label": "smiling face with smiling eyes",
+    "group": 0,
+    "tags": ["blush", "eye", "eyes", "face", "glad", "satisfied", "smile", "smiling"],
+    "shortcodes": ["blush"]
+  },
+  {
+    "unicode": "😇",
+    "hexcode": "1F607",
+    "label": "smiling face with halo",
+    "group": 0,
+    "tags": [
+      "angel",
+      "angelic",
+      "angels",
+      "blessed",
+      "face",
+      "fairy",
+      "fairytale",
+      "fantasy",
+      "halo",
+      "happy",
+      "innocent",
+      "peaceful",
+      "smile",
+      "smiling",
+      "spirit",
+      "tale"
+    ],
+    "shortcodes": ["innocent"]
+  },
+  {
+    "unicode": "🥰",
+    "hexcode": "1F970",
+    "label": "smiling face with hearts",
+    "group": 0,
+    "tags": [
+      "3",
+      "adore",
+      "crush",
+      "face",
+      "heart",
+      "hearts",
+      "ily",
+      "love",
+      "romance",
+      "smile",
+      "smiling",
+      "you"
+    ],
+    "shortcodes": ["smiling_face_with_3_hearts"]
+  },
+  {
+    "unicode": "😍",
+    "hexcode": "1F60D",
+    "label": "smiling face with heart-eyes",
+    "group": 0,
+    "tags": [
+      "143",
+      "bae",
+      "eye",
+      "face",
+      "feels",
+      "heart-eyes",
+      "hearts",
+      "ily",
+      "kisses",
+      "love",
+      "romance",
+      "romantic",
+      "smile",
+      "xoxo"
+    ],
+    "shortcodes": ["heart_eyes"]
+  },
+  {
+    "unicode": "🤩",
+    "hexcode": "1F929",
+    "label": "star-struck",
+    "group": 0,
+    "tags": ["excited", "eyes", "face", "grinning", "smile", "star", "starry-eyed", "wow"],
+    "shortcodes": ["star-struck", "grinning_face_with_star_eyes"]
+  },
+  {
+    "unicode": "😘",
+    "hexcode": "1F618",
+    "label": "face blowing a kiss",
+    "group": 0,
+    "tags": [
+      "adorbs",
+      "bae",
+      "blowing",
+      "face",
+      "flirt",
+      "heart",
+      "ily",
+      "kiss",
+      "love",
+      "lover",
+      "miss",
+      "muah",
+      "romantic",
+      "smooch",
+      "xoxo",
+      "you"
+    ],
+    "shortcodes": ["kissing_heart"]
+  },
+  {
+    "unicode": "😗",
+    "hexcode": "1F617",
+    "label": "kissing face",
+    "group": 0,
+    "tags": [
+      "143",
+      "date",
+      "dating",
+      "face",
+      "flirt",
+      "ily",
+      "kiss",
+      "love",
+      "smooch",
+      "smooches",
+      "xoxo",
+      "you"
+    ],
+    "shortcodes": ["kissing"]
+  },
+  {
+    "unicode": "☺️",
+    "hexcode": "263A",
+    "label": "smiling face",
+    "group": 0,
+    "tags": ["face", "happy", "outlined", "relaxed", "smile", "smiling"],
+    "shortcodes": ["relaxed"]
+  },
+  {
+    "unicode": "😚",
+    "hexcode": "1F61A",
+    "label": "kissing face with closed eyes",
+    "group": 0,
+    "tags": [
+      "143",
+      "bae",
+      "blush",
+      "closed",
+      "date",
+      "dating",
+      "eye",
+      "eyes",
+      "face",
+      "flirt",
+      "ily",
+      "kisses",
+      "kissing",
+      "smooches",
+      "xoxo"
+    ],
+    "shortcodes": ["kissing_closed_eyes"]
+  },
+  {
+    "unicode": "😙",
+    "hexcode": "1F619",
+    "label": "kissing face with smiling eyes",
+    "group": 0,
+    "tags": [
+      "143",
+      "closed",
+      "date",
+      "dating",
+      "eye",
+      "eyes",
+      "face",
+      "flirt",
+      "ily",
+      "kiss",
+      "kisses",
+      "kissing",
+      "love",
+      "night",
+      "smile",
+      "smiling"
+    ],
+    "shortcodes": ["kissing_smiling_eyes"]
+  },
+  {
+    "unicode": "🥲",
+    "hexcode": "1F972",
+    "label": "smiling face with tear",
+    "group": 0,
+    "tags": [
+      "face",
+      "glad",
+      "grateful",
+      "happy",
+      "joy",
+      "pain",
+      "proud",
+      "relieved",
+      "smile",
+      "smiley",
+      "smiling",
+      "tear",
+      "touched"
+    ],
+    "shortcodes": ["smiling_face_with_tear"]
+  },
+  {
+    "unicode": "😋",
+    "hexcode": "1F60B",
+    "label": "face savoring food",
+    "group": 0,
+    "tags": [
+      "delicious",
+      "eat",
+      "face",
+      "food",
+      "full",
+      "hungry",
+      "savor",
+      "smile",
+      "smiling",
+      "tasty",
+      "um",
+      "yum",
+      "yummy"
+    ],
+    "shortcodes": ["yum"]
+  },
+  {
+    "unicode": "😛",
+    "hexcode": "1F61B",
+    "label": "face with tongue",
+    "group": 0,
+    "tags": ["awesome", "cool", "face", "nice", "party", "stuck-out", "sweet", "tongue"],
+    "shortcodes": ["stuck_out_tongue"]
+  },
+  {
+    "unicode": "😜",
+    "hexcode": "1F61C",
+    "label": "winking face with tongue",
+    "group": 0,
+    "tags": [
+      "crazy",
+      "epic",
+      "eye",
+      "face",
+      "funny",
+      "joke",
+      "loopy",
+      "nutty",
+      "party",
+      "stuck-out",
+      "tongue",
+      "wacky",
+      "weirdo",
+      "wink",
+      "winking",
+      "yolo"
+    ],
+    "shortcodes": ["stuck_out_tongue_winking_eye"]
+  },
+  {
+    "unicode": "🤪",
+    "hexcode": "1F92A",
+    "label": "zany face",
+    "group": 0,
+    "tags": ["crazy", "eye", "eyes", "face", "goofy", "large", "small", "zany"],
+    "shortcodes": ["zany_face", "grinning_face_with_one_large_and_one_small_eye"]
+  },
+  {
+    "unicode": "😝",
+    "hexcode": "1F61D",
+    "label": "squinting face with tongue",
+    "group": 0,
+    "tags": [
+      "closed",
+      "eye",
+      "eyes",
+      "face",
+      "gross",
+      "horrible",
+      "omg",
+      "squinting",
+      "stuck-out",
+      "taste",
+      "tongue",
+      "whatever",
+      "yolo"
+    ],
+    "shortcodes": ["stuck_out_tongue_closed_eyes"]
+  },
+  {
+    "unicode": "🤑",
+    "hexcode": "1F911",
+    "label": "money-mouth face",
+    "group": 0,
+    "tags": ["face", "money", "money-mouth", "mouth", "paid"],
+    "shortcodes": ["money_mouth_face"]
+  },
+  {
+    "unicode": "🤗",
+    "hexcode": "1F917",
+    "label": "smiling face with open hands",
+    "group": 0,
+    "tags": ["face", "hands", "hug", "hugging", "open", "smiling"],
+    "shortcodes": ["hugging_face"]
+  },
+  {
+    "unicode": "🤭",
+    "hexcode": "1F92D",
+    "label": "face with hand over mouth",
+    "group": 0,
+    "tags": [
+      "face",
+      "giggle",
+      "giggling",
+      "hand",
+      "mouth",
+      "oops",
+      "realization",
+      "secret",
+      "shock",
+      "sudden",
+      "surprise",
+      "whoops"
+    ],
+    "shortcodes": [
+      "face_with_hand_over_mouth",
+      "smiling_face_with_smiling_eyes_and_hand_covering_mouth"
+    ]
+  },
+  {
+    "unicode": "🫢",
+    "hexcode": "1FAE2",
+    "label": "face with open eyes and hand over mouth",
+    "group": 0,
+    "tags": [
+      "amazement",
+      "awe",
+      "disbelief",
+      "embarrass",
+      "eyes",
+      "face",
+      "gasp",
+      "hand",
+      "mouth",
+      "omg",
+      "open",
+      "over",
+      "quiet",
+      "scared",
+      "shock",
+      "surprise"
+    ],
+    "shortcodes": ["face_with_open_eyes_and_hand_over_mouth"]
+  },
+  {
+    "unicode": "🫣",
+    "hexcode": "1FAE3",
+    "label": "face with peeking eye",
+    "group": 0,
+    "tags": [
+      "captivated",
+      "embarrass",
+      "eye",
+      "face",
+      "hide",
+      "hiding",
+      "peek",
+      "peeking",
+      "peep",
+      "scared",
+      "shy",
+      "stare"
+    ],
+    "shortcodes": ["face_with_peeking_eye"]
+  },
+  {
+    "unicode": "🤫",
+    "hexcode": "1F92B",
+    "label": "shushing face",
+    "group": 0,
+    "tags": ["face", "quiet", "shh", "shush", "shushing"],
+    "shortcodes": ["shushing_face", "face_with_finger_covering_closed_lips"]
+  },
+  {
+    "unicode": "🤔",
+    "hexcode": "1F914",
+    "label": "thinking face",
+    "group": 0,
+    "tags": ["chin", "consider", "face", "hmm", "ponder", "pondering", "thinking", "wondering"],
+    "shortcodes": ["thinking_face"]
+  },
+  {
+    "unicode": "🫡",
+    "hexcode": "1FAE1",
+    "label": "saluting face",
+    "group": 0,
+    "tags": [
+      "OK",
+      "face",
+      "good",
+      "luck",
+      "ma’am",
+      "respect",
+      "salute",
+      "saluting",
+      "sir",
+      "troops",
+      "yes"
+    ],
+    "shortcodes": ["saluting_face"]
+  },
+  {
+    "unicode": "🤐",
+    "hexcode": "1F910",
+    "label": "zipper-mouth face",
+    "group": 0,
+    "tags": ["face", "keep", "mouth", "quiet", "secret", "shut", "zip", "zipper", "zipper-mouth"],
+    "shortcodes": ["zipper_mouth_face"]
+  },
+  {
+    "unicode": "🤨",
+    "hexcode": "1F928",
+    "label": "face with raised eyebrow",
+    "group": 0,
+    "tags": [
+      "disapproval",
+      "disbelief",
+      "distrust",
+      "emoji",
+      "eyebrow",
+      "face",
+      "hmm",
+      "mild",
+      "raised",
+      "skeptic",
+      "skeptical",
+      "skepticism",
+      "surprise",
+      "what"
+    ],
+    "shortcodes": ["face_with_raised_eyebrow", "face_with_one_eyebrow_raised"]
+  },
+  {
+    "unicode": "😐",
+    "hexcode": "1F610",
+    "label": "neutral face",
+    "group": 0,
+    "tags": [
+      "awkward",
+      "blank",
+      "deadpan",
+      "expressionless",
+      "face",
+      "fine",
+      "jealous",
+      "meh",
+      "neutral",
+      "oh",
+      "shade",
+      "straight",
+      "unamused",
+      "unhappy",
+      "unimpressed",
+      "whatever"
+    ],
+    "shortcodes": ["neutral_face"]
+  },
+  {
+    "unicode": "😭",
+    "hexcode": "1F62D",
+    "label": "loudly crying face",
+    "group": 0,
+    "tags": [
+      "bawling",
+      "cry",
+      "crying",
+      "face",
+      "loudly",
+      "sad",
+      "sob",
+      "tear",
+      "tears",
+      "unhappy"
+    ],
+    "shortcodes": ["sob"]
+  },
+  {
+    "unicode": "💀",
+    "hexcode": "1F480",
+    "label": "skull",
+    "group": 0,
+    "tags": [
+      "body",
+      "dead",
+      "death",
+      "face",
+      "fairy",
+      "fairytale",
+      "i’m",
+      "lmao",
+      "monster",
+      "tale",
+      "yolo"
+    ],
+    "shortcodes": ["skull"]
+  },
+  {
+    "unicode": "❤️",
+    "hexcode": "2764",
+    "label": "red heart",
+    "group": 0,
+    "tags": ["emotion", "heart", "love", "red"],
+    "shortcodes": ["heart"]
+  },
+  {
+    "unicode": "🤞",
+    "hexcode": "1F91E",
+    "label": "crossed fingers",
+    "group": 1,
+    "tags": ["cross", "crossed", "finger", "fingers", "hand", "luck"],
+    "shortcodes": ["crossed_fingers", "hand_with_index_and_middle_fingers_crossed"]
+  },
+  {
+    "unicode": "👍",
+    "hexcode": "1F44D",
+    "label": "thumbs up",
+    "group": 1,
+    "tags": ["+1", "good", "hand", "like", "thumb", "up", "yes"],
+    "shortcodes": ["+1", "thumbsup"]
+  },
+  {
+    "unicode": "🤝",
+    "hexcode": "1F91D",
+    "label": "handshake",
+    "group": 1,
+    "tags": ["agreement", "deal", "hand", "meeting", "shake"],
+    "shortcodes": ["handshake"]
+  },
+  {
+    "unicode": "🙏",
+    "hexcode": "1F64F",
+    "label": "folded hands",
+    "group": 1,
+    "tags": [
+      "appreciate",
+      "ask",
+      "beg",
+      "blessed",
+      "bow",
+      "cmon",
+      "five",
+      "folded",
+      "gesture",
+      "hand",
+      "high",
+      "please",
+      "pray",
+      "thanks",
+      "thx"
+    ],
+    "shortcodes": ["pray"]
+  },
+  {
+    "unicode": "👀",
+    "hexcode": "1F440",
+    "label": "eyes",
+    "group": 1,
+    "tags": ["body", "eye", "face", "googly", "look", "looking", "omg", "peep", "see", "seeing"],
+    "shortcodes": ["eyes"]
+  },
+  {
+    "unicode": "🐵",
+    "hexcode": "1F435",
+    "label": "monkey face",
+    "group": 3,
+    "tags": ["animal", "banana", "face", "monkey"],
+    "shortcodes": ["monkey_face"]
+  },
+  {
+    "unicode": "🐒",
+    "hexcode": "1F412",
+    "label": "monkey",
+    "group": 3,
+    "tags": ["animal", "banana"],
+    "shortcodes": ["monkey"]
+  },
+  {
+    "unicode": "🦍",
+    "hexcode": "1F98D",
+    "label": "gorilla",
+    "group": 3,
+    "tags": ["animal"],
+    "shortcodes": ["gorilla"]
+  },
+  {
+    "unicode": "🦧",
+    "hexcode": "1F9A7",
+    "label": "orangutan",
+    "group": 3,
+    "tags": ["animal", "ape", "monkey"],
+    "shortcodes": ["orangutan"]
+  },
+  {
+    "unicode": "🐶",
+    "hexcode": "1F436",
+    "label": "dog face",
+    "group": 3,
+    "tags": ["adorbs", "animal", "dog", "face", "pet", "puppies", "puppy"],
+    "shortcodes": ["dog"]
+  },
+  {
+    "unicode": "🐕",
+    "hexcode": "1F415",
+    "label": "dog",
+    "group": 3,
+    "tags": ["animal", "animals", "dogs", "pet"],
+    "shortcodes": ["dog2"]
+  },
+  {
+    "unicode": "🦮",
+    "hexcode": "1F9AE",
+    "label": "guide dog",
+    "group": 3,
+    "tags": ["accessibility", "animal", "blind", "dog", "guide"],
+    "shortcodes": ["guide_dog"]
+  },
+  {
+    "unicode": "🐩",
+    "hexcode": "1F429",
+    "label": "poodle",
+    "group": 3,
+    "tags": ["animal", "dog", "fluffy"],
+    "shortcodes": ["poodle"]
+  },
+  {
+    "unicode": "🐺",
+    "hexcode": "1F43A",
+    "label": "wolf",
+    "group": 3,
+    "tags": ["animal", "face"],
+    "shortcodes": ["wolf"]
+  },
+  {
+    "unicode": "🦊",
+    "hexcode": "1F98A",
+    "label": "fox",
+    "group": 3,
+    "tags": ["animal", "face"],
+    "shortcodes": ["fox_face"]
+  },
+  {
+    "unicode": "🦝",
+    "hexcode": "1F99D",
+    "label": "raccoon",
+    "group": 3,
+    "tags": ["animal", "curious", "sly"],
+    "shortcodes": ["raccoon"]
+  },
+  {
+    "unicode": "🐱",
+    "hexcode": "1F431",
+    "label": "cat face",
+    "group": 3,
+    "tags": ["animal", "cat", "face", "kitten", "kitty", "pet"],
+    "shortcodes": ["cat"]
+  },
+  {
+    "unicode": "🐈",
+    "hexcode": "1F408",
+    "label": "cat",
+    "group": 3,
+    "tags": ["animal", "animals", "cats", "kitten", "pet"],
+    "shortcodes": ["cat2"]
+  },
+  {
+    "unicode": "🦁",
+    "hexcode": "1F981",
+    "label": "lion",
+    "group": 3,
+    "tags": [
+      "Leo",
+      "alpha",
+      "animal",
+      "face",
+      "mane",
+      "order",
+      "rawr",
+      "roar",
+      "safari",
+      "strong",
+      "zodiac"
+    ],
+    "shortcodes": ["lion_face"]
+  },
+  {
+    "unicode": "🐯",
+    "hexcode": "1F42F",
+    "label": "tiger face",
+    "group": 3,
+    "tags": ["animal", "big", "cat", "face", "predator", "tiger"],
+    "shortcodes": ["tiger"]
+  },
+  {
+    "unicode": "🐅",
+    "hexcode": "1F405",
+    "label": "tiger",
+    "group": 3,
+    "tags": ["animal", "big", "cat", "predator", "zoo"],
+    "shortcodes": ["tiger2"]
+  },
+  {
+    "unicode": "🐆",
+    "hexcode": "1F406",
+    "label": "leopard",
+    "group": 3,
+    "tags": ["animal", "big", "cat", "predator", "zoo"],
+    "shortcodes": ["leopard"]
+  },
+  {
+    "unicode": "🐴",
+    "hexcode": "1F434",
+    "label": "horse face",
+    "group": 3,
+    "tags": ["animal", "dressage", "equine", "face", "farm", "horse", "horses"],
+    "shortcodes": ["horse"]
+  },
+  {
+    "unicode": "🫎",
+    "hexcode": "1FACE",
+    "label": "moose",
+    "group": 3,
+    "tags": ["alces", "animal", "antlers", "elk", "mammal"],
+    "shortcodes": ["moose"]
+  },
+  {
+    "unicode": "🫏",
+    "hexcode": "1FACF",
+    "label": "donkey",
+    "group": 3,
+    "tags": ["animal", "ass", "burro", "hinny", "mammal", "mule", "stubborn"],
+    "shortcodes": ["donkey"]
+  },
+  {
+    "unicode": "🐎",
+    "hexcode": "1F40E",
+    "label": "horse",
+    "group": 3,
+    "tags": ["animal", "equestrian", "farm", "racehorse", "racing"],
+    "shortcodes": ["racehorse"]
+  },
+  {
+    "unicode": "🦄",
+    "hexcode": "1F984",
+    "label": "unicorn",
+    "group": 3,
+    "tags": ["face"],
+    "shortcodes": ["unicorn_face"]
+  },
+  {
+    "unicode": "🦓",
+    "hexcode": "1F993",
+    "label": "zebra",
+    "group": 3,
+    "tags": ["animal", "stripe"],
+    "shortcodes": ["zebra_face"]
+  },
+  {
+    "unicode": "🦌",
+    "hexcode": "1F98C",
+    "label": "deer",
+    "group": 3,
+    "tags": ["animal"],
+    "shortcodes": ["deer"]
+  },
+  {
+    "unicode": "🦬",
+    "hexcode": "1F9AC",
+    "label": "bison",
+    "group": 3,
+    "tags": ["animal", "buffalo", "herd", "wisent"],
+    "shortcodes": ["bison"]
+  },
+  {
+    "unicode": "🐮",
+    "hexcode": "1F42E",
+    "label": "cow face",
+    "group": 3,
+    "tags": ["animal", "cow", "face", "farm", "milk", "moo"],
+    "shortcodes": ["cow"]
+  },
+  {
+    "unicode": "🐂",
+    "hexcode": "1F402",
+    "label": "ox",
+    "group": 3,
+    "tags": ["Taurus", "animal", "animals", "bull", "farm", "zodiac"],
+    "shortcodes": ["ox"]
+  },
+  {
+    "unicode": "🐃",
+    "hexcode": "1F403",
+    "label": "water buffalo",
+    "group": 3,
+    "tags": ["animal", "buffalo", "water", "zoo"],
+    "shortcodes": ["water_buffalo"]
+  },
+  {
+    "unicode": "🐄",
+    "hexcode": "1F404",
+    "label": "cow",
+    "group": 3,
+    "tags": ["animal", "animals", "farm", "milk", "moo"],
+    "shortcodes": ["cow2"]
+  },
+  {
+    "unicode": "🐷",
+    "hexcode": "1F437",
+    "label": "pig face",
+    "group": 3,
+    "tags": ["animal", "bacon", "face", "farm", "pig", "pork"],
+    "shortcodes": ["pig"]
+  },
+  {
+    "unicode": "🐖",
+    "hexcode": "1F416",
+    "label": "pig",
+    "group": 3,
+    "tags": ["animal", "bacon", "farm", "pork", "sow"],
+    "shortcodes": ["pig2"]
+  },
+  {
+    "unicode": "🐗",
+    "hexcode": "1F417",
+    "label": "boar",
+    "group": 3,
+    "tags": ["animal", "pig"],
+    "shortcodes": ["boar"]
+  },
+  {
+    "unicode": "🐽",
+    "hexcode": "1F43D",
+    "label": "pig nose",
+    "group": 3,
+    "tags": ["animal", "face", "farm", "nose", "pig", "smell", "snout"],
+    "shortcodes": ["pig_nose"]
+  },
+  {
+    "unicode": "🐏",
+    "hexcode": "1F40F",
+    "label": "ram",
+    "group": 3,
+    "tags": ["Aries", "animal", "horns", "male", "sheep", "zodiac", "zoo"],
+    "shortcodes": ["ram"]
+  },
+  {
+    "unicode": "🐑",
+    "hexcode": "1F411",
+    "label": "ewe",
+    "group": 3,
+    "tags": ["animal", "baa", "farm", "female", "fluffy", "lamb", "sheep", "wool"],
+    "shortcodes": ["sheep"]
+  },
+  {
+    "unicode": "🐐",
+    "hexcode": "1F410",
+    "label": "goat",
+    "group": 3,
+    "tags": ["Capricorn", "animal", "farm", "milk", "zodiac"],
+    "shortcodes": ["goat"]
+  },
+  {
+    "unicode": "🐪",
+    "hexcode": "1F42A",
+    "label": "camel",
+    "group": 3,
+    "tags": ["animal", "desert", "dromedary", "hump", "one"],
+    "shortcodes": ["dromedary_camel"]
+  },
+  {
+    "unicode": "🐫",
+    "hexcode": "1F42B",
+    "label": "two-hump camel",
+    "group": 3,
+    "tags": ["animal", "bactrian", "camel", "desert", "hump", "two", "two-hump"],
+    "shortcodes": ["camel"]
+  },
+  {
+    "unicode": "🦙",
+    "hexcode": "1F999",
+    "label": "llama",
+    "group": 3,
+    "tags": ["alpaca", "animal", "guanaco", "vicuña", "wool"],
+    "shortcodes": ["llama"]
+  },
+  {
+    "unicode": "🦒",
+    "hexcode": "1F992",
+    "label": "giraffe",
+    "group": 3,
+    "tags": ["animal", "spots"],
+    "shortcodes": ["giraffe_face"]
+  },
+  {
+    "unicode": "🦉",
+    "hexcode": "1F989",
+    "label": "owl",
+    "group": 3,
+    "tags": ["animal", "bird", "ornithology", "wise"],
+    "shortcodes": ["owl"]
+  },
+  {
+    "unicode": "🍇",
+    "hexcode": "1F347",
+    "label": "grapes",
+    "group": 4,
+    "tags": ["Dionysus", "fruit", "grape"],
+    "shortcodes": ["grapes"]
+  },
+  {
+    "unicode": "🍈",
+    "hexcode": "1F348",
+    "label": "melon",
+    "group": 4,
+    "tags": ["cantaloupe", "fruit"],
+    "shortcodes": ["melon"]
+  },
+  {
+    "unicode": "🍉",
+    "hexcode": "1F349",
+    "label": "watermelon",
+    "group": 4,
+    "tags": ["fruit"],
+    "shortcodes": ["watermelon"]
+  },
+  {
+    "unicode": "🍊",
+    "hexcode": "1F34A",
+    "label": "tangerine",
+    "group": 4,
+    "tags": ["c", "citrus", "fruit", "nectarine", "orange", "vitamin"],
+    "shortcodes": ["tangerine"]
+  },
+  {
+    "unicode": "🍋",
+    "hexcode": "1F34B",
+    "label": "lemon",
+    "group": 4,
+    "tags": ["citrus", "fruit", "sour"],
+    "shortcodes": ["lemon"]
+  },
+  {
+    "unicode": "🍌",
+    "hexcode": "1F34C",
+    "label": "banana",
+    "group": 4,
+    "tags": ["fruit", "potassium"],
+    "shortcodes": ["banana"]
+  },
+  {
+    "unicode": "🍍",
+    "hexcode": "1F34D",
+    "label": "pineapple",
+    "group": 4,
+    "tags": ["colada", "fruit", "pina", "tropical"],
+    "shortcodes": ["pineapple"]
+  },
+  {
+    "unicode": "🥭",
+    "hexcode": "1F96D",
+    "label": "mango",
+    "group": 4,
+    "tags": ["food", "fruit", "tropical"],
+    "shortcodes": ["mango"]
+  },
+  {
+    "unicode": "🍎",
+    "hexcode": "1F34E",
+    "label": "red apple",
+    "group": 4,
+    "tags": ["apple", "diet", "food", "fruit", "health", "red", "ripe"],
+    "shortcodes": ["apple"]
+  },
+  {
+    "unicode": "🍏",
+    "hexcode": "1F34F",
+    "label": "green apple",
+    "group": 4,
+    "tags": ["apple", "fruit", "green"],
+    "shortcodes": ["green_apple"]
+  },
+  {
+    "unicode": "🍐",
+    "hexcode": "1F350",
+    "label": "pear",
+    "group": 4,
+    "tags": ["fruit"],
+    "shortcodes": ["pear"]
+  },
+  {
+    "unicode": "🍑",
+    "hexcode": "1F351",
+    "label": "peach",
+    "group": 4,
+    "tags": ["fruit"],
+    "shortcodes": ["peach"]
+  },
+  {
+    "unicode": "🍒",
+    "hexcode": "1F352",
+    "label": "cherries",
+    "group": 4,
+    "tags": ["berries", "cherry", "fruit", "red"],
+    "shortcodes": ["cherries"]
+  },
+  {
+    "unicode": "🍓",
+    "hexcode": "1F353",
+    "label": "strawberry",
+    "group": 4,
+    "tags": ["berry", "fruit"],
+    "shortcodes": ["strawberry"]
+  },
+  {
+    "unicode": "🫐",
+    "hexcode": "1FAD0",
+    "label": "blueberries",
+    "group": 4,
+    "tags": ["berries", "berry", "bilberry", "blue", "blueberry", "food", "fruit"],
+    "shortcodes": ["blueberries"]
+  },
+  {
+    "unicode": "🥝",
+    "hexcode": "1F95D",
+    "label": "kiwi fruit",
+    "group": 4,
+    "tags": ["food", "fruit", "kiwi"],
+    "shortcodes": ["kiwifruit"]
+  },
+  {
+    "unicode": "🍅",
+    "hexcode": "1F345",
+    "label": "tomato",
+    "group": 4,
+    "tags": ["food", "fruit", "vegetable"],
+    "shortcodes": ["tomato"]
+  },
+  {
+    "unicode": "🫒",
+    "hexcode": "1FAD2",
+    "label": "olive",
+    "group": 4,
+    "tags": ["food"],
+    "shortcodes": ["olive"]
+  },
+  {
+    "unicode": "🥥",
+    "hexcode": "1F965",
+    "label": "coconut",
+    "group": 4,
+    "tags": ["colada", "palm", "piña"],
+    "shortcodes": ["coconut"]
+  },
+  {
+    "unicode": "🥑",
+    "hexcode": "1F951",
+    "label": "avocado",
+    "group": 4,
+    "tags": ["food", "fruit"],
+    "shortcodes": ["avocado"]
+  },
+  {
+    "unicode": "🍆",
+    "hexcode": "1F346",
+    "label": "eggplant",
+    "group": 4,
+    "tags": ["aubergine", "vegetable"],
+    "shortcodes": ["eggplant"]
+  },
+  {
+    "unicode": "🥔",
+    "hexcode": "1F954",
+    "label": "potato",
+    "group": 4,
+    "tags": ["food", "vegetable"],
+    "shortcodes": ["potato"]
+  },
+  {
+    "unicode": "🥕",
+    "hexcode": "1F955",
+    "label": "carrot",
+    "group": 4,
+    "tags": ["food", "vegetable"],
+    "shortcodes": ["carrot"]
+  },
+  {
+    "unicode": "🌽",
+    "hexcode": "1F33D",
+    "label": "ear of corn",
+    "group": 4,
+    "tags": ["corn", "crops", "ear", "farm", "maize", "maze"],
+    "shortcodes": ["corn"]
+  },
+  {
+    "unicode": "🌶️",
+    "hexcode": "1F336",
+    "label": "hot pepper",
+    "group": 4,
+    "tags": ["hot", "pepper"],
+    "shortcodes": ["hot_pepper"]
+  },
+  {
+    "unicode": "🫑",
+    "hexcode": "1FAD1",
+    "label": "bell pepper",
+    "group": 4,
+    "tags": ["bell", "capsicum", "food", "pepper", "vegetable"],
+    "shortcodes": ["bell_pepper"]
+  },
+  {
+    "unicode": "🥒",
+    "hexcode": "1F952",
+    "label": "cucumber",
+    "group": 4,
+    "tags": ["food", "pickle", "vegetable"],
+    "shortcodes": ["cucumber"]
+  },
+  {
+    "unicode": "🫝",
+    "hexcode": "1FADD",
+    "label": "pickle",
+    "group": 4,
+    "tags": ["brine", "condiment", "cucumber", "ferment", "gherkin", "relish", "trouble"],
+    "shortcodes": []
+  },
+  {
+    "unicode": "🥬",
+    "hexcode": "1F96C",
+    "label": "leafy green",
+    "group": 4,
+    "tags": ["bok", "burgers", "cabbage", "choy", "green", "kale", "leafy", "lettuce", "salad"],
+    "shortcodes": ["leafy_green"]
+  },
+  {
+    "unicode": "🥦",
+    "hexcode": "1F966",
+    "label": "broccoli",
+    "group": 4,
+    "tags": ["cabbage", "wild"],
+    "shortcodes": ["broccoli"]
+  },
+  {
+    "unicode": "🧄",
+    "hexcode": "1F9C4",
+    "label": "garlic",
+    "group": 4,
+    "tags": ["flavoring"],
+    "shortcodes": ["garlic"]
+  },
+  {
+    "unicode": "🧅",
+    "hexcode": "1F9C5",
+    "label": "onion",
+    "group": 4,
+    "tags": ["flavoring"],
+    "shortcodes": ["onion"]
+  },
+  {
+    "unicode": "🥜",
+    "hexcode": "1F95C",
+    "label": "peanuts",
+    "group": 4,
+    "tags": ["food", "nut", "peanut", "vegetable"],
+    "shortcodes": ["peanuts"]
+  },
+  {
+    "unicode": "🫘",
+    "hexcode": "1FAD8",
+    "label": "beans",
+    "group": 4,
+    "tags": ["food", "kidney", "legume", "small"],
+    "shortcodes": ["beans"]
+  },
+  {
+    "unicode": "🌰",
+    "hexcode": "1F330",
+    "label": "chestnut",
+    "group": 4,
+    "tags": ["almond", "plant"],
+    "shortcodes": ["chestnut"]
+  },
+  {
+    "unicode": "🫚",
+    "hexcode": "1FADA",
+    "label": "ginger root",
+    "group": 4,
+    "tags": ["beer", "ginger", "health", "herb", "natural", "root", "spice"],
+    "shortcodes": ["ginger_root"]
+  },
+  {
+    "unicode": "🫛",
+    "hexcode": "1FADB",
+    "label": "pea pod",
+    "group": 4,
+    "tags": [
+      "beans",
+      "beanstalk",
+      "edamame",
+      "legume",
+      "pea",
+      "pod",
+      "soybean",
+      "vegetable",
+      "veggie"
+    ],
+    "shortcodes": ["pea_pod"]
+  },
+  {
+    "unicode": "🫜",
+    "hexcode": "1FADC",
+    "label": "root vegetable",
+    "group": 4,
+    "tags": [
+      "beet",
+      "food",
+      "garden",
+      "radish",
+      "root",
+      "salad",
+      "turnip",
+      "vegetable",
+      "vegetarian"
+    ],
+    "shortcodes": ["root_vegetable"]
+  },
+  {
+    "unicode": "🍞",
+    "hexcode": "1F35E",
+    "label": "bread",
+    "group": 4,
+    "tags": ["carbs", "food", "grain", "loaf", "restaurant", "toast", "wheat"],
+    "shortcodes": ["bread"]
+  },
+  {
+    "unicode": "🥐",
+    "hexcode": "1F950",
+    "label": "croissant",
+    "group": 4,
+    "tags": ["bread", "breakfast", "crescent", "food", "french", "roll"],
+    "shortcodes": ["croissant"]
+  },
+  {
+    "unicode": "🌍",
+    "hexcode": "1F30D",
+    "label": "globe showing Europe-Africa",
+    "group": 5,
+    "tags": ["Africa", "Europe", "Europe-Africa", "earth", "globe", "showing", "world"],
+    "shortcodes": ["earth_africa"]
+  },
+  {
+    "unicode": "🌎",
+    "hexcode": "1F30E",
+    "label": "globe showing Americas",
+    "group": 5,
+    "tags": ["Americas", "earth", "globe", "showing", "world"],
+    "shortcodes": ["earth_americas"]
+  },
+  {
+    "unicode": "🌏",
+    "hexcode": "1F30F",
+    "label": "globe showing Asia-Australia",
+    "group": 5,
+    "tags": ["Asia", "Asia-Australia", "Australia", "earth", "globe", "showing", "world"],
+    "shortcodes": ["earth_asia"]
+  },
+  {
+    "unicode": "🌐",
+    "hexcode": "1F310",
+    "label": "globe with meridians",
+    "group": 5,
+    "tags": ["earth", "globe", "internet", "meridians", "web", "world", "worldwide"],
+    "shortcodes": ["globe_with_meridians"]
+  },
+  {
+    "unicode": "🗺️",
+    "hexcode": "1F5FA",
+    "label": "world map",
+    "group": 5,
+    "tags": ["map", "world"],
+    "shortcodes": ["world_map"]
+  },
+  {
+    "unicode": "🗾",
+    "hexcode": "1F5FE",
+    "label": "map of Japan",
+    "group": 5,
+    "tags": ["Japan", "map"],
+    "shortcodes": ["japan"]
+  },
+  {
+    "unicode": "🧭",
+    "hexcode": "1F9ED",
+    "label": "compass",
+    "group": 5,
+    "tags": ["direction", "magnetic", "navigation", "orienteering"],
+    "shortcodes": ["compass"]
+  },
+  {
+    "unicode": "🏔️",
+    "hexcode": "1F3D4",
+    "label": "snow-capped mountain",
+    "group": 5,
+    "tags": ["cold", "mountain", "snow", "snow-capped"],
+    "shortcodes": ["snow_capped_mountain"]
+  },
+  {
+    "unicode": "⛰️",
+    "hexcode": "26F0",
+    "label": "mountain",
+    "group": 5,
+    "tags": ["mountain"],
+    "shortcodes": ["mountain"]
+  },
+  {
+    "unicode": "🛘",
+    "hexcode": "1F6D8",
+    "label": "landslide",
+    "group": 5,
+    "tags": ["avalanche", "danger", "disaster", "earthquake", "mountain", "mudslide", "rocks"],
+    "shortcodes": ["landslide"]
+  },
+  {
+    "unicode": "🌋",
+    "hexcode": "1F30B",
+    "label": "volcano",
+    "group": 5,
+    "tags": ["eruption", "mountain", "nature"],
+    "shortcodes": ["volcano"]
+  },
+  {
+    "unicode": "🗻",
+    "hexcode": "1F5FB",
+    "label": "mount fuji",
+    "group": 5,
+    "tags": ["fuji", "mount", "mountain", "nature"],
+    "shortcodes": ["mount_fuji"]
+  },
+  {
+    "unicode": "🏕️",
+    "hexcode": "1F3D5",
+    "label": "camping",
+    "group": 5,
+    "tags": ["camping"],
+    "shortcodes": ["camping"]
+  },
+  {
+    "unicode": "🏖️",
+    "hexcode": "1F3D6",
+    "label": "beach with umbrella",
+    "group": 5,
+    "tags": ["beach", "umbrella"],
+    "shortcodes": ["beach_with_umbrella"]
+  },
+  {
+    "unicode": "🏜️",
+    "hexcode": "1F3DC",
+    "label": "desert",
+    "group": 5,
+    "tags": ["desert"],
+    "shortcodes": ["desert"]
+  },
+  {
+    "unicode": "🏝️",
+    "hexcode": "1F3DD",
+    "label": "desert island",
+    "group": 5,
+    "tags": ["desert", "island"],
+    "shortcodes": ["desert_island"]
+  },
+  {
+    "unicode": "🏞️",
+    "hexcode": "1F3DE",
+    "label": "national park",
+    "group": 5,
+    "tags": ["national", "park"],
+    "shortcodes": ["national_park"]
+  },
+  {
+    "unicode": "🏟️",
+    "hexcode": "1F3DF",
+    "label": "stadium",
+    "group": 5,
+    "tags": ["stadium"],
+    "shortcodes": ["stadium"]
+  },
+  {
+    "unicode": "🏛️",
+    "hexcode": "1F3DB",
+    "label": "classical building",
+    "group": 5,
+    "tags": ["building", "classical"],
+    "shortcodes": ["classical_building"]
+  },
+  {
+    "unicode": "🏗️",
+    "hexcode": "1F3D7",
+    "label": "building construction",
+    "group": 5,
+    "tags": ["building", "construction", "crane"],
+    "shortcodes": ["building_construction"]
+  },
+  {
+    "unicode": "🧱",
+    "hexcode": "1F9F1",
+    "label": "brick",
+    "group": 5,
+    "tags": ["bricks", "clay", "mortar", "wall"],
+    "shortcodes": ["bricks"]
+  },
+  {
+    "unicode": "🪨",
+    "hexcode": "1FAA8",
+    "label": "rock",
+    "group": 5,
+    "tags": ["boulder", "heavy", "solid", "stone", "tough"],
+    "shortcodes": ["rock"]
+  },
+  {
+    "unicode": "🪵",
+    "hexcode": "1FAB5",
+    "label": "wood",
+    "group": 5,
+    "tags": ["log", "lumber", "timber"],
+    "shortcodes": ["wood"]
+  },
+  {
+    "unicode": "🛖",
+    "hexcode": "1F6D6",
+    "label": "hut",
+    "group": 5,
+    "tags": ["home", "house", "roundhouse", "shelter", "yurt"],
+    "shortcodes": ["hut"]
+  },
+  {
+    "unicode": "🏘️",
+    "hexcode": "1F3D8",
+    "label": "houses",
+    "group": 5,
+    "tags": ["house"],
+    "shortcodes": ["house_buildings"]
+  },
+  {
+    "unicode": "🏚️",
+    "hexcode": "1F3DA",
+    "label": "derelict house",
+    "group": 5,
+    "tags": ["derelict", "home", "house"],
+    "shortcodes": ["derelict_house_building"]
+  },
+  {
+    "unicode": "🏠",
+    "hexcode": "1F3E0",
+    "label": "house",
+    "group": 5,
+    "tags": [
+      "building",
+      "country",
+      "heart",
+      "home",
+      "ranch",
+      "settle",
+      "simple",
+      "suburban",
+      "suburbia",
+      "where"
+    ],
+    "shortcodes": ["house"]
+  },
+  {
+    "unicode": "🏡",
+    "hexcode": "1F3E1",
+    "label": "house with garden",
+    "group": 5,
+    "tags": [
+      "building",
+      "country",
+      "garden",
+      "heart",
+      "home",
+      "house",
+      "ranch",
+      "settle",
+      "simple",
+      "suburban",
+      "suburbia",
+      "where"
+    ],
+    "shortcodes": ["house_with_garden"]
+  },
+  {
+    "unicode": "🏢",
+    "hexcode": "1F3E2",
+    "label": "office building",
+    "group": 5,
+    "tags": ["building", "city", "cubical", "job", "office"],
+    "shortcodes": ["office"]
+  },
+  {
+    "unicode": "🏣",
+    "hexcode": "1F3E3",
+    "label": "Japanese post office",
+    "group": 5,
+    "tags": ["Japanese", "building", "office", "post"],
+    "shortcodes": ["post_office"]
+  },
+  {
+    "unicode": "🏤",
+    "hexcode": "1F3E4",
+    "label": "post office",
+    "group": 5,
+    "tags": ["European", "building", "office", "post"],
+    "shortcodes": ["european_post_office"]
+  },
+  {
+    "unicode": "🏥",
+    "hexcode": "1F3E5",
+    "label": "hospital",
+    "group": 5,
+    "tags": ["building", "doctor", "medicine"],
+    "shortcodes": ["hospital"]
+  },
+  {
+    "unicode": "🏦",
+    "hexcode": "1F3E6",
+    "label": "bank",
+    "group": 5,
+    "tags": ["building"],
+    "shortcodes": ["bank"]
+  },
+  {
+    "unicode": "🏨",
+    "hexcode": "1F3E8",
+    "label": "hotel",
+    "group": 5,
+    "tags": ["building"],
+    "shortcodes": ["hotel"]
+  },
+  {
+    "unicode": "🏩",
+    "hexcode": "1F3E9",
+    "label": "love hotel",
+    "group": 5,
+    "tags": ["building", "hotel", "love"],
+    "shortcodes": ["love_hotel"]
+  },
+  {
+    "unicode": "🏪",
+    "hexcode": "1F3EA",
+    "label": "convenience store",
+    "group": 5,
+    "tags": ["24", "building", "convenience", "hours", "store"],
+    "shortcodes": ["convenience_store"]
+  },
+  {
+    "unicode": "🏫",
+    "hexcode": "1F3EB",
+    "label": "school",
+    "group": 5,
+    "tags": ["building"],
+    "shortcodes": ["school"]
+  },
+  {
+    "unicode": "🏬",
+    "hexcode": "1F3EC",
+    "label": "department store",
+    "group": 5,
+    "tags": ["building", "department", "store"],
+    "shortcodes": ["department_store"]
+  },
+  {
+    "unicode": "🏭",
+    "hexcode": "1F3ED",
+    "label": "factory",
+    "group": 5,
+    "tags": ["building"],
+    "shortcodes": ["factory"]
+  },
+  {
+    "unicode": "🏯",
+    "hexcode": "1F3EF",
+    "label": "Japanese castle",
+    "group": 5,
+    "tags": ["Japanese", "building", "castle"],
+    "shortcodes": ["japanese_castle"]
+  },
+  {
+    "unicode": "🌙",
+    "hexcode": "1F319",
+    "label": "crescent moon",
+    "group": 5,
+    "tags": ["crescent", "moon", "ramadan", "space"],
+    "shortcodes": ["crescent_moon"]
+  },
+  {
+    "unicode": "🔥",
+    "hexcode": "1F525",
+    "label": "fire",
+    "group": 5,
+    "tags": ["af", "burn", "flame", "hot", "lit", "litaf", "tool"],
+    "shortcodes": ["fire"]
+  },
+  {
+    "unicode": "🌊",
+    "hexcode": "1F30A",
+    "label": "water wave",
+    "group": 5,
+    "tags": ["nature", "ocean", "surf", "surfer", "surfing", "water", "wave"],
+    "shortcodes": ["ocean"]
+  },
+  {
+    "unicode": "🎃",
+    "hexcode": "1F383",
+    "label": "jack-o-lantern",
+    "group": 6,
+    "tags": ["celebration", "halloween", "jack", "lantern", "pumpkin"],
+    "shortcodes": ["jack_o_lantern"]
+  },
+  {
+    "unicode": "🎄",
+    "hexcode": "1F384",
+    "label": "Christmas tree",
+    "group": 6,
+    "tags": ["Christmas", "celebration", "tree"],
+    "shortcodes": ["christmas_tree"]
+  },
+  {
+    "unicode": "🎆",
+    "hexcode": "1F386",
+    "label": "fireworks",
+    "group": 6,
+    "tags": ["boom", "celebration", "entertainment", "yolo"],
+    "shortcodes": ["fireworks"]
+  },
+  {
+    "unicode": "🎇",
+    "hexcode": "1F387",
+    "label": "sparkler",
+    "group": 6,
+    "tags": ["boom", "celebration", "fireworks", "sparkle"],
+    "shortcodes": ["sparkler"]
+  },
+  {
+    "unicode": "🧨",
+    "hexcode": "1F9E8",
+    "label": "firecracker",
+    "group": 6,
+    "tags": ["dynamite", "explosive", "fire", "fireworks", "light", "pop", "popping", "spark"],
+    "shortcodes": ["firecracker"]
+  },
+  {
+    "unicode": "✨",
+    "hexcode": "2728",
+    "label": "sparkles",
+    "group": 6,
+    "tags": ["*", "magic", "sparkle", "star"],
+    "shortcodes": ["sparkles"]
+  },
+  {
+    "unicode": "🎈",
+    "hexcode": "1F388",
+    "label": "balloon",
+    "group": 6,
+    "tags": ["birthday", "celebrate", "celebration"],
+    "shortcodes": ["balloon"]
+  },
+  {
+    "unicode": "🎉",
+    "hexcode": "1F389",
+    "label": "party popper",
+    "group": 6,
+    "tags": [
+      "awesome",
+      "birthday",
+      "celebrate",
+      "celebration",
+      "excited",
+      "hooray",
+      "party",
+      "popper",
+      "tada",
+      "woohoo"
+    ],
+    "shortcodes": ["tada"]
+  },
+  {
+    "unicode": "🎊",
+    "hexcode": "1F38A",
+    "label": "confetti ball",
+    "group": 6,
+    "tags": ["ball", "celebrate", "celebration", "confetti", "party", "woohoo"],
+    "shortcodes": ["confetti_ball"]
+  },
+  {
+    "unicode": "🎋",
+    "hexcode": "1F38B",
+    "label": "tanabata tree",
+    "group": 6,
+    "tags": ["Japanese", "banner", "celebration", "tanabata", "tree"],
+    "shortcodes": ["tanabata_tree"]
+  },
+  {
+    "unicode": "🎍",
+    "hexcode": "1F38D",
+    "label": "pine decoration",
+    "group": 6,
+    "tags": ["Japanese", "bamboo", "celebration", "decoration", "pine", "plant"],
+    "shortcodes": ["bamboo"]
+  },
+  {
+    "unicode": "🎎",
+    "hexcode": "1F38E",
+    "label": "Japanese dolls",
+    "group": 6,
+    "tags": ["Japanese", "celebration", "doll", "dolls", "festival"],
+    "shortcodes": ["dolls"]
+  },
+  {
+    "unicode": "🎏",
+    "hexcode": "1F38F",
+    "label": "carp streamer",
+    "group": 6,
+    "tags": ["carp", "celebration", "streamer"],
+    "shortcodes": ["flags"]
+  },
+  {
+    "unicode": "🎐",
+    "hexcode": "1F390",
+    "label": "wind chime",
+    "group": 6,
+    "tags": ["bell", "celebration", "chime", "wind"],
+    "shortcodes": ["wind_chime"]
+  },
+  {
+    "unicode": "🎑",
+    "hexcode": "1F391",
+    "label": "moon viewing ceremony",
+    "group": 6,
+    "tags": ["celebration", "ceremony", "moon", "viewing"],
+    "shortcodes": ["rice_scene"]
+  },
+  {
+    "unicode": "🧧",
+    "hexcode": "1F9E7",
+    "label": "red envelope",
+    "group": 6,
+    "tags": ["envelope", "gift", "good", "hóngbāo", "lai", "luck", "money", "red", "see"],
+    "shortcodes": ["red_envelope"]
+  },
+  {
+    "unicode": "🎀",
+    "hexcode": "1F380",
+    "label": "ribbon",
+    "group": 6,
+    "tags": ["celebration"],
+    "shortcodes": ["ribbon"]
+  },
+  {
+    "unicode": "🎁",
+    "hexcode": "1F381",
+    "label": "wrapped gift",
+    "group": 6,
+    "tags": [
+      "birthday",
+      "bow",
+      "box",
+      "celebration",
+      "christmas",
+      "gift",
+      "present",
+      "surprise",
+      "wrapped"
+    ],
+    "shortcodes": ["gift"]
+  },
+  {
+    "unicode": "🎗️",
+    "hexcode": "1F397",
+    "label": "reminder ribbon",
+    "group": 6,
+    "tags": ["celebration", "reminder", "ribbon"],
+    "shortcodes": ["reminder_ribbon"]
+  },
+  {
+    "unicode": "🎟️",
+    "hexcode": "1F39F",
+    "label": "admission tickets",
+    "group": 6,
+    "tags": ["admission", "ticket", "tickets"],
+    "shortcodes": ["admission_tickets"]
+  },
+  {
+    "unicode": "🎫",
+    "hexcode": "1F3AB",
+    "label": "ticket",
+    "group": 6,
+    "tags": ["admission", "stub"],
+    "shortcodes": ["ticket"]
+  },
+  {
+    "unicode": "🎖️",
+    "hexcode": "1F396",
+    "label": "military medal",
+    "group": 6,
+    "tags": ["award", "celebration", "medal", "military"],
+    "shortcodes": ["medal"]
+  },
+  {
+    "unicode": "🏆",
+    "hexcode": "1F3C6",
+    "label": "trophy",
+    "group": 6,
+    "tags": ["champion", "champs", "prize", "slay", "sport", "victory", "win", "winning"],
+    "shortcodes": ["trophy"]
+  },
+  {
+    "unicode": "🏅",
+    "hexcode": "1F3C5",
+    "label": "sports medal",
+    "group": 6,
+    "tags": ["award", "gold", "medal", "sports", "winner"],
+    "shortcodes": ["sports_medal"]
+  },
+  {
+    "unicode": "🥇",
+    "hexcode": "1F947",
+    "label": "1st place medal",
+    "group": 6,
+    "tags": ["1st", "first", "gold", "medal", "place"],
+    "shortcodes": ["first_place_medal"]
+  },
+  {
+    "unicode": "🥈",
+    "hexcode": "1F948",
+    "label": "2nd place medal",
+    "group": 6,
+    "tags": ["2nd", "medal", "place", "second", "silver"],
+    "shortcodes": ["second_place_medal"]
+  },
+  {
+    "unicode": "🥉",
+    "hexcode": "1F949",
+    "label": "3rd place medal",
+    "group": 6,
+    "tags": ["3rd", "bronze", "medal", "place", "third"],
+    "shortcodes": ["third_place_medal"]
+  },
+  {
+    "unicode": "⚽",
+    "hexcode": "26BD",
+    "label": "soccer ball",
+    "group": 6,
+    "tags": ["ball", "football", "futbol", "soccer", "sport"],
+    "shortcodes": ["soccer"]
+  },
+  {
+    "unicode": "⚾",
+    "hexcode": "26BE",
+    "label": "baseball",
+    "group": 6,
+    "tags": ["ball", "sport"],
+    "shortcodes": ["baseball"]
+  },
+  {
+    "unicode": "🥎",
+    "hexcode": "1F94E",
+    "label": "softball",
+    "group": 6,
+    "tags": ["ball", "glove", "sports", "underarm"],
+    "shortcodes": ["softball"]
+  },
+  {
+    "unicode": "🏀",
+    "hexcode": "1F3C0",
+    "label": "basketball",
+    "group": 6,
+    "tags": ["ball", "hoop", "sport"],
+    "shortcodes": ["basketball"]
+  },
+  {
+    "unicode": "🏐",
+    "hexcode": "1F3D0",
+    "label": "volleyball",
+    "group": 6,
+    "tags": ["ball", "game"],
+    "shortcodes": ["volleyball"]
+  },
+  {
+    "unicode": "🏈",
+    "hexcode": "1F3C8",
+    "label": "american football",
+    "group": 6,
+    "tags": ["american", "ball", "bowl", "football", "sport", "super"],
+    "shortcodes": ["football"]
+  },
+  {
+    "unicode": "🏉",
+    "hexcode": "1F3C9",
+    "label": "rugby football",
+    "group": 6,
+    "tags": ["ball", "football", "rugby", "sport"],
+    "shortcodes": ["rugby_football"]
+  },
+  {
+    "unicode": "🎾",
+    "hexcode": "1F3BE",
+    "label": "tennis",
+    "group": 6,
+    "tags": ["ball", "racquet", "sport"],
+    "shortcodes": ["tennis"]
+  },
+  {
+    "unicode": "🥏",
+    "hexcode": "1F94F",
+    "label": "flying disc",
+    "group": 6,
+    "tags": ["disc", "flying", "ultimate"],
+    "shortcodes": ["flying_disc"]
+  },
+  {
+    "unicode": "🎳",
+    "hexcode": "1F3B3",
+    "label": "bowling",
+    "group": 6,
+    "tags": ["ball", "game", "sport", "strike"],
+    "shortcodes": ["bowling"]
+  },
+  {
+    "unicode": "🏏",
+    "hexcode": "1F3CF",
+    "label": "cricket game",
+    "group": 6,
+    "tags": ["ball", "bat", "cricket", "game"],
+    "shortcodes": ["cricket_bat_and_ball"]
+  },
+  {
+    "unicode": "🏑",
+    "hexcode": "1F3D1",
+    "label": "field hockey",
+    "group": 6,
+    "tags": ["ball", "field", "game", "hockey", "stick"],
+    "shortcodes": ["field_hockey_stick_and_ball"]
+  },
+  {
+    "unicode": "🏒",
+    "hexcode": "1F3D2",
+    "label": "ice hockey",
+    "group": 6,
+    "tags": ["game", "hockey", "ice", "puck", "stick"],
+    "shortcodes": ["ice_hockey_stick_and_puck"]
+  },
+  {
+    "unicode": "👓",
+    "hexcode": "1F453",
+    "label": "glasses",
+    "group": 7,
+    "tags": ["clothing", "eye", "eyeglasses", "eyewear"],
+    "shortcodes": ["eyeglasses"]
+  },
+  {
+    "unicode": "🕶️",
+    "hexcode": "1F576",
+    "label": "sunglasses",
+    "group": 7,
+    "tags": ["dark", "eye", "eyewear", "glasses"],
+    "shortcodes": ["dark_sunglasses"]
+  },
+  {
+    "unicode": "🥽",
+    "hexcode": "1F97D",
+    "label": "goggles",
+    "group": 7,
+    "tags": ["dive", "eye", "protection", "scuba", "swimming", "welding"],
+    "shortcodes": ["goggles"]
+  },
+  {
+    "unicode": "🥼",
+    "hexcode": "1F97C",
+    "label": "lab coat",
+    "group": 7,
+    "tags": [
+      "clothes",
+      "coat",
+      "doctor",
+      "dr",
+      "experiment",
+      "jacket",
+      "lab",
+      "scientist",
+      "white"
+    ],
+    "shortcodes": ["lab_coat"]
+  },
+  {
+    "unicode": "🦺",
+    "hexcode": "1F9BA",
+    "label": "safety vest",
+    "group": 7,
+    "tags": ["emergency", "safety", "vest"],
+    "shortcodes": ["safety_vest"]
+  },
+  {
+    "unicode": "👔",
+    "hexcode": "1F454",
+    "label": "necktie",
+    "group": 7,
+    "tags": ["clothing", "employed", "serious", "shirt", "tie"],
+    "shortcodes": ["necktie"]
+  },
+  {
+    "unicode": "👕",
+    "hexcode": "1F455",
+    "label": "t-shirt",
+    "group": 7,
+    "tags": [
+      "blue",
+      "casual",
+      "clothes",
+      "clothing",
+      "collar",
+      "dressed",
+      "shirt",
+      "shopping",
+      "tshirt",
+      "weekend"
+    ],
+    "shortcodes": ["shirt", "tshirt"]
+  },
+  {
+    "unicode": "👖",
+    "hexcode": "1F456",
+    "label": "jeans",
+    "group": 7,
+    "tags": [
+      "blue",
+      "casual",
+      "clothes",
+      "clothing",
+      "denim",
+      "dressed",
+      "pants",
+      "shopping",
+      "trousers",
+      "weekend"
+    ],
+    "shortcodes": ["jeans"]
+  },
+  {
+    "unicode": "🧣",
+    "hexcode": "1F9E3",
+    "label": "scarf",
+    "group": 7,
+    "tags": ["bundle", "cold", "neck", "up"],
+    "shortcodes": ["scarf"]
+  },
+  {
+    "unicode": "🧤",
+    "hexcode": "1F9E4",
+    "label": "gloves",
+    "group": 7,
+    "tags": ["hand"],
+    "shortcodes": ["gloves"]
+  },
+  {
+    "unicode": "🧥",
+    "hexcode": "1F9E5",
+    "label": "coat",
+    "group": 7,
+    "tags": ["brr", "bundle", "cold", "jacket", "up"],
+    "shortcodes": ["coat"]
+  },
+  {
+    "unicode": "🧦",
+    "hexcode": "1F9E6",
+    "label": "socks",
+    "group": 7,
+    "tags": ["stocking"],
+    "shortcodes": ["socks"]
+  },
+  {
+    "unicode": "👗",
+    "hexcode": "1F457",
+    "label": "dress",
+    "group": 7,
+    "tags": ["clothes", "clothing", "dressed", "fancy", "shopping"],
+    "shortcodes": ["dress"]
+  },
+  {
+    "unicode": "👘",
+    "hexcode": "1F458",
+    "label": "kimono",
+    "group": 7,
+    "tags": ["clothing", "comfortable"],
+    "shortcodes": ["kimono"]
+  },
+  {
+    "unicode": "🥻",
+    "hexcode": "1F97B",
+    "label": "sari",
+    "group": 7,
+    "tags": ["clothing", "dress"],
+    "shortcodes": ["sari"]
+  },
+  {
+    "unicode": "🩱",
+    "hexcode": "1FA71",
+    "label": "one-piece swimsuit",
+    "group": 7,
+    "tags": ["bathing", "one-piece", "suit", "swimsuit"],
+    "shortcodes": ["one-piece_swimsuit"]
+  },
+  {
+    "unicode": "🩲",
+    "hexcode": "1FA72",
+    "label": "briefs",
+    "group": 7,
+    "tags": ["bathing", "one-piece", "suit", "swimsuit", "underwear"],
+    "shortcodes": ["briefs"]
+  },
+  {
+    "unicode": "🩳",
+    "hexcode": "1FA73",
+    "label": "shorts",
+    "group": 7,
+    "tags": ["bathing", "pants", "suit", "swimsuit", "underwear"],
+    "shortcodes": ["shorts"]
+  },
+  {
+    "unicode": "👙",
+    "hexcode": "1F459",
+    "label": "bikini",
+    "group": 7,
+    "tags": ["bathing", "beach", "clothing", "pool", "suit", "swim"],
+    "shortcodes": ["bikini"]
+  },
+  {
+    "unicode": "👚",
+    "hexcode": "1F45A",
+    "label": "woman’s clothes",
+    "group": 7,
+    "tags": [
+      "blouse",
+      "clothes",
+      "clothing",
+      "collar",
+      "dress",
+      "dressed",
+      "lady",
+      "shirt",
+      "shopping",
+      "woman",
+      "woman’s"
+    ],
+    "shortcodes": ["womans_clothes"]
+  },
+  {
+    "unicode": "🪭",
+    "hexcode": "1FAAD",
+    "label": "folding hand fan",
+    "group": 7,
+    "tags": [
+      "clack",
+      "clap",
+      "cool",
+      "cooling",
+      "dance",
+      "fan",
+      "flirt",
+      "flutter",
+      "folding",
+      "hand",
+      "hot",
+      "shy"
+    ],
+    "shortcodes": ["folding_hand_fan"]
+  },
+  {
+    "unicode": "👛",
+    "hexcode": "1F45B",
+    "label": "purse",
+    "group": 7,
+    "tags": ["clothes", "clothing", "coin", "dress", "fancy", "handbag", "shopping"],
+    "shortcodes": ["purse"]
+  },
+  {
+    "unicode": "👜",
+    "hexcode": "1F45C",
+    "label": "handbag",
+    "group": 7,
+    "tags": ["bag", "clothes", "clothing", "dress", "lady", "purse", "shopping"],
+    "shortcodes": ["handbag"]
+  },
+  {
+    "unicode": "👝",
+    "hexcode": "1F45D",
+    "label": "clutch bag",
+    "group": 7,
+    "tags": ["bag", "clothes", "clothing", "clutch", "dress", "handbag", "pouch", "purse"],
+    "shortcodes": ["pouch"]
+  },
+  {
+    "unicode": "🛍️",
+    "hexcode": "1F6CD",
+    "label": "shopping bags",
+    "group": 7,
+    "tags": ["bag", "bags", "hotel", "shopping"],
+    "shortcodes": ["shopping_bags"]
+  },
+  {
+    "unicode": "🎒",
+    "hexcode": "1F392",
+    "label": "backpack",
+    "group": 7,
+    "tags": ["backpacking", "bag", "bookbag", "education", "rucksack", "satchel", "school"],
+    "shortcodes": ["school_satchel"]
+  },
+  {
+    "unicode": "🩴",
+    "hexcode": "1FA74",
+    "label": "thong sandal",
+    "group": 7,
+    "tags": ["beach", "flip", "flop", "sandal", "sandals", "shoe", "thong", "thongs", "zōri"],
+    "shortcodes": ["thong_sandal"]
+  },
+  {
+    "unicode": "👞",
+    "hexcode": "1F45E",
+    "label": "man’s shoe",
+    "group": 7,
+    "tags": [
+      "brown",
+      "clothes",
+      "clothing",
+      "feet",
+      "foot",
+      "kick",
+      "man",
+      "man’s",
+      "shoe",
+      "shoes",
+      "shopping"
+    ],
+    "shortcodes": ["mans_shoe", "shoe"]
+  },
+  {
+    "unicode": "👟",
+    "hexcode": "1F45F",
+    "label": "running shoe",
+    "group": 7,
+    "tags": [
+      "athletic",
+      "clothes",
+      "clothing",
+      "fast",
+      "kick",
+      "running",
+      "shoe",
+      "shoes",
+      "shopping",
+      "sneaker",
+      "tennis"
+    ],
+    "shortcodes": ["athletic_shoe"]
+  },
+  {
+    "unicode": "🥾",
+    "hexcode": "1F97E",
+    "label": "hiking boot",
+    "group": 7,
+    "tags": ["backpacking", "boot", "brown", "camping", "hiking", "outdoors", "shoe"],
+    "shortcodes": ["hiking_boot"]
+  },
+  {
+    "unicode": "🥿",
+    "hexcode": "1F97F",
+    "label": "flat shoe",
+    "group": 7,
+    "tags": ["ballet", "comfy", "flat", "flats", "shoe", "slip-on", "slipper"],
+    "shortcodes": ["womans_flat_shoe"]
+  },
+  {
+    "unicode": "👠",
+    "hexcode": "1F460",
+    "label": "high-heeled shoe",
+    "group": 7,
+    "tags": [
+      "clothes",
+      "clothing",
+      "dress",
+      "fashion",
+      "heel",
+      "heels",
+      "high-heeled",
+      "shoe",
+      "shoes",
+      "shopping",
+      "stiletto",
+      "woman"
+    ],
+    "shortcodes": ["high_heel"]
+  },
+  {
+    "unicode": "👡",
+    "hexcode": "1F461",
+    "label": "woman’s sandal",
+    "group": 7,
+    "tags": ["clothing", "sandal", "shoe", "woman", "woman’s"],
+    "shortcodes": ["sandal"]
+  },
+  {
+    "unicode": "🩰",
+    "hexcode": "1FA70",
+    "label": "ballet shoes",
+    "group": 7,
+    "tags": ["ballet", "dance", "shoes"],
+    "shortcodes": ["ballet_shoes"]
+  },
+  {
+    "unicode": "👢",
+    "hexcode": "1F462",
+    "label": "woman’s boot",
+    "group": 7,
+    "tags": [
+      "boot",
+      "clothes",
+      "clothing",
+      "dress",
+      "shoe",
+      "shoes",
+      "shopping",
+      "woman",
+      "woman’s"
+    ],
+    "shortcodes": ["boot"]
+  },
+  {
+    "unicode": "🪮",
+    "hexcode": "1FAAE",
+    "label": "hair pick",
+    "group": 7,
+    "tags": ["Afro", "comb", "groom", "hair", "pick"],
+    "shortcodes": ["hair_pick"]
+  },
+  {
+    "unicode": "👑",
+    "hexcode": "1F451",
+    "label": "crown",
+    "group": 7,
+    "tags": ["clothing", "family", "king", "medieval", "queen", "royal", "royalty", "win"],
+    "shortcodes": ["crown"]
+  },
+  {
+    "unicode": "👒",
+    "hexcode": "1F452",
+    "label": "woman’s hat",
+    "group": 7,
+    "tags": ["clothes", "clothing", "garden", "hat", "hats", "party", "woman", "woman’s"],
+    "shortcodes": ["womans_hat"]
+  },
+  {
+    "unicode": "🎩",
+    "hexcode": "1F3A9",
+    "label": "top hat",
+    "group": 7,
+    "tags": ["clothes", "clothing", "fancy", "formal", "hat", "magic", "top", "tophat"],
+    "shortcodes": ["tophat"]
+  },
+  {
+    "unicode": "🎓",
+    "hexcode": "1F393",
+    "label": "graduation cap",
+    "group": 7,
+    "tags": ["cap", "celebration", "clothing", "education", "graduation", "hat", "scholar"],
+    "shortcodes": ["mortar_board"]
+  },
+  {
+    "unicode": "🔍",
+    "hexcode": "1F50D",
+    "label": "magnifying glass tilted left",
+    "group": 7,
+    "tags": [
+      "glass",
+      "lab",
+      "left",
+      "left-pointing",
+      "magnifying",
+      "science",
+      "search",
+      "tilted",
+      "tool"
+    ],
+    "shortcodes": ["mag"]
+  },
+  {
+    "unicode": "🏧",
+    "hexcode": "1F3E7",
+    "label": "ATM sign",
+    "group": 8,
+    "tags": ["ATM", "automated", "bank", "cash", "money", "sign", "teller"],
+    "shortcodes": ["atm"]
+  },
+  {
+    "unicode": "🚮",
+    "hexcode": "1F6AE",
+    "label": "litter in bin sign",
+    "group": 8,
+    "tags": ["bin", "litter", "litterbin", "sign"],
+    "shortcodes": ["put_litter_in_its_place"]
+  },
+  {
+    "unicode": "🚰",
+    "hexcode": "1F6B0",
+    "label": "potable water",
+    "group": 8,
+    "tags": ["drinking", "potable", "water"],
+    "shortcodes": ["potable_water"]
+  },
+  {
+    "unicode": "♿",
+    "hexcode": "267F",
+    "label": "wheelchair symbol",
+    "group": 8,
+    "tags": ["access", "handicap", "symbol", "wheelchair"],
+    "shortcodes": ["wheelchair"]
+  },
+  {
+    "unicode": "🚹",
+    "hexcode": "1F6B9",
+    "label": "men’s room",
+    "group": 8,
+    "tags": ["WC", "bathroom", "lavatory", "man", "men’s", "restroom", "room", "toilet"],
+    "shortcodes": ["mens"]
+  },
+  {
+    "unicode": "🚺",
+    "hexcode": "1F6BA",
+    "label": "women’s room",
+    "group": 8,
+    "tags": ["WC", "bathroom", "lavatory", "restroom", "room", "toilet", "woman", "women’s"],
+    "shortcodes": ["womens"]
+  },
+  {
+    "unicode": "🚻",
+    "hexcode": "1F6BB",
+    "label": "restroom",
+    "group": 8,
+    "tags": ["WC", "bathroom", "lavatory", "toilet"],
+    "shortcodes": ["restroom"]
+  },
+  {
+    "unicode": "🚼",
+    "hexcode": "1F6BC",
+    "label": "baby symbol",
+    "group": 8,
+    "tags": ["baby", "changing", "symbol"],
+    "shortcodes": ["baby_symbol"]
+  },
+  {
+    "unicode": "🚾",
+    "hexcode": "1F6BE",
+    "label": "water closet",
+    "group": 8,
+    "tags": ["WC", "bathroom", "closet", "lavatory", "restroom", "toilet", "water"],
+    "shortcodes": ["wc"]
+  },
+  {
+    "unicode": "🛂",
+    "hexcode": "1F6C2",
+    "label": "passport control",
+    "group": 8,
+    "tags": ["control", "passport"],
+    "shortcodes": ["passport_control"]
+  },
+  {
+    "unicode": "🛃",
+    "hexcode": "1F6C3",
+    "label": "customs",
+    "group": 8,
+    "tags": ["packing"],
+    "shortcodes": ["customs"]
+  },
+  {
+    "unicode": "🛄",
+    "hexcode": "1F6C4",
+    "label": "baggage claim",
+    "group": 8,
+    "tags": [
+      "arrived",
+      "baggage",
+      "bags",
+      "case",
+      "checked",
+      "claim",
+      "journey",
+      "packing",
+      "plane",
+      "ready",
+      "travel",
+      "trip"
+    ],
+    "shortcodes": ["baggage_claim"]
+  },
+  {
+    "unicode": "🛅",
+    "hexcode": "1F6C5",
+    "label": "left luggage",
+    "group": 8,
+    "tags": ["baggage", "case", "left", "locker", "luggage"],
+    "shortcodes": ["left_luggage"]
+  },
+  {
+    "unicode": "⚠️",
+    "hexcode": "26A0",
+    "label": "warning",
+    "group": 8,
+    "tags": ["caution"],
+    "shortcodes": ["warning"]
+  },
+  {
+    "unicode": "🚸",
+    "hexcode": "1F6B8",
+    "label": "children crossing",
+    "group": 8,
+    "tags": ["child", "children", "crossing", "pedestrian", "traffic"],
+    "shortcodes": ["children_crossing"]
+  },
+  {
+    "unicode": "⛔",
+    "hexcode": "26D4",
+    "label": "no entry",
+    "group": 8,
+    "tags": ["do", "entry", "fail", "forbidden", "no", "not", "pass", "prohibited", "traffic"],
+    "shortcodes": ["no_entry"]
+  },
+  {
+    "unicode": "🚫",
+    "hexcode": "1F6AB",
+    "label": "prohibited",
+    "group": 8,
+    "tags": ["entry", "forbidden", "no", "not", "smoke"],
+    "shortcodes": ["no_entry_sign"]
+  },
+  {
+    "unicode": "🚳",
+    "hexcode": "1F6B3",
+    "label": "no bicycles",
+    "group": 8,
+    "tags": ["bicycle", "bicycles", "bike", "forbidden", "no", "not", "prohibited"],
+    "shortcodes": ["no_bicycles"]
+  },
+  {
+    "unicode": "🚭",
+    "hexcode": "1F6AD",
+    "label": "no smoking",
+    "group": 8,
+    "tags": ["forbidden", "no", "not", "prohibited", "smoke", "smoking"],
+    "shortcodes": ["no_smoking"]
+  },
+  {
+    "unicode": "🚯",
+    "hexcode": "1F6AF",
+    "label": "no littering",
+    "group": 8,
+    "tags": ["forbidden", "litter", "littering", "no", "not", "prohibited"],
+    "shortcodes": ["do_not_litter"]
+  },
+  {
+    "unicode": "🚱",
+    "hexcode": "1F6B1",
+    "label": "non-potable water",
+    "group": 8,
+    "tags": ["dry", "non-drinking", "non-potable", "prohibited", "water"],
+    "shortcodes": ["non-potable_water"]
+  },
+  {
+    "unicode": "🚷",
+    "hexcode": "1F6B7",
+    "label": "no pedestrians",
+    "group": 8,
+    "tags": ["forbidden", "no", "not", "pedestrian", "pedestrians", "prohibited"],
+    "shortcodes": ["no_pedestrians"]
+  },
+  {
+    "unicode": "📵",
+    "hexcode": "1F4F5",
+    "label": "no mobile phones",
+    "group": 8,
+    "tags": [
+      "cell",
+      "forbidden",
+      "mobile",
+      "no",
+      "not",
+      "phone",
+      "phones",
+      "prohibited",
+      "telephone"
+    ],
+    "shortcodes": ["no_mobile_phones"]
+  },
+  {
+    "unicode": "🔞",
+    "hexcode": "1F51E",
+    "label": "no one under eighteen",
+    "group": 8,
+    "tags": [
+      "18",
+      "age",
+      "eighteen",
+      "forbidden",
+      "no",
+      "not",
+      "one",
+      "prohibited",
+      "restriction",
+      "underage"
+    ],
+    "shortcodes": ["underage"]
+  },
+  {
+    "unicode": "☢️",
+    "hexcode": "2622",
+    "label": "radioactive",
+    "group": 8,
+    "tags": ["sign"],
+    "shortcodes": ["radioactive_sign"]
+  },
+  {
+    "unicode": "☣️",
+    "hexcode": "2623",
+    "label": "biohazard",
+    "group": 8,
+    "tags": ["sign"],
+    "shortcodes": ["biohazard_sign"]
+  },
+  {
+    "unicode": "⬆️",
+    "hexcode": "2B06",
+    "label": "up arrow",
+    "group": 8,
+    "tags": ["arrow", "cardinal", "direction", "north", "up"],
+    "shortcodes": ["arrow_up"]
+  },
+  {
+    "unicode": "↗️",
+    "hexcode": "2197",
+    "label": "up-right arrow",
+    "group": 8,
+    "tags": ["arrow", "direction", "intercardinal", "northeast", "up-right"],
+    "shortcodes": ["arrow_upper_right"]
+  },
+  {
+    "unicode": "➡️",
+    "hexcode": "27A1",
+    "label": "right arrow",
+    "group": 8,
+    "tags": ["arrow", "cardinal", "direction", "east", "right"],
+    "shortcodes": ["arrow_right"]
+  },
+  {
+    "unicode": "↘️",
+    "hexcode": "2198",
+    "label": "down-right arrow",
+    "group": 8,
+    "tags": ["arrow", "direction", "down-right", "intercardinal", "southeast"],
+    "shortcodes": ["arrow_lower_right"]
+  },
+  {
+    "unicode": "⬇️",
+    "hexcode": "2B07",
+    "label": "down arrow",
+    "group": 8,
+    "tags": ["arrow", "cardinal", "direction", "down", "south"],
+    "shortcodes": ["arrow_down"]
+  },
+  {
+    "unicode": "↙️",
+    "hexcode": "2199",
+    "label": "down-left arrow",
+    "group": 8,
+    "tags": ["arrow", "direction", "down-left", "intercardinal", "southwest"],
+    "shortcodes": ["arrow_lower_left"]
+  },
+  {
+    "unicode": "⬅️",
+    "hexcode": "2B05",
+    "label": "left arrow",
+    "group": 8,
+    "tags": ["arrow", "cardinal", "direction", "left", "west"],
+    "shortcodes": ["arrow_left"]
+  },
+  {
+    "unicode": "↖️",
+    "hexcode": "2196",
+    "label": "up-left arrow",
+    "group": 8,
+    "tags": ["arrow", "direction", "intercardinal", "northwest", "up-left"],
+    "shortcodes": ["arrow_upper_left"]
+  },
+  {
+    "unicode": "↕️",
+    "hexcode": "2195",
+    "label": "up-down arrow",
+    "group": 8,
+    "tags": ["arrow", "up-down"],
+    "shortcodes": ["arrow_up_down"]
+  },
+  {
+    "unicode": "↔️",
+    "hexcode": "2194",
+    "label": "left-right arrow",
+    "group": 8,
+    "tags": ["arrow", "left-right"],
+    "shortcodes": ["left_right_arrow"]
+  },
+  {
+    "unicode": "↩️",
+    "hexcode": "21A9",
+    "label": "right arrow curving left",
+    "group": 8,
+    "tags": ["arrow", "curving", "left", "right"],
+    "shortcodes": ["leftwards_arrow_with_hook"]
+  },
+  {
+    "unicode": "↪️",
+    "hexcode": "21AA",
+    "label": "left arrow curving right",
+    "group": 8,
+    "tags": ["arrow", "curving", "left", "right"],
+    "shortcodes": ["arrow_right_hook"]
+  },
+  {
+    "unicode": "⤴️",
+    "hexcode": "2934",
+    "label": "right arrow curving up",
+    "group": 8,
+    "tags": ["arrow", "curving", "right", "up"],
+    "shortcodes": ["arrow_heading_up"]
+  },
+  {
+    "unicode": "⤵️",
+    "hexcode": "2935",
+    "label": "right arrow curving down",
+    "group": 8,
+    "tags": ["arrow", "curving", "down", "right"],
+    "shortcodes": ["arrow_heading_down"]
+  }
 ]

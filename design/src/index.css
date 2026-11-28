@@ -6,12 +6,12 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --adept-violet: #8b45ff;
+  --rift-violet: #8b45ff;
   --brand-fill: #7b2fff;
   --brand-text: #c9b5ff;
   --danger-fill: #cf3440;
-  --adept-violet-hover: #9b5fff;
-  --adept-ink: #0a0717;
+  --rift-violet-hover: #9b5fff;
+  --rift-ink: #0a0717;
   --pink: #ff6bd6;
   --lavender: #c9b5ff;
 
@@ -34,7 +34,7 @@
   --destructive: #f2555a;
   --border: #2a1f4a;
   --input: #3a2d63;
-  --ring: var(--adept-violet);
+  --ring: var(--rift-violet);
 
   --success: #3ecf8e;
   --warning: #f0b232;
@@ -47,12 +47,12 @@
 
   --sidebar: #160f2c;
   --sidebar-foreground: #f3efff;
-  --sidebar-primary: var(--adept-violet);
+  --sidebar-primary: var(--rift-violet);
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: #251b45;
   --sidebar-accent-foreground: #f3efff;
   --sidebar-border: #2a1f4a;
-  --sidebar-ring: var(--adept-violet);
+  --sidebar-ring: var(--rift-violet);
 }
 
 @theme inline {
@@ -88,9 +88,9 @@
   --color-brand-fill: var(--brand-fill);
   --color-brand-text: var(--brand-text);
   --color-danger-fill: var(--danger-fill);
-  --color-brand: var(--adept-violet);
-  --color-brand-hover: var(--adept-violet-hover);
-  --color-ink: var(--adept-ink);
+  --color-brand: var(--rift-violet);
+  --color-brand-hover: var(--rift-violet-hover);
+  --color-ink: var(--rift-ink);
   --color-pink: var(--pink);
   --color-lavender: var(--lavender);
   --color-surface-0: var(--surface-0);
@@ -146,7 +146,7 @@
   }
 
   ::selection {
-    background: color-mix(in srgb, var(--adept-violet) 40%, transparent);
+    background: color-mix(in srgb, var(--rift-violet) 40%, transparent);
   }
 }
 

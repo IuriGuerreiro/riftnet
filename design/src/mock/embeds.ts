@@ -23,7 +23,7 @@ export type Embed =
 const EMBEDS: Embed[] = [
   {
     kind: "video",
-    url: "https://www.youtube.com/watch?v=adept-dash",
+    url: "https://www.youtube.com/watch?v=rift-dash",
     site: "YouTube",
     color: "#ff0033",
     title: "Ridgeline: every dash cancel you should know (patch 0.9)",
@@ -43,7 +43,7 @@ const EMBEDS: Embed[] = [
   },
   {
     kind: "link",
-    url: "https://adept.example/night-owls",
+    url: "https://riftnet.example/night-owls",
     site: "Riftnet",
     color: "#8b45ff",
     title: "Late Shift · server rules",

@@ -10,7 +10,7 @@ export const EMOJI_SETS = [
 
 export type EmojiSet = (typeof EMOJI_SETS)[number]["id"];
 
-const KEY = "adept.emojiSet";
+const KEY = "riftnet.emojiSet";
 const listeners = new Set<() => void>();
 
 function read(): EmojiSet {

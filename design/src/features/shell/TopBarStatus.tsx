@@ -111,7 +111,7 @@ export function TopBarStatus({
     <div className="flex items-center justify-end gap-1">
       <Pill label="Friends online" onClick={onFriends}>
         <span className="hidden lg:block">
-          <AvatarStack ids={ONLINE.map((f) => f.id)} size={18} max={3} ringBg="var(--adept-ink)" />
+          <AvatarStack ids={ONLINE.map((f) => f.id)} size={18} max={3} ringBg="var(--rift-ink)" />
         </span>
         <span>
           <span className="text-foreground">{ONLINE.length}</span> online

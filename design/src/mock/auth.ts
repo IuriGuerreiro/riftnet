@@ -3,7 +3,7 @@ const wait = (ms: number) =>
     setTimeout(resolve, ms);
   });
 
-const TAKEN = new Set(["admin", "adept", "nova", "pixel", "ghost", "iuri"]);
+const TAKEN = new Set(["admin", "riftnet", "nova", "pixel", "ghost", "iuri"]);
 
 export const MOCK_HINTS = [
   ["Login error", "password: wrong"],
@@ -29,7 +29,7 @@ export async function mockCheckUsername(name: string) {
 }
 
 export function suggestUsernames(name: string): string[] {
-  const base = name.replaceAll(/[^a-z0-9_.]/g, "").slice(0, 24) || "adept";
+  const base = name.replaceAll(/[^a-z0-9_.]/g, "").slice(0, 24) || "riftnet";
   return [`${base}_`, `${base}.gg`, `${base}${(base.length * 37) % 100}`].filter(
     (s) => !TAKEN.has(s),
   );

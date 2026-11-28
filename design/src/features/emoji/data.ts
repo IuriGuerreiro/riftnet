@@ -83,7 +83,7 @@ export function searchEmoji(i: EmojiIndex, query: string, limit = 60): EmojiEntr
     .map(([, e]) => e);
 }
 
-const RECENT_KEY = "adept.recentEmoji";
+const RECENT_KEY = "riftnet.recentEmoji";
 const DEFAULT_RECENT = ["👍", "❤️", "😂", "🔥", "💀", "😭", "👀", "🎉", "✨", "🙏", "😅", "🤝"];
 
 export function readRecent(): string[] {

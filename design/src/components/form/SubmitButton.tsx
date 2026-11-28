@@ -17,7 +17,7 @@ export function SubmitButton({
       type="submit"
       size="lg"
       disabled={pending || disabled}
-      className="h-11 w-full text-[15px] font-semibold shadow-[0_8px_24px_-8px_var(--adept-violet)]"
+      className="h-11 w-full text-[15px] font-semibold shadow-[0_8px_24px_-8px_var(--rift-violet)]"
     >
       {pending && <Loader2 className="size-4 animate-spin" />}
       {children}

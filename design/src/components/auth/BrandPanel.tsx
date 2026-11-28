@@ -23,7 +23,7 @@ export function BrandPanel({ className }: { className?: string }) {
     >
       <div
         aria-hidden
-        className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_50%_42%,color-mix(in_srgb,var(--adept-violet)_22%,transparent),transparent_60%)]"
+        className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_50%_42%,color-mix(in_srgb,var(--rift-violet)_22%,transparent),transparent_60%)]"
       />
       <div
         aria-hidden

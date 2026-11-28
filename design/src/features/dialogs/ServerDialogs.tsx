@@ -75,7 +75,7 @@ export function AddServer({ code = "" }: { code?: string }) {
           maxLength={mode === "create" ? 40 : 120}
           aria-invalid={bad}
           aria-label={mode === "create" ? "Server name" : "Invite link"}
-          placeholder={mode === "create" ? "Server name" : "adept.gg/cozy"}
+          placeholder={mode === "create" ? "Server name" : "riftnet.app/i/cozy"}
           onChange={(e) => setValue(e.target.value)}
         />
         {bad && (
@@ -154,7 +154,7 @@ export function Invite({ id }: { id: string }) {
       {invites.map((i) => (
         <div key={i.code} className="flex items-center gap-2 rounded-lg bg-surface-2 p-2 text-sm">
           <span className="min-w-0 flex-1 truncate">
-            adept.gg/{i.code}
+            riftnet.app/i/{i.code}
             <span className="block text-xs text-muted-foreground">
               Expires in {i.expires} · {i.uses === 1 ? "1 use" : `${i.uses} uses`}
             </span>
@@ -163,7 +163,7 @@ export function Invite({ id }: { id: string }) {
             size="icon-sm"
             variant="ghost"
             aria-label="Copy invite"
-            onClick={() => void copy(`https://adept.gg/${i.code}`)}
+            onClick={() => void copy(`https://riftnet.app/i/${i.code}`)}
           >
             <Copy />
           </Button>
@@ -197,7 +197,7 @@ export function Invite({ id }: { id: string }) {
                   setSent((x) => [...x, f]);
                   pushMessage(ensureDm(f), {
                     author: ME,
-                    text: `Join me on ${s.name}: https://adept.gg/${s.id}`,
+                    text: `Join me on ${s.name}: https://riftnet.app/i/${s.id}`,
                   });
                 }}
               >
