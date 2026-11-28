@@ -38,9 +38,10 @@ import {
 } from "@/mock/data";
 import { change, ensureDm, openDialog, systemMessage, toast, useWorld, world } from "@/mock/world";
 
-const CallStage = lazy(() =>
-  import("@/features/call/CallStage").then((m) => ({ default: m.CallStage })),
-);
+const loadCallStage = () => import("@/features/call/CallStage");
+const CallStage = lazy(() => loadCallStage().then((m) => ({ default: m.CallStage })));
+
+setTimeout(() => void loadCallStage(), 1500);
 
 const WIDE = "(min-width: 1100px)";
 
@@ -580,7 +581,7 @@ export function AppLayout() {
             </div>
           ) : inStage && call ? (
             <>
-              <Suspense fallback={<p role="status">Loading call…</p>}>
+              <Suspense fallback={null}>
                 <CallStage
                   call={call}
                   onCall={patchCall}
