@@ -32,10 +32,10 @@ export function LoginScreen() {
   return (
     <AuthShell
       title="Welcome back"
-      subtitle="Log in to your Adept account."
+      subtitle="Log in to your Riftnet account."
       footer={
         <>
-          New to Adept?{" "}
+          New to Riftnet?{" "}
           <Link to="/register" className="font-medium text-brand-text hover:underline">
             Create an account
           </Link>

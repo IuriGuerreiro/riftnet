@@ -1,7 +1,7 @@
 import { Compass, Menu, Plus, Search, Volume2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { AdeptMark } from "@/components/brand/AdeptMark";
+import { RiftnetMark } from "@/components/brand/RiftnetMark";
 import { ServerIcon } from "@/components/ServerIcon";
 import { CallCard } from "@/features/adept/CallCard";
 import { IncomingCall, SharePlayBanner } from "@/features/adept/CallPrompts";
@@ -316,7 +316,7 @@ export function AdeptLayout() {
           >
             <Menu className="size-4" />
           </button>
-          <AdeptMark className="size-5 shrink-0" />
+          <RiftnetMark className="size-5 shrink-0" />
           <span className="truncate text-muted-foreground">
             {inStage
               ? (findServer(joinedRoom.serverId)?.name ?? "Home")
@@ -387,7 +387,7 @@ export function AdeptLayout() {
                 place === "home" ? "bg-brand/20" : "bg-surface-2",
               )}
             >
-              <AdeptMark className="size-6" />
+              <RiftnetMark className="size-6" />
             </span>
           </RailTile>
           <span className="h-px w-6 bg-surface-3" />

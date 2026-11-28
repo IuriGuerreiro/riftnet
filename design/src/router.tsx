@@ -22,7 +22,7 @@ const rootRoute = createRootRoute({
     <div className="grid h-full place-content-center gap-3 text-center">
       <h1 className="text-xl font-semibold">Something broke</h1>
       <a href="/app" className="text-brand-text hover:underline">
-        Reload Adept
+        Reload Riftnet
       </a>
     </div>
   ),

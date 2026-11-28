@@ -17,7 +17,7 @@ const SCREENS = [
   { label: "Forgot password", to: "/forgot", search: {} },
   { label: "Verify email", to: "/verify", search: {} },
   { label: "Username", to: "/username", search: {} },
-  { label: "Adept app", to: "/app", search: {} },
+  { label: "Riftnet app", to: "/app", search: {} },
 ] as const;
 
 const SCENARIOS: [string, () => void][] = [

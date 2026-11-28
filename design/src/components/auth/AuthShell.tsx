@@ -33,7 +33,7 @@ export function AuthShell({
           </div>
         </div>
         <p className="text-xs text-muted-foreground/70">
-          © {YEAR} Adept · <LegalLink title="Terms of Service">Terms</LegalLink> ·{" "}
+          © {YEAR} Riftnet · <LegalLink title="Terms of Service">Terms</LegalLink> ·{" "}
           <LegalLink title="Privacy Policy">Privacy</LegalLink>
         </p>
       </main>

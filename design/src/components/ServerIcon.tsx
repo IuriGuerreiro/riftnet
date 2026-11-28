@@ -11,8 +11,8 @@ const EMBLEMS = {
         <polygon points="8,10 17,15 14,27 7,21" fill="currentColor" opacity="0.92" />
         <polygon points="32,10 23,15 26,27 33,21" fill="currentColor" opacity="0.92" />
         <polygon points="15,29 20,33 25,29 20,24" fill="currentColor" opacity="0.55" />
-        <polygon points="12,18 17,19.5 14.5,22.5" fill="#7c6cf2" />
-        <polygon points="28,18 23,19.5 25.5,22.5" fill="#7c6cf2" />
+        <polygon points="12,18 17,19.5 14.5,22.5" fill="#8b45ff" />
+        <polygon points="28,18 23,19.5 25.5,22.5" fill="#8b45ff" />
       </svg>
     ),
   },

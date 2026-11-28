@@ -32,7 +32,7 @@ export function Banners() {
         <div className={`${bar} bg-brand-fill text-white`}>
           <Download className="size-4" />
           {world.update === "available"
-            ? "Adept 0.2.0 is available."
+            ? "Riftnet 0.2.0 is available."
             : world.update === "downloading"
               ? "Downloading the update…"
               : "Update ready."}

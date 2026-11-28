@@ -44,11 +44,11 @@ const EMBEDS: Embed[] = [
   {
     kind: "link",
     url: "https://adept.example/night-owls",
-    site: "Adept",
-    color: "#7c6cf2",
+    site: "Riftnet",
+    color: "#8b45ff",
     title: "Late Shift · server rules",
     description: "Be kind, no spoilers outside #spoilers, clips go in #clips.",
-    image: "/adept.svg",
+    image: "/riftnet.svg",
   },
 ];
 

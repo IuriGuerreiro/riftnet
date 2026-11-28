@@ -1,7 +1,7 @@
 import { ArrowLeft, Hash, Pin, Search, SquarePen, Volume2 } from "lucide-react";
 import { useState } from "react";
 
-import { AdeptMark } from "@/components/brand/AdeptMark";
+import { RiftnetMark } from "@/components/brand/RiftnetMark";
 import { ServerIcon } from "@/components/ServerIcon";
 import { ChatView } from "@/features/chat/ChatView";
 import { ConversationRow } from "@/features/shell/ConversationRow";
@@ -115,7 +115,7 @@ export function InboxLayout() {
               <ArrowLeft className="size-4" />
             </button>
           ) : (
-            <AdeptMark className="size-6" />
+            <RiftnetMark className="size-6" />
           )}
           <h1 className="flex-1 truncate text-lg font-semibold">{srv ? srv.name : "Inbox"}</h1>
           <button

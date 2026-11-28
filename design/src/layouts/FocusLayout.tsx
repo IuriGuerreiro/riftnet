@@ -2,7 +2,7 @@ import { Hash, MessageSquare, Plus, Search, Settings, UserRound, X } from "lucid
 import { useEffect, useState } from "react";
 
 import { Avatar } from "@/components/Avatar";
-import { AdeptMark } from "@/components/brand/AdeptMark";
+import { RiftnetMark } from "@/components/brand/RiftnetMark";
 import { ChatView } from "@/features/chat/ChatView";
 import { EmojiText } from "@/features/emoji/EmojiText";
 import { JumpPalette } from "@/features/shell/JumpPalette";
@@ -122,7 +122,7 @@ export function FocusLayout() {
   return (
     <div className="flex h-full bg-ink">
       <nav className="flex w-16 shrink-0 flex-col items-center gap-1.5 py-3">
-        <AdeptMark className="mb-3 size-8" />
+        <RiftnetMark className="mb-3 size-8" />
         <RailButton label="Chats" active>
           <MessageSquare className="size-5" />
         </RailButton>
@@ -188,7 +188,7 @@ export function FocusLayout() {
             </>
           ) : (
             <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
-              <AdeptMark tone="mono" className="size-10 text-surface-4" />
+              <RiftnetMark tone="mono" className="size-10 text-surface-4" />
               <p className="text-sm text-muted-foreground">No conversation open</p>
               <button
                 type="button"

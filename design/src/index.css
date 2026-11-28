@@ -1,61 +1,63 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@import "@fontsource-variable/inter";
-@import "@fontsource-variable/jost";
+@import "@fontsource-variable/figtree";
+@import "@fontsource-variable/rubik";
 
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --adept-violet: #7c6cf2;
-  --brand-fill: #6757dc;
-  --brand-text: #a99eff;
+  --adept-violet: #8b45ff;
+  --brand-fill: #7b2fff;
+  --brand-text: #c9b5ff;
   --danger-fill: #cf3440;
-  --adept-violet-hover: #8e80f5;
-  --adept-ink: #0b0d12;
+  --adept-violet-hover: #9b5fff;
+  --adept-ink: #0a0717;
+  --pink: #ff6bd6;
+  --lavender: #c9b5ff;
 
   --radius: 0.625rem;
 
-  --background: #0f1014;
-  --foreground: #ecedf1;
-  --card: #16171d;
-  --card-foreground: #ecedf1;
-  --popover: #1d1f26;
-  --popover-foreground: #ecedf1;
+  --background: #0f0a1f;
+  --foreground: #f3efff;
+  --card: #160f2c;
+  --card-foreground: #f3efff;
+  --popover: #1c1436;
+  --popover-foreground: #f3efff;
   --primary: var(--brand-fill);
   --primary-foreground: #ffffff;
-  --secondary: #272a33;
-  --secondary-foreground: #ecedf1;
-  --muted: #1d1f26;
-  --muted-foreground: #a4a8b5;
-  --accent: #272a33;
-  --accent-foreground: #ecedf1;
+  --secondary: #251b45;
+  --secondary-foreground: #f3efff;
+  --muted: #1c1436;
+  --muted-foreground: #a99cc9;
+  --accent: #251b45;
+  --accent-foreground: #f3efff;
   --destructive: #f2555a;
-  --border: #2a2d36;
-  --input: #3a3e4a;
+  --border: #2a1f4a;
+  --input: #3a2d63;
   --ring: var(--adept-violet);
 
   --success: #3ecf8e;
   --warning: #f0b232;
 
-  --surface-0: #0f1014;
-  --surface-1: #16171d;
-  --surface-2: #1d1f26;
-  --surface-3: #272a33;
-  --surface-4: #323642;
+  --surface-0: #0f0a1f;
+  --surface-1: #160f2c;
+  --surface-2: #1c1436;
+  --surface-3: #251b45;
+  --surface-4: #30245a;
 
-  --sidebar: #16171d;
-  --sidebar-foreground: #ecedf1;
+  --sidebar: #160f2c;
+  --sidebar-foreground: #f3efff;
   --sidebar-primary: var(--adept-violet);
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #272a33;
-  --sidebar-accent-foreground: #ecedf1;
-  --sidebar-border: #2a2d36;
+  --sidebar-accent: #251b45;
+  --sidebar-accent-foreground: #f3efff;
+  --sidebar-border: #2a1f4a;
   --sidebar-ring: var(--adept-violet);
 }
 
 @theme inline {
-  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Jost Variable", "URW Gothic", ui-sans-serif, sans-serif;
+  --font-sans: "Figtree Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Rubik Variable", ui-sans-serif, sans-serif;
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -89,6 +91,8 @@
   --color-brand: var(--adept-violet);
   --color-brand-hover: var(--adept-violet-hover);
   --color-ink: var(--adept-ink);
+  --color-pink: var(--pink);
+  --color-lavender: var(--lavender);
   --color-surface-0: var(--surface-0);
   --color-surface-1: var(--surface-1);
   --color-surface-2: var(--surface-2);

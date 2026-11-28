@@ -2,7 +2,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { RotateCw, WifiOff } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { AdeptMorph } from "@/components/brand/AdeptMorph";
+import { RiftnetPulse } from "@/components/brand/RiftnetPulse";
 import { Wordmark } from "@/components/brand/Wordmark";
 import { Button } from "@/components/ui/button";
 
@@ -48,7 +48,7 @@ function Booting({ hold }: { hold: boolean }) {
 
   return (
     <div className="flex flex-col items-center" role="status" aria-live="polite">
-      <AdeptMorph size={168} />
+      <RiftnetPulse size={168} />
       <Wordmark className="mt-8 text-xl" />
       <div className="mt-10 h-0.5 w-44 overflow-hidden rounded-full bg-white/10">
         <div
@@ -73,7 +73,7 @@ function Offline() {
       <div className="grid size-16 place-items-center rounded-2xl border border-white/10 bg-surface-1">
         <WifiOff className="size-7 text-muted-foreground" />
       </div>
-      <h1 className="mt-6 text-xl font-semibold">Can't reach Adept</h1>
+      <h1 className="mt-6 text-xl font-semibold">Can't reach Riftnet</h1>
       <p className="mt-2 text-sm text-muted-foreground">Check your connection, then try again.</p>
       <Button
         className="mt-6"

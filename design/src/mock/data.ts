@@ -90,7 +90,7 @@ export type Attachment =
 const media = (f: string) => `/media/${f}`;
 
 export const GIFS: Extract<Attachment, { kind: "gif" }>[] = [
-  { kind: "gif", url: media("adept-loop.gif"), name: "adept", w: 480, h: 480 },
+  { kind: "gif", url: media("riftnet-loop.gif"), name: "riftnet", w: 480, h: 480 },
   { kind: "gif", url: media("flower.gif"), name: "bloom", w: 360, h: 203 },
   { kind: "gif", url: media("friday.gif"), name: "friday", w: 300, h: 225 },
   { kind: "gif", url: media("flower-2.gif"), name: "petals", w: 320, h: 180 },
@@ -632,7 +632,9 @@ const SCRIPTS: Record<string, Message[]> = {
       author: "noor",
       text: "",
       time: "21:08",
-      attachments: [{ kind: "gif", url: media("adept-loop.gif"), name: "adept", w: 480, h: 480 }],
+      attachments: [
+        { kind: "gif", url: media("riftnet-loop.gif"), name: "riftnet", w: 480, h: 480 },
+      ],
     },
     {
       id: "g6d",

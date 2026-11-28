@@ -2,7 +2,7 @@ import { ChevronDown, Compass, Hash, Inbox, Plus, Search, UserRound, Volume2 } f
 import { useState } from "react";
 
 import { Avatar } from "@/components/Avatar";
-import { AdeptMark } from "@/components/brand/AdeptMark";
+import { RiftnetMark } from "@/components/brand/RiftnetMark";
 import { ServerIcon } from "@/components/ServerIcon";
 import { ChatView } from "@/features/chat/ChatView";
 import { EmojiText } from "@/features/emoji/EmojiText";
@@ -240,7 +240,7 @@ export function ClassicLayout() {
                 : "rounded-[38%] bg-surface-2 hover:bg-brand/80",
             )}
           >
-            <AdeptMark
+            <RiftnetMark
               tone={place === "home" ? "mono" : "brand"}
               className={cn("size-7", place === "home" && "text-white")}
             />

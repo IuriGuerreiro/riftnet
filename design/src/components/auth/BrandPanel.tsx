@@ -1,10 +1,10 @@
 import { useState } from "react";
 
-import { AdeptMorph } from "@/components/brand/AdeptMorph";
+import { RiftnetPulse } from "@/components/brand/RiftnetPulse";
 import { cn } from "@/lib/utils";
 
 const CAPTIONS = [
-  { tag: "Adept", line: "Voice, chat and 60fps screen share." },
+  { tag: "Riftnet", line: "Voice, chat and 60fps screen share." },
   { tag: "Voice", line: "Clear voice that stays out of your way." },
   { tag: "Screen", line: "Share your screen at 60fps." },
   { tag: "Play", line: "Hand over the controls with Share Play." },
@@ -30,7 +30,7 @@ export function BrandPanel({ className }: { className?: string }) {
         className="absolute inset-0 -z-10 opacity-[0.07] [background-image:linear-gradient(var(--foreground)_1px,transparent_1px),linear-gradient(90deg,var(--foreground)_1px,transparent_1px)] [background-size:44px_44px] [mask-image:radial-gradient(circle_at_50%_45%,black,transparent_70%)]"
       />
 
-      <AdeptMorph size={280} onStateChange={setState} />
+      <RiftnetPulse size={240} steps={CAPTIONS.length} onStateChange={setState} />
 
       <div className="mt-10 flex h-20 flex-col items-center gap-3 text-center">
         <p

@@ -55,7 +55,7 @@ const NAV = [
       ["Shortcuts", Keyboard],
     ],
   ],
-  ["Adept", [["About", Info]]],
+  ["Riftnet", [["About", Info]]],
 ] as const;
 
 const INDEX: [string, string][] = [
@@ -178,7 +178,7 @@ function Profile() {
               <span className="flex-1">Accent color</span>
               <input
                 type="color"
-                value={draft.accent ?? "#7c6cf2"}
+                value={draft.accent ?? "#8b45ff"}
                 onChange={(e) => set({ accent: e.target.value })}
                 className="h-8 w-12 bg-transparent"
               />
@@ -415,7 +415,9 @@ function MicTest() {
         tick();
       } catch {
         if (!live) return;
-        setError("Adept can't use your microphone. Allow it in your system settings, then retry.");
+        setError(
+          "Riftnet can't use your microphone. Allow it in your system settings, then retry.",
+        );
         setOn(false);
       }
     };
