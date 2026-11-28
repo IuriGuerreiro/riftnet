@@ -11,12 +11,11 @@ import { Forward, GroupMembers, NewDm, RenameGroup, Report } from "./HomeDialogs
 import { Modal } from "./Modal";
 import { AddServer, ChannelForm, Discover, Invite } from "./ServerDialogs";
 
-const SettingsScreen = lazy(() =>
-  import("@/features/settings/SettingsScreen").then((m) => ({ default: m.SettingsScreen })),
-);
-const ShortcutList = lazy(() =>
-  import("@/features/settings/SettingsScreen").then((m) => ({ default: m.ShortcutList })),
-);
+const loadSettings = () => import("@/features/settings/SettingsScreen");
+const SettingsScreen = lazy(() => loadSettings().then((m) => ({ default: m.SettingsScreen })));
+const ShortcutList = lazy(() => loadSettings().then((m) => ({ default: m.ShortcutList })));
+
+setTimeout(() => void loadSettings(), 1500);
 
 const SOURCES = [
   ["Screen 1", "photo-1.jpg"],
@@ -125,14 +124,14 @@ export function Dialogs({ onShare }: { onShare: () => void }) {
     case "shortcuts":
       return (
         <Modal title="Keyboard shortcuts">
-          <Suspense fallback={<p role="status">Loading shortcuts…</p>}>
+          <Suspense fallback={null}>
             <ShortcutList />
           </Suspense>
         </Modal>
       );
     case "settings":
       return (
-        <Suspense fallback={<p role="status">Loading settings…</p>}>
+        <Suspense fallback={null}>
           <SettingsScreen key={d.tab ?? "default"} tab={d.tab} />
         </Suspense>
       );
