@@ -64,7 +64,7 @@ function comments(src) {
 
 const files = execFileSync("git", ["ls-files", "*.rs"], { encoding: "utf8" })
   .split("\n")
-  .filter((f) => f && !f.startsWith("spikes/"));
+  .filter(Boolean);
 
 let errors = 0;
 for (const file of files) {
