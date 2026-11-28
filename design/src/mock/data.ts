@@ -90,9 +90,9 @@ export type Attachment =
 const media = (f: string) => `/media/${f}`;
 
 export const GIFS: Extract<Attachment, { kind: "gif" }>[] = [
-  { kind: "gif", url: media("riftnet-loop.gif"), name: "riftnet", w: 480, h: 480 },
-  { kind: "gif", url: media("flower.gif"), name: "bloom", w: 360, h: 203 },
-  { kind: "gif", url: media("friday.gif"), name: "friday", w: 300, h: 225 },
+  { kind: "gif", url: "/riftnet-loop.mp4", name: "riftnet", w: 480, h: 480 },
+  { kind: "gif", url: media("flower.mp4"), name: "bloom", w: 360, h: 203 },
+  { kind: "gif", url: media("friday.mp4"), name: "friday", w: 300, h: 225 },
   { kind: "gif", url: media("flower-2.gif"), name: "petals", w: 320, h: 180 },
   { kind: "gif", url: media("friday-2.gif"), name: "weekend", w: 300, h: 225 },
 ];
@@ -529,7 +529,7 @@ const SCRIPTS: Record<string, Message[]> = {
       author: "maya",
       text: "",
       time: "21:07",
-      attachments: [{ kind: "gif", url: media("friday.gif"), name: "friday", w: 300, h: 225 }],
+      attachments: [{ kind: "gif", url: media("friday.mp4"), name: "friday", w: 300, h: 225 }],
     },
     {
       id: "m6c",
@@ -632,9 +632,7 @@ const SCRIPTS: Record<string, Message[]> = {
       author: "noor",
       text: "",
       time: "21:08",
-      attachments: [
-        { kind: "gif", url: media("riftnet-loop.gif"), name: "riftnet", w: 480, h: 480 },
-      ],
+      attachments: [{ kind: "gif", url: "/riftnet-loop.mp4", name: "riftnet", w: 480, h: 480 }],
     },
     {
       id: "g6d",

@@ -1,16 +1,22 @@
 import { useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 
 import { Pick, Toggle } from "@/components/Controls";
 import { Button } from "@/components/ui/button";
 import { ServerSettings } from "@/features/server/ServerSettings";
-import { SettingsScreen, ShortcutList } from "@/features/settings/SettingsScreen";
 import { cn } from "@/lib/utils";
 import { change, openDialog, type ShareOptions, useWorld, world } from "@/mock/world";
 
 import { Forward, GroupMembers, NewDm, RenameGroup, Report } from "./HomeDialogs";
 import { Modal } from "./Modal";
 import { AddServer, ChannelForm, Discover, Invite } from "./ServerDialogs";
+
+const SettingsScreen = lazy(() =>
+  import("@/features/settings/SettingsScreen").then((m) => ({ default: m.SettingsScreen })),
+);
+const ShortcutList = lazy(() =>
+  import("@/features/settings/SettingsScreen").then((m) => ({ default: m.ShortcutList })),
+);
 
 const SOURCES = [
   ["Screen 1", "photo-1.jpg"],
@@ -117,11 +123,17 @@ export function Dialogs({ onShare }: { onShare: () => void }) {
     case "shortcuts":
       return (
         <Modal title="Keyboard shortcuts">
-          <ShortcutList />
+          <Suspense fallback={<p role="status">Loading shortcuts…</p>}>
+            <ShortcutList />
+          </Suspense>
         </Modal>
       );
     case "settings":
-      return <SettingsScreen tab={d.tab} />;
+      return (
+        <Suspense fallback={<p role="status">Loading settings…</p>}>
+          <SettingsScreen tab={d.tab} />
+        </Suspense>
+      );
     case "expired":
       return <Expired />;
     case "confirm":

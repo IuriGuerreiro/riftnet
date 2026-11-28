@@ -1,15 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { codepoints } from "./sets";
-
-interface CompactEmoji {
-  hexcode: string;
-  unicode: string;
-  label: string;
-  group?: number;
-  order?: number;
-  tags?: string[];
-}
+import subset from "./subset.json";
 
 export interface EmojiEntry {
   unicode: string;
@@ -35,7 +27,6 @@ export const GROUPS = [
   { id: 6, label: "Activities" },
   { id: 7, label: "Objects" },
   { id: 8, label: "Symbols" },
-  { id: 9, label: "Flags" },
 ] as const;
 
 export function emojiKey(unicode: string) {
@@ -49,26 +40,7 @@ let pending: Promise<EmojiIndex> | null = null;
 
 export function loadEmojiIndex(): Promise<EmojiIndex> {
   if (index) return Promise.resolve(index);
-  pending ??= Promise.all([
-    import("emojibase-data/en/compact.json"),
-    import("emojibase-data/en/shortcodes/iamcal.json"),
-  ]).then(([compact, codes]) => {
-    const raw = compact.default as unknown as CompactEmoji[];
-    const shortcodes = codes.default as unknown as Record<string, string | string[]>;
-    const list: EmojiEntry[] = raw
-      .filter((e) => e.group !== undefined && e.group !== 2)
-      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-      .map((e) => {
-        const sc = shortcodes[e.hexcode];
-        return {
-          unicode: e.unicode,
-          hexcode: e.hexcode,
-          label: e.label,
-          group: e.group ?? 0,
-          tags: e.tags ?? [],
-          shortcodes: sc === undefined ? [] : Array.isArray(sc) ? sc : [sc],
-        };
-      });
+  pending ??= Promise.resolve(subset).then((list: EmojiEntry[]) => {
     const byKey = new Map(list.map((e) => [emojiKey(e.unicode), e]));
     const byShortcode = new Map(list.flatMap((e) => e.shortcodes.map((s) => [s, e] as const)));
     index = { list, byKey, byShortcode };

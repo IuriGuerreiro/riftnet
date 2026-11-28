@@ -1,5 +1,6 @@
 import { FileText, Film, X } from "lucide-react";
 
+import { MediaImage } from "@/features/media/MediaImage";
 import type { Attachment } from "@/mock/data";
 
 import { formatBytes } from "./format";
@@ -30,7 +31,7 @@ export function StagedTray({
         >
           <div className="relative grid h-24 place-items-center overflow-hidden rounded-lg border border-border bg-surface-3">
             {att.kind === "image" || att.kind === "gif" ? (
-              <img src={att.url} alt={att.name} className="size-full object-cover" />
+              <MediaImage src={att.url} alt={att.name} className="size-full object-cover" />
             ) : att.kind === "video" ? (
               <>
                 <video src={att.url} muted preload="metadata" className="size-full object-cover" />

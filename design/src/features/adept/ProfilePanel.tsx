@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import { Avatar } from "@/components/Avatar";
 import { ServerIcon } from "@/components/ServerIcon";
+import { MediaImage } from "@/features/media/MediaImage";
 import { openChat } from "@/features/profile/openChat";
 import { bannerStyle, UserMenu } from "@/features/profile/ProfileCard";
 import { cn } from "@/lib/utils";
@@ -10,7 +11,7 @@ import { SERVERS, user } from "@/mock/data";
 
 import { ACTIVITY_ICON } from "./ActivityLine";
 
-const SHARED = [1, 2, 3, 4, 5].map((n) => `/media/photo-${n}.jpg`).concat("/media/flower.gif");
+const SHARED = [1, 2, 3, 4, 5].map((n) => `/media/photo-${n}.jpg`).concat("/media/flower.mp4");
 
 const ACTIVITY_TONE = {
   playing: "border-brand/20 bg-brand/12 text-brand-text",
@@ -146,7 +147,7 @@ export function ProfilePanel({ id, onCall }: { id: string; onCall: () => void })
         </p>
         <div className="grid grid-cols-3 gap-1.5">
           {SHARED.map((src) => (
-            <img
+            <MediaImage
               key={src}
               src={src}
               alt=""

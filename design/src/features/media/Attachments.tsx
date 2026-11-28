@@ -1,6 +1,7 @@
 import { Download, FileArchive, FileText, Film, ImageIcon } from "lucide-react";
 import { useState } from "react";
 
+import { MediaImage } from "@/features/media/MediaImage";
 import { cn } from "@/lib/utils";
 import type { Attachment } from "@/mock/data";
 
@@ -37,7 +38,7 @@ function Tile({
       style={style}
       className={cn("group/tile relative overflow-hidden bg-surface-2", className)}
     >
-      <img
+      <MediaImage
         src={item.url}
         alt={item.name}
         loading="lazy"

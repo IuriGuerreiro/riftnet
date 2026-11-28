@@ -1,11 +1,11 @@
 import { Compass, Menu, Plus, Search, Volume2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 
 import { RiftnetMark } from "@/components/brand/RiftnetMark";
 import { ServerIcon } from "@/components/ServerIcon";
 import { CallCard } from "@/features/adept/CallCard";
 import { IncomingCall, SharePlayBanner } from "@/features/adept/CallPrompts";
-import { CallStage, type CallState } from "@/features/adept/CallStage";
+import type { CallState } from "@/features/adept/CallStage";
 import { PeoplePanel } from "@/features/adept/PeoplePanel";
 import { ProfilePanel } from "@/features/adept/ProfilePanel";
 import { RoomPreview } from "@/features/adept/RoomPreview";
@@ -37,6 +37,10 @@ import {
   SERVERS,
 } from "@/mock/data";
 import { change, ensureDm, openDialog, systemMessage, toast, useWorld, world } from "@/mock/world";
+
+const CallStage = lazy(() =>
+  import("@/features/adept/CallStage").then((m) => ({ default: m.CallStage })),
+);
 
 const WIDE = "(min-width: 1100px)";
 
@@ -542,22 +546,24 @@ export function AdeptLayout() {
             </div>
           ) : inStage && call ? (
             <>
-              <CallStage
-                call={call}
-                onCall={patchCall}
-                room={joinedRoom}
-                muted={muted || deafened}
-                deafened={deafened}
-                sharing={sharing}
-                onMute={toggleMute}
-                onDeafen={toggleDeafen}
-                onShare={toggleShare}
-                onLeave={leave}
-                onOpenChat={() => {
-                  if (window.matchMedia(WIDE).matches) patchCall({ chat: !call.chat });
-                  else setPreview(null);
-                }}
-              />
+              <Suspense fallback={<p role="status">Loading call…</p>}>
+                <CallStage
+                  call={call}
+                  onCall={patchCall}
+                  room={joinedRoom}
+                  muted={muted || deafened}
+                  deafened={deafened}
+                  sharing={sharing}
+                  onMute={toggleMute}
+                  onDeafen={toggleDeafen}
+                  onShare={toggleShare}
+                  onLeave={leave}
+                  onOpenChat={() => {
+                    if (window.matchMedia(WIDE).matches) patchCall({ chat: !call.chat });
+                    else setPreview(null);
+                  }}
+                />
+              </Suspense>
               {call.chat && (
                 <div className="flex w-[380px] shrink-0 border-l border-border max-lg:hidden">
                   <ChatView key={activeId} conversationId={activeId} />

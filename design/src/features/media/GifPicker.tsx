@@ -1,6 +1,7 @@
 import { Search } from "lucide-react";
 import { useState } from "react";
 
+import { MediaImage } from "@/features/media/MediaImage";
 import { type Attachment, GIFS } from "@/mock/data";
 
 type Gif = Extract<Attachment, { kind: "gif" }>;
@@ -38,7 +39,7 @@ export function GifPicker({ onPick }: { onPick: (gif: Gif) => void }) {
                 className="group/gif relative mb-1.5 block w-full overflow-hidden rounded-lg bg-surface-2"
                 style={{ aspectRatio: `${g.w} / ${g.h}` }}
               >
-                <img
+                <MediaImage
                   src={g.url}
                   alt={g.name}
                   loading="lazy"

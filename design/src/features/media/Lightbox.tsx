@@ -11,6 +11,7 @@ import { Dialog } from "radix-ui";
 import { useEffect, useState } from "react";
 
 import { Avatar } from "@/components/Avatar";
+import { MediaImage } from "@/features/media/MediaImage";
 import { cn } from "@/lib/utils";
 import { type Attachment, user } from "@/mock/data";
 
@@ -150,7 +151,7 @@ export function Lightbox({
           </div>
 
           <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden px-16">
-            <img
+            <MediaImage
               key={`${item.url}-${index}`}
               src={item.url}
               alt={item.name}
@@ -234,7 +235,7 @@ export function Lightbox({
                       : "opacity-50 ring-transparent hover:opacity-90",
                   )}
                 >
-                  <img src={it.url} alt="" className="size-full object-cover" />
+                  <MediaImage src={it.url} alt="" className="size-full object-cover" />
                 </button>
               ))}
             </div>

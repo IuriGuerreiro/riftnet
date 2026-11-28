@@ -159,9 +159,6 @@ importers:
       cmdk:
         specifier: ^1.1.1
         version: 1.1.1(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
-      emojibase-data:
-        specifier: 18.0.0
-        version: 18.0.0(emojibase@18.0.0)
       highlight.js:
         specifier: 11.11.2
         version: 11.11.2
@@ -2629,15 +2626,6 @@ packages:
 
   electron-to-chromium@1.5.483:
     resolution: {integrity: sha512-zkGOvf625oaZgK+mhTF4hl3aTAfIOOnR7Jey0e7fUktdJWrB/wsLnzPKvWaqZkMCJ1yzUkAh6IqDJ9GMr3pR2Q==}
-
-  emojibase-data@18.0.0:
-    resolution: {integrity: sha512-TPPRRYv2zPd0jKI+pTpMquwWNZXYAsC3IVsCMeg2X8y8fEzKwOks4/5bz0YavF5r6d71aGPpb6oDnUEwSLLMoA==}
-    peerDependencies:
-      emojibase: '*'
-
-  emojibase@18.0.0:
-    resolution: {integrity: sha512-5PG+EEt5zQ9qvqdHZw61+T9iz96g+r621QS/w8jEzPg+3mjzAdjl8LPLc+e9ABv/yboNfMwEair7aK9qKnwAbQ==}
-    engines: {node: '>=20.0.0'}
 
   enhanced-resolve@5.26.2:
     resolution: {integrity: sha512-sQeK9D5kN5T+O0Hh+Cn8t39FZ0VJVARcoacJ7x1I0N+3/WqlckcS8D4NUKjMyTh4P5ly1SMgJQstou2aL3rmZQ==}
@@ -5813,12 +5801,6 @@ snapshots:
       gopd: 1.2.0
 
   electron-to-chromium@1.5.483: {}
-
-  emojibase-data@18.0.0(emojibase@18.0.0):
-    dependencies:
-      emojibase: 18.0.0
-
-  emojibase@18.0.0: {}
 
   enhanced-resolve@5.26.2:
     dependencies:
