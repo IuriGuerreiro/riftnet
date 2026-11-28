@@ -39,6 +39,8 @@ export default tseslint.config(
           "./client/tsconfig.node.json",
           "./tools/mock/tsconfig.json",
           "./site/tsconfig.json",
+          "./design/tsconfig.app.json",
+          "./design/tsconfig.node.json",
         ],
         tsconfigRootDir: import.meta.dirname,
       },
@@ -81,7 +83,7 @@ export default tseslint.config(
   },
 
   {
-    files: ["client/**/*.{ts,tsx}"],
+    files: ["client/**/*.{ts,tsx}", "design/**/*.{ts,tsx}"],
     extends: [reactX.configs["recommended-type-checked"], reactDom.configs.recommended],
     languageOptions: { globals: globals.browser },
     plugins: { "react-hooks": reactHooks, "react-refresh": reactRefresh },
@@ -112,6 +114,11 @@ export default tseslint.config(
         },
       ],
     },
+  },
+
+  {
+    files: ["design/src/components/ui/**/*.tsx"],
+    rules: { "react-refresh/only-export-components": "off" },
   },
 
   {

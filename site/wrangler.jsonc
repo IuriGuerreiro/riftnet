@@ -2,6 +2,10 @@
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "riftnet-site",
   "compatibility_date": "2026-11-01",
+  "routes": [
+    { "pattern": "riftnet.app", "custom_domain": true },
+    { "pattern": "www.riftnet.app", "custom_domain": true },
+  ],
   "assets": {
     "directory": "./dist",
   },

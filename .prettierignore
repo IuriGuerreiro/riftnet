@@ -4,3 +4,4 @@ client/src-tauri/
 target/
 dist/
 *.md
+design/src/features/emoji/subset.json

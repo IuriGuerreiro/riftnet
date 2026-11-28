@@ -148,11 +148,37 @@ Archive `adept-releases` once no one runs v0.1.0.
 
 For an end-to-end test, run the workflow from a public fork with its own signing key. Install the lower version, then expose the higher version on the test feed. Verify **Later**, the install and restart, settings persistence, and rejection of a mismatched signature. If a published build needs to be reverted, ship the previous working code with a higher version.
 
+## 6. Landing site (riftnet.app)
+
+`site/` is a static page on Cloudflare Workers. Cloudflare's Git integration (Workers Builds) builds and deploys it; there is no GitHub Action. `site/wrangler.jsonc` attaches it to `riftnet.app` and `www.riftnet.app` as custom domains, so neither hostname may have an existing DNS record.
+
+### Set up (once)
+
+In Cloudflare: **Workers & Pages → Create → Import a repository**, pick `IuriGuerreiro/riftnet`, then set:
+
+| Setting | Value |
+| --- | --- |
+| Project name | `riftnet-site` (must match `name` in `wrangler.jsonc`) |
+| Production branch | `prod` |
+| Root directory | leave empty (repository root) |
+| Build command | `pnpm install --frozen-lockfile --filter site && pnpm --filter site build` |
+| Deploy command | `pnpm --filter site exec wrangler deploy` |
+| Build watch paths | include `site/*` and `pnpm-lock.yaml` |
+
+Run everything from the repository root with `--filter site`. Running `pnpm build` at the root builds every package, and `wrangler deploy` refuses to run in a workspace root.
+
+Turn off non-production branch builds, or keep them for preview URLs.
+
+### Deploy
+
+Merge `main` into `prod`. Cloudflare builds and deploys when `site/` changes. To deploy from a laptop: `pnpm --filter site deploy` after `wrangler login`.
+
 ## Update / redeploy
 
 - **API and media**: merge `main` into `prod`. The **Deploy** workflow does the rest.
 - **Web**: not automated. On the server: `up -d --build --no-deps web`.
 - **Desktop app**: see section 5.
+- **Landing site**: merge `main` into `prod`. Cloudflare Workers Builds does the rest.
 - Changing the domain: rebuild `web` and the desktop app (URLs baked in).
 
 Always pass `--no-deps <service>`. A plain `up -d --build` would replace the

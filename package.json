@@ -7,6 +7,7 @@
     "dev": "pnpm --filter client dev",
     "desktop": "pnpm --filter client tauri dev",
     "mock": "pnpm --filter mock start",
+    "design": "pnpm --filter design dev",
     "lint": "eslint .",
     "build": "pnpm -r build",
     "lint:comments": "node tools/lint/check-rust-comments.mjs",

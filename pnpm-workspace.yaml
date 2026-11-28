@@ -3,8 +3,9 @@ packages:
   - site
   - tools/mock
   - tools/loadtest
+  - design
 
 allowBuilds:
   esbuild: true
   "@bufbuild/buf": true
-  workerd: true
+  workerd: false
