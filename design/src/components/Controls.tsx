@@ -1,5 +1,3 @@
-import type { ReactNode } from "react";
-
 import { cn } from "@/lib/utils";
 
 export function Toggle({
@@ -79,42 +77,6 @@ export function Choice<T extends string>({
   );
 }
 
-export function Slider({
-  label,
-  value,
-  max = 200,
-  min = 0,
-  unit = "%",
-  onChange,
-}: {
-  label: string;
-  value: number;
-  max?: number;
-  min?: number;
-  unit?: string;
-  onChange: (v: number) => void;
-}) {
-  return (
-    <label className="block py-2">
-      <span className="flex justify-between text-sm font-medium">
-        {label}
-        <span className="text-xs text-muted-foreground tabular-nums">
-          {value}
-          {unit}
-        </span>
-      </span>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="mt-1.5 w-full accent-brand"
-      />
-    </label>
-  );
-}
-
 export function Pick({
   label,
   value,
@@ -139,18 +101,5 @@ export function Pick({
         ))}
       </select>
     </label>
-  );
-}
-
-export function Panel({ title, children }: { title?: string; children: ReactNode }) {
-  return (
-    <section className="mb-6">
-      {title && (
-        <h3 className="mb-1 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
-          {title}
-        </h3>
-      )}
-      <div className="rounded-xl border border-border bg-surface-1 px-4 py-1.5">{children}</div>
-    </section>
   );
 }

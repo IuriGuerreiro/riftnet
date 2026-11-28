@@ -2,7 +2,7 @@ import { Activity, AudioLines } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { DevicePicks } from "@/features/settings/SettingsScreen";
+import { DevicePicks } from "@/features/settings/DevicePicks";
 import { change, openDialog, useWorld, world } from "@/mock/world";
 
 function Tool({ label, icon, children }: { label: string; icon: ReactNode; children: ReactNode }) {

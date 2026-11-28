@@ -103,7 +103,6 @@ export function Avatar({
   id: string;
   size?: number;
   status?: boolean;
-  ringBg?: string;
   className?: string;
 }) {
   const u = user(id);
@@ -145,7 +144,6 @@ export function AvatarStack({
   ids: string[];
   size?: number;
   max?: number;
-  ringBg?: string;
 }) {
   const shown = ids.slice(0, max);
   const extra = ids.length - shown.length;

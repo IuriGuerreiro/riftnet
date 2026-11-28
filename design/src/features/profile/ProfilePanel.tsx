@@ -34,13 +34,7 @@ export function ProfilePanel({ id, onCall }: { id: string; onCall: () => void })
     >
       <div className="h-20 shrink-0" style={bannerStyle(u, "var(--surface-1)")} />
       <div className="-mt-10 px-4">
-        <Avatar
-          id={id}
-          size={76}
-          status
-          ringBg="var(--surface-1)"
-          className="rounded-full ring-[5px] ring-surface-1"
-        />
+        <Avatar id={id} size={76} status className="rounded-full ring-[5px] ring-surface-1" />
         <h3 className="mt-2.5 text-[17px] leading-tight font-semibold tracking-[-0.01em]">
           {u.name}
         </h3>

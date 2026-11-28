@@ -16,7 +16,6 @@ import { Dialog } from "radix-ui";
 import { useEffect, useRef, useState } from "react";
 
 import { Avatar } from "@/components/Avatar";
-import { Pick } from "@/components/Controls";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { EMOJI_SETS, setEmojiSet, useEmojiSet } from "@/features/emoji/sets";
@@ -500,32 +499,6 @@ function beep() {
   o.start();
   o.stop(ctx.currentTime + 0.4);
   o.onended = () => void ctx.close();
-}
-
-export function DevicePicks() {
-  const s = world.settings;
-  return (
-    <>
-      <Pick
-        label="Microphone"
-        value={s.input}
-        options={["Default microphone", "USB headset", "Webcam mic"]}
-        onChange={(input) => saveSettings({ input })}
-      />
-      <Pick
-        label="Speakers"
-        value={s.output}
-        options={["Default speakers", "USB headset", "Monitor"]}
-        onChange={(output) => saveSettings({ output })}
-      />
-      <Pick
-        label="Camera"
-        value={s.camera}
-        options={["Built-in camera", "USB webcam"]}
-        onChange={(camera) => saveSettings({ camera })}
-      />
-    </>
-  );
 }
 
 function KeyCapture() {

@@ -63,7 +63,7 @@ function Picker({
               picked.includes(id) && "bg-brand/15",
             )}
           >
-            <Avatar id={id} size={28} status ringBg="var(--popover)" />
+            <Avatar id={id} size={28} status />
             <span className="flex-1">{user(id).name}</span>
             <span className="text-xs text-muted-foreground">@{user(id).handle}</span>
             {picked.includes(id) && <Check className="size-4 text-brand-text" />}

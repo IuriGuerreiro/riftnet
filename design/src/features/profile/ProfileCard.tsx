@@ -73,13 +73,7 @@ export function ProfileBody({ u, onDone }: { u: User; onDone?: () => void }) {
     <div className="overflow-hidden rounded-xl">
       <div className="h-20" style={bannerStyle(u)} />
       <div className="-mt-8 p-4 pt-0">
-        <Avatar
-          id={u.id}
-          size={64}
-          status
-          ringBg="var(--popover)"
-          className="rounded-full ring-4 ring-popover"
-        />
+        <Avatar id={u.id} size={64} status className="rounded-full ring-4 ring-popover" />
         <h3 className="mt-1.5 text-base leading-tight font-semibold">{u.name}</h3>
         <p className="text-xs text-muted-foreground">
           @{u.handle}

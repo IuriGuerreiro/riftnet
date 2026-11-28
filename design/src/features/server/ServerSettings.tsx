@@ -98,7 +98,7 @@ function Members({ s }: { s: Server }) {
       </div>
       {list.slice(0, limit).map((id) => (
         <div key={id} className="flex h-12 items-center gap-2.5 text-sm">
-          <Avatar id={id} size={30} status ringBg="var(--popover)" />
+          <Avatar id={id} size={30} status />
           <span className="flex flex-1 items-center gap-1.5">
             {user(id).name}
             {id === ME && <Crown className="size-3.5 text-warning" aria-label="Owner" />}

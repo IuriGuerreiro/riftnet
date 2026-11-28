@@ -5,7 +5,7 @@ import { Avatar, AvatarStack } from "@/components/Avatar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { EmojiText } from "@/features/emoji/EmojiText";
 import { cn } from "@/lib/utils";
-import { FRIENDS, LIVE_ROOMS, server, user } from "@/mock/data";
+import { FRIENDS, server, SERVERS, user } from "@/mock/data";
 import { answerRequest, useWorld, world } from "@/mock/world";
 
 interface Note {
@@ -58,8 +58,6 @@ const NOTES: Note[] = [
   { id: "n5", kind: "request", who: "rui", text: "sent you a friend request", at: "1h" },
 ];
 
-const IN_VOICE = [...new Set(LIVE_ROOMS.flatMap((r) => r.people))];
-
 function Pill({
   onClick,
   children,
@@ -91,6 +89,14 @@ export function TopBarStatus({
   onLive: () => void;
 }) {
   useWorld();
+  const rooms = world.empty
+    ? []
+    : SERVERS.flatMap((s) =>
+        s.channels
+          .filter((c) => c.kind === "voice" && (c.voice?.length ?? 0) > 0)
+          .map((c) => ({ name: c.name, serverId: s.id, people: c.voice ?? [] })),
+      );
+  const inVoice = [...new Set(rooms.flatMap((r) => r.people))];
   const request = world.incoming.includes("rui")
     ? "pending"
     : world.friends.has("rui")
@@ -111,19 +117,19 @@ export function TopBarStatus({
     <div className="flex items-center justify-end gap-1">
       <Pill label="Friends online" onClick={onFriends}>
         <span className="hidden lg:block">
-          <AvatarStack ids={ONLINE.map((f) => f.id)} size={18} max={3} ringBg="var(--rift-ink)" />
+          <AvatarStack ids={ONLINE.map((f) => f.id)} size={18} max={3} />
         </span>
         <span>
           <span className="text-foreground">{ONLINE.length}</span> online
         </span>
       </Pill>
       <Pill
-        label={`In voice: ${LIVE_ROOMS.map((r) => `${r.name} (${server(r.serverId)?.name})`).join(", ")}`}
+        label={`In voice: ${rooms.map((r) => `${r.name} (${server(r.serverId)?.name})`).join(", ")}`}
         onClick={onLive}
       >
         <Headphones className="size-3.5" />
         <span>
-          <span className="text-foreground">{IN_VOICE.length}</span> in voice
+          <span className="text-foreground">{inVoice.length}</span> in voice
         </span>
       </Pill>
       <span className="mx-1 h-4 w-px bg-surface-3" />

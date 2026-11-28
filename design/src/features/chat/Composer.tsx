@@ -65,7 +65,7 @@ function mentionSuggestions(query: string, members: string[], isChannel: boolean
       insert: `@${u.handle}`,
       label: (
         <span className="flex items-center gap-2.5">
-          <Avatar id={u.id} size={22} status ringBg="var(--popover)" />
+          <Avatar id={u.id} size={22} status />
           <span className="font-medium">{u.name}</span>
         </span>
       ),
